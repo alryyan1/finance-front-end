@@ -28,52 +28,23 @@ import AddOutlinedIcon from '@mui/icons-material/AddOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import type { SelectChangeEvent } from '@mui/material/Select'
+import { partiesApi } from '@/api/parties'
 import { accountsApi } from '@/api/accounts'
-import type { Account, AccountType } from '@/types/account'
+import type { Party, PartyType } from '@/types/party'
+import type { Account } from '@/types/account'
 
-const TYPE_LABELS: Record<AccountType, string> = {
-  asset:     'أصول',
-  liability: 'خصوم',
-  equity:    'حقوق الملكية',
-  revenue:   'إيرادات',
-  expense:   'مصروفات',
+const TYPE_LABELS: Record<PartyType, string> = {
+  customer: 'عميل',
+  supplier: 'مورد',
+  employee: 'موظف',
+  other:    'أخرى',
 }
 
-const TYPE_COLOR: Record<AccountType, 'primary' | 'error' | 'secondary' | 'success' | 'warning'> = {
-  asset:     'primary',
-  liability: 'error',
-  equity:    'secondary',
-  revenue:   'success',
-  expense:   'warning',
-}
-
-interface AccountNode extends Account { level: number }
-
-function flattenTree(accounts: Account[]): AccountNode[] {
-  const childrenOf = new Map<number | null, Account[]>()
-  for (const a of accounts) {
-    const key = a.parent_id ?? null
-    if (!childrenOf.has(key)) childrenOf.set(key, [])
-    childrenOf.get(key)!.push(a)
-  }
-  const result: AccountNode[] = []
-  function walk(pid: number | null, level: number) {
-    for (const a of (childrenOf.get(pid) ?? [])) {
-      result.push({ ...a, level })
-      walk(a.id, level + 1)
-    }
-  }
-  walk(null, 0)
-  return result
-}
-
-function getDescendantIds(id: number, accounts: Account[]): Set<number> {
-  const ids = new Set<number>()
-  function walk(pid: number) {
-    accounts.filter(a => a.parent_id === pid).forEach(a => { ids.add(a.id); walk(a.id) })
-  }
-  walk(id)
-  return ids
+const TYPE_COLOR: Record<PartyType, 'success' | 'warning' | 'primary' | 'default'> = {
+  customer: 'success',
+  supplier: 'warning',
+  employee: 'primary',
+  other:    'default',
 }
 
 function extractError(err: unknown): string {
@@ -86,23 +57,28 @@ function extractError(err: unknown): string {
 }
 
 const emptyForm = {
-  code:      '',
-  name:      '',
-  type:      'asset' as AccountType,
-  parent_id: null as number | null,
-  is_active: true,
+  name:       '',
+  type:       'customer' as PartyType,
+  phone:      '',
+  email:      '',
+  address:    '',
+  account_id: null as number | null,
+  is_active:  true,
 }
 
-export default function AccountsPage() {
-  const [accounts, setAccounts]   = useState<Account[]>([])
-  const [loading, setLoading]     = useState(true)
+export default function PartiesPage() {
+  const [parties, setParties]   = useState<Party[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [loading, setLoading]   = useState(true)
+
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editing, setEditing]       = useState<Account | null>(null)
+  const [editing, setEditing]       = useState<Party | null>(null)
   const [form, setForm]             = useState(emptyForm)
   const [saving, setSaving]         = useState(false)
   const [formError, setFormError]   = useState<string | null>(null)
+
   const [deleteOpen, setDeleteOpen]     = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Party | null>(null)
   const [deleting, setDeleting]         = useState(false)
   const [deleteError, setDeleteError]   = useState<string | null>(null)
 
@@ -110,62 +86,76 @@ export default function AccountsPage() {
 
   async function load() {
     setLoading(true)
-    try { setAccounts(await accountsApi.list()) }
-    finally { setLoading(false) }
+    try {
+      const [p, a] = await Promise.all([partiesApi.list(), accountsApi.list()])
+      setParties(p)
+      setAccounts(a)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function openCreate() {
     setEditing(null); setForm(emptyForm); setFormError(null); setDialogOpen(true)
   }
 
-  function openEdit(a: Account) {
-    setEditing(a)
-    setForm({ code: a.code, name: a.name, type: a.type, parent_id: a.parent_id, is_active: a.is_active })
+  function openEdit(p: Party) {
+    setEditing(p)
+    setForm({
+      name:       p.name,
+      type:       p.type,
+      phone:      p.phone ?? '',
+      email:      p.email ?? '',
+      address:    p.address ?? '',
+      account_id: p.account_id,
+      is_active:  p.is_active,
+    })
     setFormError(null); setDialogOpen(true)
   }
 
   async function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault()
     setSaving(true); setFormError(null)
+    const payload = {
+      ...form,
+      phone:   form.phone   || null,
+      email:   form.email   || null,
+      address: form.address || null,
+    }
     try {
-      if (editing) await accountsApi.update(editing.id, form)
-      else         await accountsApi.create(form)
+      if (editing) await partiesApi.update(editing.id, payload)
+      else         await partiesApi.create(payload)
       await load(); setDialogOpen(false)
     } catch (err) {
       setFormError(extractError(err))
     } finally { setSaving(false) }
   }
 
-  function confirmDelete(a: Account) {
-    setDeleteTarget(a); setDeleteError(null); setDeleteOpen(true)
+  function confirmDelete(p: Party) {
+    setDeleteTarget(p); setDeleteError(null); setDeleteOpen(true)
   }
 
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true); setDeleteError(null)
     try {
-      await accountsApi.remove(deleteTarget.id)
+      await partiesApi.remove(deleteTarget.id)
       await load(); setDeleteOpen(false)
     } catch (err) {
       setDeleteError(extractError(err))
     } finally { setDeleting(false) }
   }
 
-  const tree       = flattenTree(accounts)
-  const excludeIds = editing
-    ? new Set([editing.id, ...getDescendantIds(editing.id, accounts)])
-    : new Set<number>()
-
   return (
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>شجرة الحسابات</Typography>
-          <Typography variant="body2" color="text.secondary">دليل الحسابات المحاسبي</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>الأطراف</Typography>
+          <Typography variant="body2" color="text.secondary">العملاء والموردون والموظفون</Typography>
         </Box>
         <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreate}>
-          إضافة حساب
+          إضافة طرف
         </Button>
       </Box>
 
@@ -174,9 +164,10 @@ export default function AccountsPage() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell sx={{ width: 90 }}>الكود</TableCell>
               <TableCell>الاسم</TableCell>
-              <TableCell sx={{ width: 130 }}>النوع</TableCell>
+              <TableCell sx={{ width: 110 }}>النوع</TableCell>
+              <TableCell sx={{ width: 140 }}>الهاتف</TableCell>
+              <TableCell>الحساب المرتبط</TableCell>
               <TableCell sx={{ width: 80 }}>الحالة</TableCell>
               <TableCell sx={{ width: 80 }} align="center">إجراءات</TableCell>
             </TableRow>
@@ -184,47 +175,60 @@ export default function AccountsPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                   <CircularProgress size={28} />
                 </TableCell>
               </TableRow>
-            ) : tree.length === 0 ? (
+            ) : parties.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                  لا توجد حسابات. أضف حساباً للبدء.
+                <TableCell colSpan={6} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                  لا توجد أطراف. أضف طرفاً للبدء.
                 </TableCell>
               </TableRow>
-            ) : tree.map(node => (
+            ) : parties.map(party => (
               <TableRow
-                key={node.id}
-                sx={{ opacity: node.is_active ? 1 : 0.45, '&:hover': { bgcolor: 'action.hover' } }}
+                key={party.id}
+                sx={{ opacity: party.is_active ? 1 : 0.45, '&:hover': { bgcolor: 'action.hover' } }}
               >
-                <TableCell sx={{ fontFamily: 'monospace', fontSize: 13, color: 'text.secondary' }}>
-                  {node.code}
+                <TableCell>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{party.name}</Typography>
+                  {party.email && (
+                    <Typography variant="caption" color="text.secondary">{party.email}</Typography>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, paddingInlineStart: `${node.level * 20}px` }}>
-                    {node.level > 0 && (
-                      <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1 }}>└</Typography>
-                    )}
-                    <Typography variant="body2" sx={{ fontWeight: node.level === 0 ? 600 : 400 }}>
-                      {node.name}
+                  <Chip
+                    label={TYPE_LABELS[party.type]}
+                    color={TYPE_COLOR[party.type]}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: 11 }}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" dir="ltr" sx={{ textAlign: 'right' }}>
+                    {party.phone ?? '—'}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  {party.account ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {party.account.code} — {party.account.name}
                     </Typography>
-                  </Box>
+                  ) : (
+                    <Typography variant="caption" color="text.disabled">—</Typography>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <Chip label={TYPE_LABELS[node.type]} color={TYPE_COLOR[node.type]} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                </TableCell>
-                <TableCell>
-                  <Typography variant="caption" sx={{ color: node.is_active ? 'success.main' : 'text.disabled', fontWeight: 500 }}>
-                    {node.is_active ? 'نشط' : 'موقوف'}
+                  <Typography variant="caption" sx={{ color: party.is_active ? 'success.main' : 'text.disabled', fontWeight: 500 }}>
+                    {party.is_active ? 'نشط' : 'موقوف'}
                   </Typography>
                 </TableCell>
                 <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
-                  <IconButton size="small" onClick={() => openEdit(node)} sx={{ color: 'text.secondary' }}>
+                  <IconButton size="small" onClick={() => openEdit(party)} sx={{ color: 'text.secondary' }}>
                     <EditOutlinedIcon fontSize="small" />
                   </IconButton>
-                  <IconButton size="small" onClick={() => confirmDelete(node)} sx={{ color: 'error.main' }}>
+                  <IconButton size="small" onClick={() => confirmDelete(party)} sx={{ color: 'error.main' }}>
                     <DeleteOutlineOutlinedIcon fontSize="small" />
                   </IconButton>
                 </TableCell>
@@ -236,56 +240,73 @@ export default function AccountsPage() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editing ? 'تعديل الحساب' : 'إضافة حساب جديد'}</DialogTitle>
+        <DialogTitle>{editing ? 'تعديل الطرف' : 'إضافة طرف جديد'}</DialogTitle>
         <Divider />
         <form onSubmit={handleSubmit}>
           <DialogContent sx={{ pt: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {formError && <Alert severity="error">{formError}</Alert>}
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <TextField
-                label="الكود" value={form.code}
-                onChange={e => setForm(p => ({ ...p, code: e.target.value }))}
-                inputProps={{ dir: 'ltr' }} required fullWidth size="small"
+                label="الاسم" value={form.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                required fullWidth size="small"
               />
               <FormControl size="small" fullWidth>
                 <InputLabel>النوع</InputLabel>
                 <Select
                   value={form.type} label="النوع"
-                  onChange={(e: SelectChangeEvent) => setForm(p => ({ ...p, type: e.target.value as AccountType }))}
+                  onChange={(e: SelectChangeEvent) => setForm(p => ({ ...p, type: e.target.value as PartyType }))}
                 >
-                  {(Object.entries(TYPE_LABELS) as [AccountType, string][]).map(([v, label]) => (
+                  {(Object.entries(TYPE_LABELS) as [PartyType, string][]).map(([v, label]) => (
                     <MenuItem key={v} value={v}>{label}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
             </Box>
 
-            <TextField
-              label="الاسم" value={form.name}
-              onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-              required fullWidth size="small"
-            />
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <TextField
+                label="الهاتف" value={form.phone}
+                onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                inputProps={{ dir: 'ltr' }} fullWidth size="small"
+              />
+              <TextField
+                label="البريد الإلكتروني" value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                type="email" inputProps={{ dir: 'ltr' }} fullWidth size="small"
+              />
+            </Box>
 
             <FormControl size="small" fullWidth>
-              <InputLabel>الحساب الأب</InputLabel>
+              <InputLabel>الحساب المرتبط</InputLabel>
               <Select
-                value={form.parent_id?.toString() ?? ''}
-                label="الحساب الأب"
+                value={form.account_id?.toString() ?? ''}
+                label="الحساب المرتبط"
                 onChange={(e: SelectChangeEvent) =>
-                  setForm(p => ({ ...p, parent_id: e.target.value === '' ? null : Number(e.target.value) }))
+                  setForm(p => ({ ...p, account_id: e.target.value === '' ? null : Number(e.target.value) }))
                 }
               >
-                <MenuItem value="">— بدون أب —</MenuItem>
-                {accounts.filter(a => !excludeIds.has(a.id)).map(a => (
+                <MenuItem value="">— بدون حساب —</MenuItem>
+                {accounts.map(a => (
                   <MenuItem key={a.id} value={a.id.toString()}>{a.code} — {a.name}</MenuItem>
                 ))}
               </Select>
             </FormControl>
 
+            <TextField
+              label="العنوان" value={form.address}
+              onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
+              multiline rows={2} fullWidth size="small"
+            />
+
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 2, py: 1 }}>
-              <Typography variant="body2">الحساب نشط</Typography>
-              <Switch checked={form.is_active} onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} size="small" />
+              <Typography variant="body2">الطرف نشط</Typography>
+              <Switch
+                checked={form.is_active}
+                onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))}
+                size="small"
+              />
             </Box>
           </DialogContent>
           <Divider />
@@ -299,14 +320,19 @@ export default function AccountsPage() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeleteError(null) }} maxWidth="xs" fullWidth>
+      <Dialog
+        open={deleteOpen}
+        onClose={() => { setDeleteOpen(false); setDeleteError(null) }}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>تأكيد الحذف</DialogTitle>
         <Divider />
         <DialogContent sx={{ pt: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            هل أنت متأكد من حذف الحساب{' '}
+            هل أنت متأكد من حذف الطرف{' '}
             <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
-              {deleteTarget?.code} — {deleteTarget?.name}
+              {deleteTarget?.name}
             </Box>؟
           </Typography>
           {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}

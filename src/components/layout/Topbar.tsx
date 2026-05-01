@@ -1,66 +1,75 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { LogOut, User } from 'lucide-react'
+import AppBar from '@mui/material/AppBar'
+import Toolbar from '@mui/material/Toolbar'
+import Box from '@mui/material/Box'
+import IconButton from '@mui/material/IconButton'
+import Avatar from '@mui/material/Avatar'
+import Typography from '@mui/material/Typography'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import Divider from '@mui/material/Divider'
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined'
 
 export default function Topbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-
-  async function handleLogout() {
-    await logout()
-    navigate('/login')
-  }
+  const [anchor, setAnchor] = useState<null | HTMLElement>(null)
 
   const initials = user?.name
     .split(' ')
     .map(n => n[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase() ?? '؟'
+    .toUpperCase() ?? '?'
+
+  async function handleLogout() {
+    setAnchor(null)
+    await logout()
+    navigate('/login')
+  }
 
   return (
-    <header className="h-16 border-b bg-card px-6 flex items-center justify-between shrink-0">
-      <div />
-
-      <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-muted transition-colors outline-none">
-          <Avatar className="w-8 h-8">
-            <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+    <AppBar
+      position="static"
+      elevation={0}
+      sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', color: 'text.primary', height: 64 }}
+    >
+      <Toolbar sx={{ height: '100%' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.3 }}>{user?.name}</Typography>
+            <Typography variant="caption" color="text.secondary">@{user?.username}</Typography>
+          </Box>
+          <IconButton onClick={e => setAnchor(e.currentTarget)} size="small" sx={{ p: 0.5 }}>
+            <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: 13, fontWeight: 700 }}>
               {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-medium leading-none">{user?.name}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">@{user?.username}</p>
-          </div>
-        </DropdownMenuTrigger>
+            </Avatar>
+          </IconButton>
+        </Box>
 
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuLabel>حسابي</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem>
-            <User size={14} className="ms-2" />
-            الملف الشخصي
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={handleLogout}
-          >
-            <LogOut size={14} className="ms-2" />
+        <Menu
+          anchorEl={anchor}
+          open={Boolean(anchor)}
+          onClose={() => setAnchor(null)}
+          anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+          transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+          slotProps={{ paper: { sx: { minWidth: 180, mt: 0.5 } } }}
+        >
+          <MenuItem disabled dense>
+            <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
+          </MenuItem>
+          <Divider />
+          <MenuItem onClick={handleLogout} sx={{ color: 'error.main', gap: 1 }}>
+            <ListItemIcon sx={{ color: 'error.main', minWidth: 0 }}>
+              <LogoutOutlinedIcon fontSize="small" />
+            </ListItemIcon>
             تسجيل الخروج
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </header>
+          </MenuItem>
+        </Menu>
+      </Toolbar>
+    </AppBar>
   )
 }

@@ -1,29 +1,29 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
-} from '@/components/ui/card'
 import { useAuth } from '@/context/AuthContext'
+import Box from '@mui/material/Box'
+import Paper from '@mui/material/Paper'
+import TextField from '@mui/material/TextField'
+import Button from '@mui/material/Button'
+import Typography from '@mui/material/Typography'
+import Alert from '@mui/material/Alert'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
-  const navigate = useNavigate()
+  const [error, setError]       = useState<string | null>(null)
+  const [loading, setLoading]   = useState(false)
+  const { login }  = useAuth()
+  const navigate   = useNavigate()
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault()
     setError(null)
     setLoading(true)
     try {
       await login(username, password)
       navigate('/')
-    } catch (err: unknown) {
+    } catch (err) {
       setError(extractError(err))
     } finally {
       setLoading(false)
@@ -31,77 +31,64 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/40 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-1">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary text-primary-foreground text-xl font-bold mb-2">
+    <Box sx={{
+      minHeight: '100vh',
+      bgcolor: 'background.default',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      p: 2,
+    }}>
+      <Box sx={{ width: '100%', maxWidth: 420 }}>
+        {/* Logo */}
+        <Box sx={{ textAlign: 'center', mb: 4 }}>
+          <Box sx={{
+            width: 52,
+            height: 52,
+            bgcolor: 'primary.main',
+            borderRadius: 2,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontSize: 22,
+            fontWeight: 700,
+            mb: 1.5,
+          }}>
             م
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">المالية</h1>
-          <p className="text-sm text-muted-foreground">أدِر شؤونك المالية بكل سهولة</p>
-        </div>
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>المالية</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            أدِر شؤونك المالية بكل سهولة
+          </Typography>
+        </Box>
 
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-xl">تسجيل الدخول</CardTitle>
-            <CardDescription>أدخل بياناتك للوصول إلى حسابك</CardDescription>
-          </CardHeader>
+        <Paper elevation={0} sx={{ p: 4, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }} gutterBottom>تسجيل الدخول</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            أدخل بياناتك للوصول إلى حسابك
+          </Typography>
 
           <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              {error && (
-                <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
-                  {error}
-                </div>
-              )}
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-              <div className="space-y-2">
-                <Label htmlFor="username">اسم المستخدم</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="admin"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  required
-                  autoComplete="username"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <a href="#" className="text-xs text-primary hover:underline">
-                    نسيت كلمة المرور؟
-                  </a>
-                  <Label htmlFor="password">كلمة المرور</Label>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                />
-              </div>
-            </CardContent>
-
-            <CardFooter className="flex flex-col gap-3">
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'جارٍ تسجيل الدخول…' : 'تسجيل الدخول'}
-              </Button>
-              <p className="text-center text-sm text-muted-foreground">
-                ليس لديك حساب؟{' '}
-                <a href="#" className="text-primary font-medium hover:underline">
-                  إنشاء حساب
-                </a>
-              </p>
-            </CardFooter>
+            <TextField
+              fullWidth label="اسم المستخدم"
+              value={username} onChange={e => setUsername(e.target.value)}
+              autoComplete="username" required sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth label="كلمة المرور" type="password"
+              value={password} onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password" required sx={{ mb: 3 }}
+            />
+            <Button fullWidth variant="contained" type="submit" disabled={loading} size="large">
+              {loading ? 'جارٍ تسجيل الدخول…' : 'تسجيل الدخول'}
+            </Button>
           </form>
-        </Card>
-      </div>
-    </div>
+        </Paper>
+      </Box>
+    </Box>
   )
 }
 

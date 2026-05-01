@@ -4,6 +4,15 @@ import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import AccountsPage from '@/pages/AccountsPage'
+import PartiesPage from '@/pages/PartiesPage'
+import TransactionsPage from '@/pages/TransactionsPage'
+import JournalEntryFormPage from '@/pages/JournalEntryFormPage'
+import TrialBalancePage from '@/pages/TrialBalancePage'
+import LedgerPage from '@/pages/LedgerPage'
+import IncomeStatementPage from '@/pages/IncomeStatementPage'
+import BalanceSheetPage from '@/pages/BalanceSheetPage'
+import SettingsPage from '@/pages/SettingsPage'
+import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
 
 export default function App() {
   return (
@@ -18,10 +27,17 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
-          <Route path="/transactions" element={<ComingSoon title="المعاملات" />} />
-          <Route path="/parties" element={<ComingSoon title="الأطراف" />} />
-          <Route path="/reports" element={<ComingSoon title="التقارير" />} />
-          <Route path="/settings" element={<ComingSoon title="الإعدادات" />} />
+          <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/transactions/new" element={<JournalEntryFormPage />} />
+          <Route path="/transactions/:id/edit" element={<JournalEntryFormPage />} />
+          <Route path="/parties" element={<PartiesPage />} />
+          <Route path="/reports" element={<TrialBalancePage />} />
+          <Route path="/reports/trial-balance" element={<TrialBalancePage />} />
+          <Route path="/reports/ledger" element={<LedgerPage />} />
+          <Route path="/reports/income-statement" element={<IncomeStatementPage />} />
+          <Route path="/reports/balance-sheet" element={<BalanceSheetPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/opening-balances" element={<OpeningBalancesPage />} />
         </Route>
       </Route>
 
@@ -30,11 +46,3 @@ export default function App() {
   )
 }
 
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
-      <p className="text-lg font-medium">{title}</p>
-      <p className="text-sm">قريباً</p>
-    </div>
-  )
-}
