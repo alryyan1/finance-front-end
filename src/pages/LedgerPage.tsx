@@ -7,7 +7,9 @@ import {
 } from '@mui/material'
 import api from '@/lib/axios'
 import { accountsApi } from '@/api/accounts'
+import { openPdf } from '@/api/pdf'
 import type { Account } from '@/types/account'
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 
 interface LedgerRow {
   entry_id: number
@@ -50,8 +52,16 @@ export default function LedgerPage() {
   const [to, setTo]                   = useState(today())
   const [data, setData]               = useState<LedgerData | null>(null)
   const [loading, setLoading]         = useState(false)
+  const [pdfLoading, setPdfLoading]   = useState(false)
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [error, setError]             = useState<string | null>(null)
+
+  const handlePdf = async () => {
+    if (!account) return
+    setPdfLoading(true)
+    try { await openPdf('/api/reports/ledger/pdf', { account_id: account.id, from, to }) }
+    finally { setPdfLoading(false) }
+  }
 
   useEffect(() => {
     accountsApi.list()
@@ -110,6 +120,15 @@ export default function LedgerPage() {
           />
           <Button variant="contained" onClick={load} disabled={!account || loading}>
             {loading ? <CircularProgress size={18} /> : 'عرض'}
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfOutlinedIcon />}
+            onClick={handlePdf}
+            disabled={pdfLoading || !data}
+          >
+            طباعة PDF
           </Button>
         </Box>
       </Paper>

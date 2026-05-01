@@ -5,7 +5,9 @@ import {
   TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined'
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import api from '@/lib/axios'
+import { openPdf } from '@/api/pdf'
 
 interface BSRow {
   account_id: number
@@ -92,8 +94,15 @@ function Section({
 export default function BalanceSheetPage() {
   const [asOf, setAsOf]   = useState(today())
   const [data, setData]   = useState<BalanceSheetData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+  const [loading, setLoading]       = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+
+  const handlePdf = async () => {
+    setPdfLoading(true)
+    try { await openPdf('/api/reports/balance-sheet/pdf', { as_of: asOf }) }
+    finally { setPdfLoading(false) }
+  }
 
   const load = () => {
     setLoading(true)
@@ -135,6 +144,15 @@ export default function BalanceSheetPage() {
           />
           <Button variant="contained" onClick={load} disabled={loading}>
             {loading ? <CircularProgress size={18} /> : 'عرض'}
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfOutlinedIcon />}
+            onClick={handlePdf}
+            disabled={pdfLoading || !data}
+          >
+            طباعة PDF
           </Button>
         </Box>
       </Paper>
