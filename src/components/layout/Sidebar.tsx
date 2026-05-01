@@ -13,6 +13,7 @@ import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined'
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined'
 import PlaylistAddOutlinedIcon from '@mui/icons-material/PlaylistAddOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined'
 import type { SvgIconProps } from '@mui/material'
 import type { ComponentType } from 'react'
 
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
     children: [
       { to: '/settings',                  label: 'إعدادات الشركة',    icon: TuneOutlinedIcon },
       { to: '/settings/opening-balances', label: 'الأرصدة الافتتاحية', icon: PlaylistAddOutlinedIcon },
+      { to: '/settings/fiscal-years',     label: 'السنوات المالية',    icon: CalendarMonthOutlinedIcon },
     ],
   },
 ]

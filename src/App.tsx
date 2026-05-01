@@ -13,6 +13,7 @@ import IncomeStatementPage from '@/pages/IncomeStatementPage'
 import BalanceSheetPage from '@/pages/BalanceSheetPage'
 import SettingsPage from '@/pages/SettingsPage'
 import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
+import FiscalYearsPage from '@/pages/FiscalYearsPage'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/reports/balance-sheet" element={<BalanceSheetPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/settings/opening-balances" element={<OpeningBalancesPage />} />
+          <Route path="/settings/fiscal-years" element={<FiscalYearsPage />} />
         </Route>
       </Route>
 
