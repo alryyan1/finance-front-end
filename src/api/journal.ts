@@ -22,4 +22,7 @@ export const journalApi = {
 
   togglePost: (id: number): Promise<JournalEntry> =>
     api.patch<JournalEntry>(`/api/journal-entries/${id}/post`).then(d),
+
+  reverse: (id: number): Promise<JournalEntry> =>
+    api.post<JournalEntry>(`/api/journal-entries/${id}/reverse`).then(d),
 }

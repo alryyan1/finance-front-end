@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Box, Button, Chip, CircularProgress, IconButton, InputAdornment,
+  Box, Button, Chip, CircularProgress, Dialog, DialogActions,
+  DialogContent, DialogContentText, DialogTitle,
+  IconButton, InputAdornment,
   MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material'
@@ -12,6 +14,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import UnpublishedIcon from '@mui/icons-material/Unpublished'
 import SearchIcon from '@mui/icons-material/Search'
 import FilterAltOffIcon from '@mui/icons-material/FilterAltOff'
+import SwapVertIcon from '@mui/icons-material/SwapVert'
 import { journalApi } from '@/api/journal'
 import type { JournalEntry, JournalEntryLine } from '@/types/journal'
 
@@ -98,6 +101,8 @@ export default function TransactionsPage() {
   const navigate = useNavigate()
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [reversing, setReversing] = useState<number | null>(null)
+  const [confirmEntry, setConfirmEntry] = useState<JournalEntry | null>(null)
 
   const [search, setSearch] = useState('')
   const [from,   setFrom]   = useState('')
@@ -131,6 +136,18 @@ export default function TransactionsPage() {
   const handleTogglePost = async (entry: JournalEntry) => {
     await journalApi.togglePost(entry.id)
     load()
+  }
+
+  const handleReverse = async () => {
+    if (!confirmEntry) return
+    setReversing(confirmEntry.id)
+    setConfirmEntry(null)
+    try {
+      await journalApi.reverse(confirmEntry.id)
+      load()
+    } finally {
+      setReversing(null)
+    }
   }
 
   const grandTotal = entries.reduce((s, e) => s + Number(e.lines_sum_debit ?? 0), 0)
@@ -247,10 +264,16 @@ export default function TransactionsPage() {
                     <Typography variant="body2" sx={{ direction: 'ltr', color: 'text.secondary' }}>
                       {entry.date}
                     </Typography>
-                    <Box sx={{ mt: 0.5 }}>
+                    <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.4 }}>
                       {entry.is_posted
                         ? <Chip label="مرحَّل" color="success" size="small" />
                         : <Chip label="مسودة"  color="default" size="small" />}
+                      {entry.reversal_of && (
+                        <Chip label="قيد عكسي" color="warning" size="small" variant="outlined" />
+                      )}
+                      {entry.reversed_by && (
+                        <Chip label="معكوس" color="error" size="small" variant="outlined" />
+                      )}
                     </Box>
                   </TableCell>
 
@@ -280,6 +303,20 @@ export default function TransactionsPage() {
                         <IconButton size="small" color={entry.is_posted ? 'warning' : 'success'} onClick={() => handleTogglePost(entry)}>
                           {entry.is_posted ? <UnpublishedIcon sx={{ fontSize: 16 }} /> : <CheckCircleIcon sx={{ fontSize: 16 }} />}
                         </IconButton>
+                      </Tooltip>
+                      <Tooltip title={entry.reversed_by ? 'تم العكس مسبقاً' : 'عكس القيد'}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="secondary"
+                            disabled={!entry.is_posted || !!entry.reversed_by || reversing === entry.id}
+                            onClick={() => setConfirmEntry(entry)}
+                          >
+                            {reversing === entry.id
+                              ? <CircularProgress size={14} />
+                              : <SwapVertIcon sx={{ fontSize: 16 }} />}
+                          </IconButton>
+                        </span>
                       </Tooltip>
                       <Tooltip title="تعديل">
                         <span>
@@ -319,6 +356,29 @@ export default function TransactionsPage() {
           </Table>
         </TableContainer>
       )}
+
+      {/* Reverse confirmation dialog */}
+      <Dialog open={!!confirmEntry} onClose={() => setConfirmEntry(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>تأكيد عكس القيد</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            سيتم إنشاء قيد عكسي يلغي أثر هذا القيد:
+          </DialogContentText>
+          <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'grey.50', borderRadius: 1, direction: 'rtl' }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmEntry?.description}</Typography>
+            <Typography variant="caption" color="text.secondary">{confirmEntry?.date}</Typography>
+          </Box>
+          <DialogContentText sx={{ mt: 1.5, fontSize: 13 }}>
+            القيد العكسي سيُرحَّل تلقائياً بتاريخ اليوم ولا يمكن التراجع عن هذا الإجراء.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmEntry(null)}>إلغاء</Button>
+          <Button variant="contained" color="warning" onClick={handleReverse} startIcon={<SwapVertIcon />}>
+            تأكيد العكس
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

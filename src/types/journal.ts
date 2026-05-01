@@ -16,6 +16,8 @@ export interface JournalEntry {
   reference: string | null
   description: string
   is_posted: boolean
+  reversal_of: number | null
+  reversed_by: number | null
   lines_sum_debit?: string | null
   lines_count?: number
   lines?: JournalEntryLine[]
