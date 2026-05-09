@@ -2,19 +2,25 @@ import { useEffect, useState } from 'react'
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress,
   Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  Divider, IconButton, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
+  Divider, IconButton, MenuItem, Paper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, ToggleButton,
+  ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined'
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined'
+import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined'
 import api from '@/lib/axios'
 import { accountsApi } from '@/api/accounts'
 import type { Account } from '@/types/account'
 
+type PeriodType = 'yearly' | 'monthly'
+
 interface FiscalYear {
   id: number
   name: string
+  period_type: PeriodType
   start_date: string
   end_date: string
   status: 'open' | 'closed'
@@ -25,22 +31,45 @@ interface FiscalYear {
   is_profit: boolean
 }
 
+const ARABIC_MONTHS = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+]
+
 const numFmt = (v: string | number) =>
   Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-const today     = () => new Date().toISOString().slice(0, 10)
-const yearStart = () => `${new Date().getFullYear()}-01-01`
-const yearEnd   = () => `${new Date().getFullYear()}-12-31`
+const currentYear = new Date().getFullYear()
+const yearStart   = () => `${currentYear}-01-01`
+const yearEnd     = () => `${currentYear}-12-31`
+
+function lastDayOfMonth(year: number, month: number): string {
+  return new Date(year, month, 0).toISOString().slice(0, 10)
+}
+function firstDayOfMonth(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-01`
+}
 
 export default function FiscalYearsPage() {
-  const [years, setYears]     = useState<FiscalYear[]>([])
+  const [years, setYears]       = useState<FiscalYear[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
+
+  // Filter
+  const [filterType, setFilterType] = useState<'all' | PeriodType>('all')
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', start_date: yearStart(), end_date: yearEnd() })
+  const [periodType, setPeriodType] = useState<PeriodType>('yearly')
+
+  // Yearly form
+  const [yearlyForm, setYearlyForm] = useState({ name: '', start_date: yearStart(), end_date: yearEnd() })
+
+  // Monthly form
+  const [monthYear,  setMonthYear]  = useState(currentYear)
+  const [monthMonth, setMonthMonth] = useState(0) // 0 = all 12 months
+
   const [creating, setCreating] = useState(false)
 
   // Close dialog
@@ -67,13 +96,43 @@ export default function FiscalYearsPage() {
 
   const equityAccounts = accounts.filter(a => a.type === 'equity')
 
+  // Monthly period preview
+  const monthlyName      = monthMonth === 0
+    ? `جميع أشهر ${monthYear} (12 شهراً)`
+    : `${ARABIC_MONTHS[monthMonth - 1]} ${monthYear}`
+  const monthlyStartDate = monthMonth > 0 ? firstDayOfMonth(monthYear, monthMonth) : ''
+  const monthlyEndDate   = monthMonth > 0 ? lastDayOfMonth(monthYear, monthMonth)  : ''
+
+  const openCreateDialog = () => {
+    setYearlyForm({ name: '', start_date: yearStart(), end_date: yearEnd() })
+    setMonthYear(currentYear)
+    setMonthMonth(0)
+    setError(null)
+    setCreateOpen(true)
+  }
+
   const handleCreate = async () => {
-    if (!form.name || !form.start_date || !form.end_date) return
     setCreating(true)
+    setError(null)
     try {
-      await api.post('/api/fiscal-years', form)
+      if (periodType === 'yearly') {
+        if (!yearlyForm.name || !yearlyForm.start_date || !yearlyForm.end_date) return
+        await api.post('/api/fiscal-years', { ...yearlyForm, period_type: 'yearly' })
+      } else if (monthMonth === 0) {
+        // Bulk: create all 12 months
+        const res = await api.post('/api/fiscal-years/bulk-months', { year: monthYear })
+        const { created, skipped } = res.data
+        if (skipped > 0) setError(`تم إنشاء ${created} شهراً — تم تخطي ${skipped} شهراً لأنها موجودة مسبقاً`)
+      } else {
+        // Single month
+        await api.post('/api/fiscal-years', {
+          name:        `${ARABIC_MONTHS[monthMonth - 1]} ${monthYear}`,
+          period_type: 'monthly',
+          start_date:  monthlyStartDate,
+          end_date:    monthlyEndDate,
+        })
+      }
       setCreateOpen(false)
-      setForm({ name: '', start_date: yearStart(), end_date: yearEnd() })
       load()
     } catch (e: any) {
       setError(e?.response?.data?.message ?? 'تعذّر الإنشاء')
@@ -113,53 +172,87 @@ export default function FiscalYearsPage() {
     }
   }
 
+  const filteredYears = years.filter(y =>
+    filterType === 'all' || y.period_type === filterType
+  )
+
+  const createDisabled = creating || (
+    periodType === 'yearly'
+      ? !yearlyForm.name
+      : false
+  )
+
   return (
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>السنوات المالية</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>الفترات المالية</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            إدارة السنوات المالية وإقفال الفترات المحاسبية
+            إدارة الفترات المالية السنوية والشهرية
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-          سنة جديدة
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
+          فترة جديدة
         </Button>
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
+      {/* Filter */}
+      <Box sx={{ mb: 2 }}>
+        <ToggleButtonGroup value={filterType} exclusive size="small"
+          onChange={(_, v) => v && setFilterType(v)}>
+          <ToggleButton value="all">الكل</ToggleButton>
+          <ToggleButton value="yearly" sx={{ gap: 0.5 }}>
+            <DateRangeOutlinedIcon fontSize="small" /> سنوية
+          </ToggleButton>
+          <ToggleButton value="monthly" sx={{ gap: 0.5 }}>
+            <CalendarMonthOutlinedIcon fontSize="small" /> شهرية
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
       ) : (
         <TableContainer component={Paper}>
-          <Table>
+          <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell>اسم السنة</TableCell>
+                <TableCell>اسم الفترة</TableCell>
+                <TableCell align="center" sx={{ width: 80 }}>النوع</TableCell>
                 <TableCell align="center">من</TableCell>
                 <TableCell align="center">إلى</TableCell>
                 <TableCell align="center">الحالة</TableCell>
                 <TableCell align="center">قيود غير مرحّلة</TableCell>
                 <TableCell align="center">صافي الربح / الخسارة</TableCell>
                 <TableCell align="center">تاريخ الإغلاق</TableCell>
-                <TableCell align="center">إجراءات</TableCell>
+                <TableCell align="center" sx={{ width: 70 }}>إجراءات</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {years.length === 0 && (
+              {filteredYears.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                    لا توجد سنوات مالية — أنشئ سنة جديدة للبدء
+                  <TableCell colSpan={9} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                    لا توجد فترات مالية — أنشئ فترة جديدة للبدء
                   </TableCell>
                 </TableRow>
               )}
-              {years.map(y => (
+              {filteredYears.map(y => (
                 <TableRow key={y.id} hover>
                   <TableCell sx={{ fontWeight: 600 }}>{y.name}</TableCell>
-                  <TableCell align="center" sx={{ direction: 'ltr' }}>{y.start_date}</TableCell>
-                  <TableCell align="center" sx={{ direction: 'ltr' }}>{y.end_date}</TableCell>
+                  <TableCell align="center">
+                    <Chip
+                      size="small"
+                      icon={y.period_type === 'yearly' ? <DateRangeOutlinedIcon /> : <CalendarMonthOutlinedIcon />}
+                      label={y.period_type === 'yearly' ? 'سنوية' : 'شهرية'}
+                      color={y.period_type === 'yearly' ? 'primary' : 'secondary'}
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell align="center" sx={{ direction: 'ltr', fontSize: 12 }}>{y.start_date}</TableCell>
+                  <TableCell align="center" sx={{ direction: 'ltr', fontSize: 12 }}>{y.end_date}</TableCell>
                   <TableCell align="center">
                     {y.status === 'open'
                       ? <Chip label="مفتوحة" color="success" size="small" />
@@ -171,25 +264,23 @@ export default function FiscalYearsPage() {
                       : <Typography variant="body2" color="text.disabled">—</Typography>}
                   </TableCell>
                   <TableCell align="center">
-                    <Typography
-                      variant="body2"
-                      sx={{ fontWeight: 600, direction: 'ltr', color: y.is_profit ? 'success.main' : 'error.main' }}
-                    >
+                    <Typography variant="body2" sx={{ fontWeight: 600, direction: 'ltr',
+                      color: y.is_profit ? 'success.main' : 'error.main' }}>
                       {y.is_profit ? '+' : '-'}{numFmt(Math.abs(Number(y.net_profit)))}
                     </Typography>
                   </TableCell>
-                  <TableCell align="center" sx={{ color: 'text.secondary', direction: 'ltr' }}>
+                  <TableCell align="center" sx={{ color: 'text.secondary', direction: 'ltr', fontSize: 12 }}>
                     {y.closed_at ? new Date(y.closed_at).toLocaleDateString('en-GB') : '—'}
                   </TableCell>
                   <TableCell align="center">
                     {y.status === 'open' ? (
-                      <Tooltip title="إغلاق السنة المالية">
+                      <Tooltip title="إغلاق الفترة">
                         <IconButton size="small" color="warning" onClick={() => setCloseTarget(y)}>
                           <LockOutlinedIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     ) : (
-                      <Tooltip title="إعادة فتح السنة المالية">
+                      <Tooltip title="إعادة فتح الفترة">
                         <IconButton size="small" color="primary" onClick={() => setReopenTarget(y)}>
                           <LockOpenOutlinedIcon fontSize="small" />
                         </IconButton>
@@ -205,42 +296,111 @@ export default function FiscalYearsPage() {
 
       {/* ── Create dialog ── */}
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>إنشاء سنة مالية جديدة</DialogTitle>
+        <DialogTitle>إنشاء فترة مالية جديدة</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
-          <TextField
-            label="اسم السنة"
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            placeholder={`السنة المالية ${new Date().getFullYear()}`}
-            fullWidth size="small"
-          />
-          <TextField
-            label="تاريخ البداية" type="date" value={form.start_date}
-            onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
-            fullWidth size="small" slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            label="تاريخ النهاية" type="date" value={form.end_date}
-            onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
-            fullWidth size="small" slotProps={{ inputLabel: { shrink: true } }}
-          />
+
+          {/* Period type toggle */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+              نوع الفترة
+            </Typography>
+            <ToggleButtonGroup value={periodType} exclusive fullWidth size="small"
+              onChange={(_, v) => v && setPeriodType(v)}>
+              <ToggleButton value="yearly" sx={{ gap: 0.5 }}>
+                <DateRangeOutlinedIcon fontSize="small" /> سنوية
+              </ToggleButton>
+              <ToggleButton value="monthly" sx={{ gap: 0.5 }}>
+                <CalendarMonthOutlinedIcon fontSize="small" /> شهرية
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
+          <Divider />
+
+          {/* ── Yearly fields ── */}
+          {periodType === 'yearly' && (
+            <>
+              <TextField
+                label="اسم الفترة"
+                value={yearlyForm.name}
+                onChange={e => setYearlyForm(f => ({ ...f, name: e.target.value }))}
+                placeholder={`السنة المالية ${currentYear}`}
+                fullWidth size="small"
+              />
+              <TextField
+                label="تاريخ البداية" type="date" value={yearlyForm.start_date}
+                onChange={e => setYearlyForm(f => ({ ...f, start_date: e.target.value }))}
+                fullWidth size="small" slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                label="تاريخ النهاية" type="date" value={yearlyForm.end_date}
+                onChange={e => setYearlyForm(f => ({ ...f, end_date: e.target.value }))}
+                fullWidth size="small" slotProps={{ inputLabel: { shrink: true } }}
+              />
+            </>
+          )}
+
+          {/* ── Monthly fields ── */}
+          {periodType === 'monthly' && (
+            <>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <TextField
+                  label="السنة" type="number" value={monthYear}
+                  onChange={e => setMonthYear(Number(e.target.value))}
+                  size="small" sx={{ width: 110 }}
+                  slotProps={{ htmlInput: { min: 2000, max: 2100 } }}
+                />
+                <TextField
+                  select label="الشهر" value={monthMonth} size="small" fullWidth
+                  onChange={e => setMonthMonth(Number(e.target.value))}
+                >
+                  <MenuItem value={0}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Chip label="12" size="small" color="primary" />
+                      جميع الأشهر
+                    </Box>
+                  </MenuItem>
+                  {ARABIC_MONTHS.map((name, i) => (
+                    <MenuItem key={i + 1} value={i + 1}>{name}</MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+
+              {/* Preview box */}
+              <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" color="text.secondary">معاينة:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.25 }}>{monthlyName}</Typography>
+                {monthMonth > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ direction: 'ltr', display: 'block' }}>
+                    {monthlyStartDate} — {monthlyEndDate}
+                  </Typography>
+                )}
+                {monthMonth === 0 && (
+                  <Typography variant="caption" color="primary.main" sx={{ display: 'block' }}>
+                    سيتم إنشاء 12 فترة شهرية — الأشهر الموجودة مسبقاً ستُتخطى تلقائياً
+                  </Typography>
+                )}
+              </Box>
+            </>
+          )}
         </DialogContent>
+
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>إلغاء</Button>
           <Button
             variant="contained"
             onClick={handleCreate}
-            disabled={creating || !form.name}
+            disabled={createDisabled}
             startIcon={creating ? <CircularProgress size={16} color="inherit" /> : <AddIcon />}
           >
-            إنشاء
+            {periodType === 'monthly' && monthMonth === 0 ? 'إنشاء 12 شهراً' : 'إنشاء'}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* ── Close dialog ── */}
       <Dialog open={!!closeTarget} onClose={() => setCloseTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>إغلاق السنة المالية</DialogTitle>
+        <DialogTitle>إغلاق الفترة المالية</DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
           {closeTarget && (
             <>
@@ -251,20 +411,15 @@ export default function FiscalYearsPage() {
                 </Typography>
               </Box>
 
-              {/* Net profit summary */}
               <Box sx={{
-                p: 2, mb: 2, borderRadius: 1,
-                bgcolor: closeTarget.is_profit ? 'success.50' : 'error.50',
-                border: '1px solid',
-                borderColor: closeTarget.is_profit ? 'success.200' : 'error.200',
+                p: 2, mb: 2, borderRadius: 1, bgcolor: closeTarget.is_profit ? 'success.50' : 'error.50',
+                border: '1px solid', borderColor: closeTarget.is_profit ? 'success.200' : 'error.200',
               }}>
                 <Typography variant="caption" color="text.secondary">
                   {closeTarget.is_profit ? 'صافي الربح المحقق' : 'صافي الخسارة'}
                 </Typography>
-                <Typography
-                  variant="h6"
-                  sx={{ fontWeight: 700, direction: 'ltr', color: closeTarget.is_profit ? 'success.main' : 'error.main' }}
-                >
+                <Typography variant="h6" sx={{ fontWeight: 700, direction: 'ltr',
+                  color: closeTarget.is_profit ? 'success.main' : 'error.main' }}>
                   {numFmt(Math.abs(Number(closeTarget.net_profit)))}
                 </Typography>
               </Box>
@@ -277,7 +432,7 @@ export default function FiscalYearsPage() {
 
               <Divider sx={{ my: 2 }} />
               <Typography variant="body2" sx={{ mb: 1.5 }}>
-                اختر حساب الأرباح المحتجزة (سيُرحَّل إليه صافي الربح/الخسارة):
+                اختر حساب الأرباح المحتجزة:
               </Typography>
               <Autocomplete
                 options={equityAccounts}
@@ -290,33 +445,27 @@ export default function FiscalYearsPage() {
                 size="small"
               />
               <DialogContentText sx={{ mt: 2, fontSize: 13 }}>
-                سيتم إنشاء قيد إقفال مرحَّل يُصفّر حسابات الإيرادات والمصروفات وتقييد
-                أي تعديل على قيود هذه الفترة.
+                سيتم إنشاء قيد إقفال مرحَّل يُصفّر حسابات الإيرادات والمصروفات.
               </DialogContentText>
             </>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCloseTarget(null)}>إلغاء</Button>
-          <Button
-            variant="contained"
-            color="warning"
-            onClick={handleClose}
+          <Button variant="contained" color="warning" onClick={handleClose}
             disabled={closing || !retainedAcct}
-            startIcon={closing ? <CircularProgress size={16} color="inherit" /> : <LockOutlinedIcon />}
-          >
-            إغلاق السنة
+            startIcon={closing ? <CircularProgress size={16} color="inherit" /> : <LockOutlinedIcon />}>
+            إغلاق الفترة
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* ── Reopen dialog ── */}
       <Dialog open={!!reopenTarget} onClose={() => setReopenTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>إعادة فتح السنة المالية</DialogTitle>
+        <DialogTitle>إعادة فتح الفترة المالية</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            سيتم حذف قيد الإقفال وإعادة فتح السنة للتعديل. هذا الإجراء قد يؤثر على
-            دقة التقارير إذا كانت ثمة سنة مالية لاحقة.
+            سيتم حذف قيد الإقفال وإعادة فتح الفترة للتعديل.
           </DialogContentText>
           {reopenTarget && (
             <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
@@ -326,13 +475,8 @@ export default function FiscalYearsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setReopenTarget(null)}>إلغاء</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleReopen}
-            disabled={reopening}
-            startIcon={reopening ? <CircularProgress size={16} color="inherit" /> : <LockOpenOutlinedIcon />}
-          >
+          <Button variant="contained" color="error" onClick={handleReopen} disabled={reopening}
+            startIcon={reopening ? <CircularProgress size={16} color="inherit" /> : <LockOpenOutlinedIcon />}>
             إعادة الفتح
           </Button>
         </DialogActions>

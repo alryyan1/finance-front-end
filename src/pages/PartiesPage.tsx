@@ -18,6 +18,7 @@ import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
+import Autocomplete from '@mui/material/Autocomplete'
 import Switch from '@mui/material/Switch'
 import IconButton from '@mui/material/IconButton'
 import Chip from '@mui/material/Chip'
@@ -278,21 +279,18 @@ export default function PartiesPage() {
               />
             </Box>
 
-            <FormControl size="small" fullWidth>
-              <InputLabel>الحساب المرتبط</InputLabel>
-              <Select
-                value={form.account_id?.toString() ?? ''}
-                label="الحساب المرتبط"
-                onChange={(e: SelectChangeEvent) =>
-                  setForm(p => ({ ...p, account_id: e.target.value === '' ? null : Number(e.target.value) }))
-                }
-              >
-                <MenuItem value="">— بدون حساب —</MenuItem>
-                {accounts.map(a => (
-                  <MenuItem key={a.id} value={a.id.toString()}>{a.code} — {a.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              size="small"
+              options={accounts}
+              value={accounts.find(a => a.id === form.account_id) ?? null}
+              onChange={(_, v) => setForm(p => ({ ...p, account_id: v?.id ?? null }))}
+              getOptionLabel={a => `${a.code} — ${a.name}`}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              noOptionsText="لا توجد نتائج"
+              renderInput={params => (
+                <TextField {...params} label="الحساب المرتبط" placeholder="ابحث عن حساب..." />
+              )}
+            />
 
             <TextField
               label="العنوان" value={form.address}

@@ -14,6 +14,7 @@ import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlin
 import PlaylistAddOutlinedIcon from '@mui/icons-material/PlaylistAddOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined'
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
 import type { SvgIconProps } from '@mui/material'
 import type { ComponentType } from 'react'
 
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { to: '/',              label: 'لوحة التحكم',  icon: DashboardOutlinedIcon,  end: true },
   { to: '/accounts',     label: 'الحسابات',      icon: AccountTreeOutlinedIcon },
   { to: '/transactions', label: 'المعاملات',     icon: SwapHorizOutlinedIcon },
+  { to: '/cash-vouchers', label: 'إذونات القبض والصرف', icon: AccountBalanceWalletOutlinedIcon },
   { to: '/parties',      label: 'الأطراف',       icon: PeopleOutlinedIcon },
   {
     to: '/reports', label: 'التقارير', icon: AssessmentOutlinedIcon,
@@ -55,6 +57,7 @@ export default function Sidebar() {
   const location = useLocation()
   const reportsActive  = location.pathname.startsWith('/reports')
   const settingsActive = location.pathname.startsWith('/settings')
+
 
   return (
     <Box sx={{

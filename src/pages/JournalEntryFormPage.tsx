@@ -12,6 +12,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { journalApi } from '@/api/journal'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
+import { fiscalYearsApi } from '@/api/fiscalYears'
 import type { JournalEntryLinePayload } from '@/types/journal'
 import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
@@ -50,6 +51,7 @@ export default function JournalEntryFormPage() {
   const [reference, setReference] = useState('')
   const [description, setDescription] = useState('')
   const [lines, setLines] = useState<LineForm[]>([emptyLine(), emptyLine()])
+  const [dateWarning, setDateWarning] = useState<string | null>(null)
 
   const firstAccountRef = useRef<HTMLInputElement>(null)
 
@@ -84,6 +86,13 @@ export default function JournalEntryFormPage() {
   const totalDebit = lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0)
   const totalCredit = lines.reduce((s, l) => s + (parseFloat(l.credit) || 0), 0)
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.005 && totalDebit > 0
+
+  useEffect(() => {
+    if (!date) return
+    fiscalYearsApi.checkDate(date).then(res => {
+      setDateWarning(res.covered ? null : 'لا توجد فترة محاسبية مفتوحة تغطي هذا التاريخ — سيُحفظ القيد لكن تأكد من صحة التاريخ')
+    }).catch(() => setDateWarning(null))
+  }, [date])
 
   const updateLine = (i: number, patch: Partial<LineForm>) => {
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l))
@@ -177,6 +186,11 @@ export default function JournalEntryFormPage() {
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+      {dateWarning && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {dateWarning}
         </Alert>
       )}
 

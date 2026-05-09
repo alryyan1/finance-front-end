@@ -14,6 +14,7 @@ import BalanceSheetPage from '@/pages/BalanceSheetPage'
 import SettingsPage from '@/pages/SettingsPage'
 import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
 import FiscalYearsPage from '@/pages/FiscalYearsPage'
+import CashVouchersPage from '@/pages/CashVouchersPage'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/transactions/new" element={<JournalEntryFormPage />} />
           <Route path="/transactions/:id/edit" element={<JournalEntryFormPage />} />
+          <Route path="/cash-vouchers" element={<CashVouchersPage />} />
           <Route path="/parties" element={<PartiesPage />} />
           <Route path="/reports" element={<TrialBalancePage />} />
           <Route path="/reports/trial-balance" element={<TrialBalancePage />} />

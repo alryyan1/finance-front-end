@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import {
   Alert, Box, Button, Chip, CircularProgress, Divider,
   Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Typography,
+  TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined'
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import api from '@/lib/axios'
 import { openPdf } from '@/api/pdf'
+import FiscalYearSelector from '@/components/FiscalYearSelector'
 
 interface BSRow {
   account_id: number
@@ -29,12 +30,25 @@ interface BalanceSheetData {
   total_equity_net: string
   total_liab_equity: string
   balanced: boolean
+  // Form 2
+  current_assets: BSRow[]
+  non_current_assets: BSRow[]
+  current_liabilities: BSRow[]
+  long_term_liabilities: BSRow[]
+  total_current_assets: string
+  total_non_current_assets: string
+  total_current_liabilities: string
+  total_long_term_liabilities: string
+  working_capital: string
+  net_assets: string
 }
 
 const numFmt = (v: string | number) =>
   Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const today = () => new Date().toISOString().slice(0, 10)
+
+// ── Form 1 helpers ─────────────────────────────────────────────────────────────
 
 function Section({
   title, color, rows, subtotal, subtotalLabel, extra,
@@ -91,12 +105,93 @@ function Section({
   )
 }
 
+// ── Form 2 helpers ─────────────────────────────────────────────────────────────
+
+function F2Section({
+  title, titleColor = 'text.primary', underline = false, rows, subtotal, subtotalLabel, subtotalColor = 'text.primary', negateValues = false,
+}: {
+  title: string
+  titleColor?: string
+  underline?: boolean
+  rows: BSRow[]
+  subtotal: string
+  subtotalLabel: string
+  subtotalColor?: string
+  negateValues?: boolean
+}) {
+  return (
+    <>
+      <TableRow sx={{ bgcolor: 'grey.50' }}>
+        <TableCell colSpan={3} sx={{ py: 0.75 }}>
+          <Typography variant="caption" sx={{
+            fontWeight: 700, color: titleColor,
+            textDecoration: underline ? 'underline' : 'none',
+          }}>
+            {title}
+          </Typography>
+        </TableCell>
+      </TableRow>
+      {rows.length === 0 && (
+        <TableRow>
+          <TableCell colSpan={3} sx={{ py: 1.5, color: 'text.disabled', textAlign: 'center', fontStyle: 'italic' }}>
+            لا توجد بيانات — حدد التصنيف الفرعي للحسابات
+          </TableCell>
+        </TableRow>
+      )}
+      {rows.map(row => (
+        <TableRow key={row.account_id} hover>
+          <TableCell sx={{ width: 40 }} />
+          <TableCell>
+            <Typography variant="body2">{row.name}</Typography>
+            <Typography variant="caption" color="text.secondary">{row.code}</Typography>
+          </TableCell>
+          <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', width: 130 }}>
+            {numFmt(negateValues ? -Number(row.balance) : row.balance)}
+          </TableCell>
+        </TableRow>
+      ))}
+      <TableRow sx={{ '& td': { fontWeight: 700, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'grey.100' } }}>
+        <TableCell />
+        <TableCell sx={{ color: subtotalColor }}>{subtotalLabel}</TableCell>
+        <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: subtotalColor }}>
+          {numFmt(negateValues ? -Number(subtotal) : subtotal)}
+        </TableCell>
+      </TableRow>
+    </>
+  )
+}
+
+function F2SummaryRow({ label, value, color, indent = false, doubleUnderline = false }: {
+  label: string; value: string; color?: string; indent?: boolean; doubleUnderline?: boolean
+}) {
+  return (
+    <TableRow sx={{
+      '& td': {
+        fontWeight: 700,
+        borderBottom: doubleUnderline ? '3px double' : '2px solid',
+        borderColor: 'divider',
+        bgcolor: doubleUnderline ? 'action.selected' : 'background.paper',
+      },
+    }}>
+      <TableCell />
+      <TableCell sx={{ color, paddingInlineStart: indent ? 4 : 2 }}>{label}</TableCell>
+      <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color }}>
+        {numFmt(value)}
+      </TableCell>
+    </TableRow>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
 export default function BalanceSheetPage() {
-  const [asOf, setAsOf]   = useState(today())
-  const [data, setData]   = useState<BalanceSheetData | null>(null)
+  const [asOf, setAsOf]             = useState(today())
+  const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
+  const [data, setData]             = useState<BalanceSheetData | null>(null)
   const [loading, setLoading]       = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [error, setError]           = useState<string | null>(null)
+  const [viewForm, setViewForm]     = useState<'1' | '2'>('1')
 
   const handlePdf = async () => {
     setPdfLoading(true)
@@ -104,13 +199,21 @@ export default function BalanceSheetPage() {
     finally { setPdfLoading(false) }
   }
 
-  const load = () => {
+  const load = (aof = asOf, fyId = fiscalYearId) => {
     setLoading(true)
     setError(null)
-    api.get<BalanceSheetData>('/api/reports/balance-sheet', { params: { as_of: asOf } })
+    const params = fyId ? { fiscal_year_id: fyId } : { as_of: aof }
+    api.get<BalanceSheetData>('/api/reports/balance-sheet', { params })
       .then(r => setData(r.data))
       .catch(() => setError('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
+  }
+
+  const handlePeriodChange = (fyId: number | null, _from: string, to: string) => {
+    setFiscalYearId(fyId)
+    const aof = fyId ? to : asOf
+    if (fyId) setAsOf(to)
+    load(aof, fyId)
   }
 
   useEffect(() => { load() }, [])
@@ -134,6 +237,7 @@ export default function BalanceSheetPage() {
       {/* Filter */}
       <Paper sx={{ p: 2.5, mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={today()} defaultTo={today()} />
           <TextField
             label="كما في تاريخ"
             type="date"
@@ -142,9 +246,18 @@ export default function BalanceSheetPage() {
             size="small"
             slotProps={{ inputLabel: { shrink: true } }}
           />
-          <Button variant="contained" onClick={load} disabled={loading}>
+          <Button variant="contained" onClick={() => load()} disabled={loading}>
             {loading ? <CircularProgress size={18} /> : 'عرض'}
           </Button>
+
+          <ToggleButtonGroup
+            value={viewForm} exclusive size="small"
+            onChange={(_, v) => v && setViewForm(v)}
+          >
+            <ToggleButton value="1" sx={{ px: 2, fontSize: 12 }}>الشكل الأول</ToggleButton>
+            <ToggleButton value="2" sx={{ px: 2, fontSize: 12 }}>الشكل الثاني</ToggleButton>
+          </ToggleButtonGroup>
+
           <Button
             variant="outlined"
             color="error"
@@ -165,15 +278,14 @@ export default function BalanceSheetPage() {
         </Box>
       )}
 
-      {!loading && data && (
+      {/* ── Form 1: Traditional two-column layout ── */}
+      {!loading && data && viewForm === '1' && (
         <>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, mb: 3 }}>
             {/* Assets */}
             <TableContainer component={Paper}>
               <Box sx={{ px: 2.5, pt: 2, pb: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                  الأصول
-                </Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>الأصول</Typography>
               </Box>
               <Table size="small">
                 <TableHead>
@@ -197,9 +309,7 @@ export default function BalanceSheetPage() {
             {/* Liabilities + Equity */}
             <TableContainer component={Paper}>
               <Box sx={{ px: 2.5, pt: 2, pb: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, color: 'error.main' }}>
-                  الخصوم وحقوق الملكية
-                </Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: 'error.main' }}>الخصوم وحقوق الملكية</Typography>
               </Box>
               <Table size="small">
                 <TableHead>
@@ -271,6 +381,144 @@ export default function BalanceSheetPage() {
             </Box>
           </Paper>
         </>
+      )}
+
+      {/* ── Form 2: Working capital format ── */}
+      {!loading && data && viewForm === '2' && (
+        <TableContainer component={Paper}>
+          <Box sx={{ px: 2.5, pt: 2, pb: 1 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              قائمة المركز المالي — الشكل الثاني
+            </Typography>
+            <Typography variant="caption" color="text.secondary">كما في تاريخ {data.as_of}</Typography>
+          </Box>
+          <Divider />
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: 40 }} />
+                <TableCell>البيان</TableCell>
+                <TableCell align="left" sx={{ width: 130 }}>المبلغ</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+
+              {/* Current Assets */}
+              <F2Section
+                title="الأصول المتداولة:"
+                titleColor="#2563eb"
+                underline
+                rows={data.current_assets}
+                subtotal={data.total_current_assets}
+                subtotalLabel="إجمالي الأصول المتداولة"
+                subtotalColor="#2563eb"
+              />
+
+              <TableRow><TableCell colSpan={3} sx={{ py: 0.25 }} /></TableRow>
+
+              {/* Current Liabilities (deducted) */}
+              <F2Section
+                title="يطرح: الخصوم المتداولة:"
+                titleColor="#dc2626"
+                underline
+                rows={data.current_liabilities}
+                subtotal={data.total_current_liabilities}
+                subtotalLabel="إجمالي الخصوم المتداولة"
+                subtotalColor="#dc2626"
+              />
+
+              {/* Working Capital */}
+              <F2SummaryRow
+                label="رأس المال العامل"
+                value={data.working_capital}
+                color={Number(data.working_capital) >= 0 ? '#16a34a' : '#dc2626'}
+              />
+
+              <TableRow><TableCell colSpan={3} sx={{ py: 0.5 }} /></TableRow>
+
+              {/* Non-current Assets */}
+              <F2Section
+                title="يضاف: الأصول الثابتة وغير الملموسة:"
+                titleColor="#2563eb"
+                underline
+                rows={data.non_current_assets}
+                subtotal={data.total_non_current_assets}
+                subtotalLabel="إجمالي الأصول الثابتة وغير الملموسة"
+                subtotalColor="#2563eb"
+              />
+
+              {/* Total Assets */}
+              <F2SummaryRow
+                label="إجمالي الأصول"
+                value={String(Number(data.working_capital) + Number(data.total_non_current_assets))}
+                color="primary.main"
+              />
+
+              <TableRow><TableCell colSpan={3} sx={{ py: 0.5 }} /></TableRow>
+
+              {/* Long-term Liabilities (deducted) */}
+              <F2Section
+                title="يطرح: الخصوم طويلة الأجل:"
+                titleColor="#dc2626"
+                underline
+                rows={data.long_term_liabilities}
+                subtotal={data.total_long_term_liabilities}
+                subtotalLabel="إجمالي الخصوم طويلة الأجل"
+                subtotalColor="#dc2626"
+              />
+
+              {/* Net Assets */}
+              <F2SummaryRow
+                label="صافي الأصول"
+                value={data.net_assets}
+                color="#7c3aed"
+                doubleUnderline
+              />
+
+              <TableRow><TableCell colSpan={3} sx={{ py: 0.5 }} /></TableRow>
+
+              {/* Equity section */}
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell colSpan={3} sx={{ py: 0.75 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#7c3aed', textDecoration: 'underline' }}>
+                    حقوق الملكية:
+                  </Typography>
+                </TableCell>
+              </TableRow>
+              {data.equity.map(row => (
+                <TableRow key={row.account_id} hover>
+                  <TableCell />
+                  <TableCell>
+                    <Typography variant="body2">{row.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">{row.code}</Typography>
+                  </TableCell>
+                  <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+                    {numFmt(row.balance)}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {/* Net profit in equity */}
+              <TableRow hover>
+                <TableCell />
+                <TableCell sx={{ color: data.is_profit ? '#16a34a' : '#dc2626' }}>
+                  {data.is_profit ? 'صافي الربح' : 'صافي الخسارة'}
+                </TableCell>
+                <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: data.is_profit ? '#16a34a' : '#dc2626' }}>
+                  {numFmt(Math.abs(Number(data.net_profit)))}
+                </TableCell>
+              </TableRow>
+
+              {/* Total Equity */}
+              <F2SummaryRow
+                label="صافي حقوق الملكية"
+                value={data.total_equity_net}
+                color="#7c3aed"
+                doubleUnderline
+              />
+
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
     </Box>
   )
