@@ -17,6 +17,7 @@ import FilterAltOffIcon from '@mui/icons-material/FilterAltOff'
 import SwapVertIcon from '@mui/icons-material/SwapVert'
 import { journalApi } from '@/api/journal'
 import type { JournalEntry, JournalEntryLine } from '@/types/journal'
+import FiscalYearSelector from '@/components/FiscalYearSelector'
 
 const fmt = (v: string | null | undefined) =>
   v ? Number(v).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'
@@ -24,33 +25,18 @@ const fmt = (v: string | null | undefined) =>
 const debitLines  = (lines: JournalEntryLine[]) => lines.filter(l => Number(l.debit)  > 0)
 const creditLines = (lines: JournalEntryLine[]) => lines.filter(l => Number(l.credit) > 0)
 
-/** One line in the البيان: account name on the RIGHT, (مدين)/(دائن) tag on the LEFT */
 function AccountLine({
   prefix, name, tag, indent = false, prefixColor,
 }: {
-  prefix: string
-  name: string
-  tag: string
-  indent?: boolean
-  prefixColor: string
+  prefix: string; name: string; tag: string; indent?: boolean; prefixColor: string
 }) {
   return (
-    <Box sx={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'baseline',
-      pl: indent ? 3 : 0,
-      gap: 2,
-    }}>
-      {/* LEFT side — (مدين) / (دائن) */}
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', pl: indent ? 3 : 0, gap: 2 }}>
       <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
         {tag}
       </Typography>
-      {/* RIGHT side — من ح/ account name */}
       <Typography variant="body2" sx={{ fontWeight: indent ? 400 : 600 }}>
-        <Box component="span" sx={{ color: prefixColor, fontWeight: 700, ml: 0.5 }}>
-          {prefix}
-        </Box>
+        <Box component="span" sx={{ color: prefixColor, fontWeight: 700, ml: 0.5 }}>{prefix}</Box>
         {name}
       </Typography>
     </Box>
@@ -61,47 +47,30 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
   const lines   = entry.lines ?? []
   const debits  = debitLines(lines)
   const credits = creditLines(lines)
-
   return (
     <Box sx={{ py: 0.75 }}>
       {debits.map((l, i) => (
-        <AccountLine
-          key={`d-${i}`}
-          prefix="من ح/"
-          name={l.account?.name ?? '—'}
-          tag="(مدين)"
-          prefixColor="primary.main"
-        />
+        <AccountLine key={`d-${i}`} prefix="من ح/" name={l.account?.name ?? '—'} tag="(مدين)" prefixColor="primary.main" />
       ))}
       {credits.map((l, i) => (
-        <AccountLine
-          key={`c-${i}`}
-          prefix="إلى ح/"
-          name={l.account?.name ?? '—'}
-          tag="(دائن)"
-          indent
-          prefixColor="success.main"
-        />
+        <AccountLine key={`c-${i}`} prefix="إلى ح/" name={l.account?.name ?? '—'} tag="(دائن)" indent prefixColor="success.main" />
       ))}
-      <Typography
-        variant="caption"
-        color="text.disabled"
-        sx={{ display: 'block', textAlign: 'center', mt: 0.5, fontStyle: 'italic' }}
-      >
+      <Typography variant="caption" color="text.disabled" sx={{ display: 'block', textAlign: 'center', mt: 0.5, fontStyle: 'italic' }}>
         ({entry.description})
       </Typography>
     </Box>
   )
 }
 
-const CELL_BORDER = { borderLeft: '1px solid', borderColor: 'divider' }
-const AMOUNT_CELL = { ...CELL_BORDER, direction: 'rtl', fontVariantNumeric: 'tabular-nums', textAlign: 'center', width: 130 }
+const CELL_BORDER  = { borderLeft: '1px solid', borderColor: 'divider' }
+const AMOUNT_CELL  = { ...CELL_BORDER, direction: 'rtl', fontVariantNumeric: 'tabular-nums', textAlign: 'center', width: 130 }
+const DRAFT_BG     = 'rgba(237, 108, 2, 0.05)'   // subtle amber tint for unposted rows
 
 export default function TransactionsPage() {
   const navigate = useNavigate()
-  const [entries, setEntries] = useState<JournalEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [reversing, setReversing] = useState<number | null>(null)
+  const [entries, setEntries]         = useState<JournalEntry[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [reversing, setReversing]     = useState<number | null>(null)
   const [confirmEntry, setConfirmEntry] = useState<JournalEntry | null>(null)
 
   const [search, setSearch] = useState('')
@@ -121,6 +90,11 @@ export default function TransactionsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  const handlePeriodChange = (_fyId: number | null, f: string, t: string) => {
+    setFrom(f); setTo(t)
+    load({ search, from: f, to: t, status })
+  }
 
   const handleReset = () => {
     setSearch(''); setFrom(''); setTo(''); setStatus('all')
@@ -150,28 +124,28 @@ export default function TransactionsPage() {
     }
   }
 
-  const grandTotal = entries.reduce((s, e) => s + Number(e.lines_sum_debit ?? 0), 0)
-  const hasFilters = !!(search || from || to || status !== 'all')
+  const grandTotal   = entries.reduce((s, e) => s + Number(e.lines_sum_debit ?? 0), 0)
+  const postedCount  = entries.filter(e => e.is_posted).length
+  const draftCount   = entries.filter(e => !e.is_posted).length
+  const hasFilters   = !!(search || from || to || status !== 'all')
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>القيود اليومية</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/transactions/new')}>
-          قيد جديد
-        </Button>
-      </Box>
+  
 
       {/* Filter bar */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Fiscal year selector */}
+          <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={from} defaultTo={to} />
+
           <TextField
             size="small"
             placeholder="بحث في البيان أو المرجع..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && load()}
-            sx={{ minWidth: 220 }}
+            sx={{ minWidth: 200 }}
             slotProps={{
               input: {
                 startAdornment: (
@@ -183,29 +157,16 @@ export default function TransactionsPage() {
             }}
           />
           <TextField
-            size="small"
-            type="date"
-            label="من"
-            value={from}
+            size="small" type="date" label="من" value={from}
             onChange={e => setFrom(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: 150 }}
+            slotProps={{ inputLabel: { shrink: true } }} sx={{ width: 145 }}
           />
           <TextField
-            size="small"
-            type="date"
-            label="إلى"
-            value={to}
+            size="small" type="date" label="إلى" value={to}
             onChange={e => setTo(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ width: 150 }}
+            slotProps={{ inputLabel: { shrink: true } }} sx={{ width: 145 }}
           />
-          <Select
-            size="small"
-            value={status}
-            onChange={e => setStatus(e.target.value)}
-            sx={{ minWidth: 120 }}
-          >
+          <Select size="small" value={status} onChange={e => setStatus(e.target.value)} sx={{ minWidth: 110 }}>
             <MenuItem value="all">الكل</MenuItem>
             <MenuItem value="posted">مرحَّل</MenuItem>
             <MenuItem value="draft">مسودة</MenuItem>
@@ -218,12 +179,22 @@ export default function TransactionsPage() {
               </IconButton>
             </Tooltip>
           )}
-          {!loading && (
-            <Typography variant="caption" color="text.secondary" sx={{ mr: 'auto' }}>
-              {entries.length} نتيجة
-            </Typography>
-          )}
+             {/* Count summary */}
+        {!loading && entries.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 1, mt: 1.5, alignItems: 'center' }}>
+            <Typography variant="caption" color="text.secondary">النتائج:</Typography>
+            <Chip label={`${entries.length} قيد`} size="small" variant="outlined" />
+            {postedCount > 0 && (
+              <Chip label={`${postedCount} مرحَّل`} size="small" color="success" variant="outlined" />
+            )}
+            {draftCount > 0 && (
+              <Chip label={`${draftCount} مسودة`} size="small" color="warning" variant="outlined" />
+            )}
+          </Box>
+        )}
         </Box>
+
+     
       </Paper>
 
       {loading ? (
@@ -239,7 +210,7 @@ export default function TransactionsPage() {
                 <TableCell align="center" sx={CELL_BORDER}>البيان</TableCell>
                 <TableCell align="center" sx={{ ...CELL_BORDER, width: 130 }}>دائن</TableCell>
                 <TableCell align="center" sx={{ ...CELL_BORDER, width: 130 }}>مدين</TableCell>
-                <TableCell sx={{ width: 40 }} />
+                <TableCell align="center" sx={{ ...CELL_BORDER, width: 155 }}>الإجراءات</TableCell>
               </TableRow>
             </TableHead>
 
@@ -256,7 +227,14 @@ export default function TransactionsPage() {
                 <TableRow
                   key={entry.id}
                   hover
-                  sx={{ cursor: 'pointer', verticalAlign: 'middle' }}
+                  sx={{
+                    cursor: 'pointer',
+                    verticalAlign: 'middle',
+                    bgcolor: entry.is_posted ? undefined : DRAFT_BG,
+                    '&:hover': {
+                      bgcolor: entry.is_posted ? undefined : 'rgba(237, 108, 2, 0.10)',
+                    },
+                  }}
                   onClick={() => navigate(`/transactions/${entry.id}/edit`)}
                 >
                   {/* التاريخ + الحالة */}
@@ -266,19 +244,19 @@ export default function TransactionsPage() {
                     </Typography>
                     <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.4 }}>
                       {entry.is_posted
-                        ? <Chip label="مرحَّل" color="success" size="small" />
-                        : <Chip label="مسودة"  color="default" size="small" />}
+                        ? <Chip label="مرحَّل"   color="success" size="small" />
+                        : <Chip label="مسودة"    color="warning" size="small" />}
                       {entry.reversal_of && (
                         <Chip label="قيد عكسي" color="warning" size="small" variant="outlined" />
                       )}
                       {entry.reversed_by && (
-                        <Chip label="معكوس" color="error" size="small" variant="outlined" />
+                        <Chip label="معكوس"    color="error"   size="small" variant="outlined" />
                       )}
                     </Box>
                   </TableCell>
 
                   {/* البيان */}
-                  <TableCell sx={{ ...CELL_BORDER, py: 0 ,direction: 'rtl' }}>
+                  <TableCell sx={{ ...CELL_BORDER, py: 0, direction: 'rtl' }}>
                     <BayanCell entry={entry} />
                   </TableCell>
 
@@ -296,39 +274,41 @@ export default function TransactionsPage() {
                     </Typography>
                   </TableCell>
 
-                  {/* Actions */}
-                  <TableCell sx={{ px: 0.5, py: 0 }} onClick={e => e.stopPropagation()}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25, py: 0.5 }}>
+                  {/* Actions — horizontal */}
+                  <TableCell sx={{ ...CELL_BORDER, px: 0.5, py: 0 }} onClick={e => e.stopPropagation()}>
+                    <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
                       <Tooltip title={entry.is_posted ? 'إلغاء الترحيل' : 'ترحيل'}>
                         <IconButton size="small" color={entry.is_posted ? 'warning' : 'success'} onClick={() => handleTogglePost(entry)}>
-                          {entry.is_posted ? <UnpublishedIcon sx={{ fontSize: 16 }} /> : <CheckCircleIcon sx={{ fontSize: 16 }} />}
+                          {entry.is_posted ? <UnpublishedIcon sx={{ fontSize: 18 }} /> : <CheckCircleIcon sx={{ fontSize: 18 }} />}
                         </IconButton>
                       </Tooltip>
+
                       <Tooltip title={entry.reversed_by ? 'تم العكس مسبقاً' : 'عكس القيد'}>
                         <span>
                           <IconButton
-                            size="small"
-                            color="secondary"
+                            size="small" color="secondary"
                             disabled={!entry.is_posted || !!entry.reversed_by || reversing === entry.id}
                             onClick={() => setConfirmEntry(entry)}
                           >
                             {reversing === entry.id
                               ? <CircularProgress size={14} />
-                              : <SwapVertIcon sx={{ fontSize: 16 }} />}
+                              : <SwapVertIcon sx={{ fontSize: 18 }} />}
                           </IconButton>
                         </span>
                       </Tooltip>
+
                       <Tooltip title="تعديل">
                         <span>
                           <IconButton size="small" color="primary" disabled={entry.is_posted} onClick={() => navigate(`/transactions/${entry.id}/edit`)}>
-                            <EditIcon sx={{ fontSize: 16 }} />
+                            <EditIcon sx={{ fontSize: 18 }} />
                           </IconButton>
                         </span>
                       </Tooltip>
+
                       <Tooltip title="حذف">
                         <span>
                           <IconButton size="small" color="error" disabled={entry.is_posted} onClick={() => handleDelete(entry)}>
-                            <DeleteIcon sx={{ fontSize: 16 }} />
+                            <DeleteIcon sx={{ fontSize: 18 }} />
                           </IconButton>
                         </span>
                       </Tooltip>
@@ -349,7 +329,7 @@ export default function TransactionsPage() {
                   <TableCell sx={{ ...AMOUNT_CELL, fontWeight: 700, borderTop: '2px solid', borderTopColor: 'divider', color: 'primary.main' }}>
                     {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell sx={{ borderTop: '2px solid', borderTopColor: 'divider' }} />
+                  <TableCell sx={{ borderTop: '2px solid', borderTopColor: 'divider', ...CELL_BORDER }} />
                 </TableRow>
               )}
             </TableBody>
@@ -361,9 +341,7 @@ export default function TransactionsPage() {
       <Dialog open={!!confirmEntry} onClose={() => setConfirmEntry(null)} maxWidth="xs" fullWidth>
         <DialogTitle>تأكيد عكس القيد</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            سيتم إنشاء قيد عكسي يلغي أثر هذا القيد:
-          </DialogContentText>
+          <DialogContentText>سيتم إنشاء قيد عكسي يلغي أثر هذا القيد:</DialogContentText>
           <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'grey.50', borderRadius: 1, direction: 'rtl' }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmEntry?.description}</Typography>
             <Typography variant="caption" color="text.secondary">{confirmEntry?.date}</Typography>

@@ -19,6 +19,7 @@
     "axios": "^1.15.2",
     "dayjs": "^1.11.20",
     "react": "^19.2.5",
+    "react-arborist": "^3.6.1",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2",
     "stylis-plugin-rtl": "^2.1.1",

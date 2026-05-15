@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { keyframes } from '@emotion/react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
@@ -53,6 +54,28 @@ const TYPE_COLOR: Record<AccountType, 'primary' | 'error' | 'secondary' | 'succe
   equity:    'secondary',
   revenue:   'success',
   expense:   'warning',
+}
+
+// ─── Sibling color palette ────────────────────────────────────────────────────
+
+const SIBLING_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#6366f1',
+  '#84cc16', '#a855f7', '#0ea5e9', '#d946ef', '#22c55e',
+]
+
+// Maps each parent_id → a color. Children sharing the same parent_id share the same color.
+function buildParentColorMap(accounts: Account[]): Map<number, string> {
+  const map = new Map<number, string>()
+  let idx = 0
+  const sorted = [...accounts].sort((a, b) => a.code.localeCompare(b.code))
+  for (const a of sorted) {
+    if (a.parent_id !== null && !map.has(a.parent_id)) {
+      map.set(a.parent_id, SIBLING_COLORS[idx % SIBLING_COLORS.length])
+      idx++
+    }
+  }
+  return map
 }
 
 // ─── Tree helpers ────────────────────────────────────────────────────────────
@@ -159,21 +182,33 @@ const emptyForm = {
   is_active: true,
 }
 
+// ─── Highlight animation ──────────────────────────────────────────────────────
+
+const highlightFade = keyframes`
+  0%   { background-color: rgba(59, 130, 246, 0.22); }
+  60%  { background-color: rgba(59, 130, 246, 0.09); }
+  100% { background-color: rgba(59, 130, 246, 0); }
+`
+
 // ─── Tree node component ──────────────────────────────────────────────────────
 
 interface TreeNodeProps {
   node: TreeNode
   depth: number
   expandedIds: Set<number>
+  parentColorMap: Map<number, string>
+  newlyAddedId: number | null
   onToggle: (id: number) => void
   onEdit: (a: Account) => void
   onDelete: (a: Account) => void
   onAddChild: (a: Account) => void
 }
 
-function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete, onAddChild }: TreeNodeProps) {
+function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedId, onToggle, onEdit, onDelete, onAddChild }: TreeNodeProps) {
   const hasChildren = node.children.length > 0
   const isExpanded  = expandedIds.has(node.id)
+  // Color shared by all siblings (nodes with same parent_id)
+  const siblingColor = node.parent_id !== null ? (parentColorMap.get(node.parent_id) ?? null) : null
 
   return (
     <>
@@ -184,13 +219,14 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
           paddingInlineStart: `${4 + depth * 22}px`,
           borderBottom: '1px solid',
           borderColor: 'divider',
+          borderLeft: siblingColor ? `3px solid ${siblingColor}` : '3px solid transparent',
           opacity: node.is_active ? 1 : 0.45,
           bgcolor: depth === 0 ? 'grey.50' : 'background.paper',
           '&:hover': { bgcolor: 'action.hover' },
           transition: 'background-color 0.1s',
+          animation: node.id === newlyAddedId ? `${highlightFade} 2s ease-out forwards` : undefined,
         }}
       >
-        {/* Expand / collapse icon */}
         <Box sx={{ width: 26, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
           {hasChildren ? (
             <IconButton size="small" onClick={() => onToggle(node.id)} sx={{ p: 0.25 }}>
@@ -203,7 +239,6 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
           )}
         </Box>
 
-        {/* Code */}
         <Typography
           sx={{ fontFamily: 'monospace', fontSize: 12, color: 'text.secondary',
             minWidth: 64, flexShrink: 0, direction: 'ltr', textAlign: 'left' }}
@@ -211,7 +246,6 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
           {node.code}
         </Typography>
 
-        {/* Name */}
         <Typography
           variant="body2"
           sx={{
@@ -222,13 +256,21 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
         >
           {node.name}
           {hasChildren && (
-            <Typography component="span" variant="caption" color="text.disabled" sx={{ mr: 0.75 }}>
-              ({node.children.length})
-            </Typography>
+            <Box
+              component="span"
+              sx={{
+                display: 'inline-block',
+                mr: 1.3, fontSize: 11, fontWeight: 600,
+                px: 0.6, py: 0.1, borderRadius: 0.75,
+                color: siblingColor ?? 'text.disabled',
+                bgcolor: siblingColor ? `${siblingColor}18` : 'transparent',
+              }}
+            >
+              {node.children.length}
+            </Box>
           )}
         </Typography>
 
-        {/* Type chip */}
         <Chip
           label={TYPE_LABELS[node.type]}
           color={TYPE_COLOR[node.type]}
@@ -236,7 +278,6 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
           sx={{ fontSize: 11, flexShrink: 0 }}
         />
 
-        {/* Status */}
         <Typography
           variant="caption"
           sx={{ color: node.is_active ? 'success.main' : 'text.disabled',
@@ -245,7 +286,6 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
           {node.is_active ? 'نشط' : 'موقوف'}
         </Typography>
 
-        {/* Actions */}
         <Tooltip title="إضافة حساب فرعي">
           <IconButton size="small" onClick={() => onAddChild(node)} sx={{ color: 'primary.main' }}>
             <AddOutlinedIcon sx={{ fontSize: 16 }} />
@@ -263,7 +303,6 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
         </Tooltip>
       </Box>
 
-      {/* Children */}
       {hasChildren && (
         <Collapse in={isExpanded} unmountOnExit>
           {node.children.map(child => (
@@ -272,6 +311,8 @@ function AccountTreeNode({ node, depth, expandedIds, onToggle, onEdit, onDelete,
               node={child}
               depth={depth + 1}
               expandedIds={expandedIds}
+              parentColorMap={parentColorMap}
+              newlyAddedId={newlyAddedId}
               onToggle={onToggle}
               onEdit={onEdit}
               onDelete={onDelete}
@@ -303,6 +344,9 @@ export default function AccountsPage() {
   const [deleting, setDeleting]         = useState(false)
   const [deleteError, setDeleteError]   = useState<string | null>(null)
 
+  const [newlyAddedId, setNewlyAddedId] = useState<number | null>(null)
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => { load() }, [])
 
   async function load() {
@@ -310,14 +354,14 @@ export default function AccountsPage() {
     try {
       const data = await accountsApi.list()
       setAccounts(data)
-      // expand all nodes with children by default
       const tree = buildTree(data)
       setExpandedIds(new Set(collectAllIds(tree)))
     } finally { setLoading(false) }
   }
 
-  const treeData  = useMemo(() => buildTree(accounts), [accounts])
-  const flatData  = useMemo(() => flattenTree(accounts), [accounts])
+  const treeData       = useMemo(() => buildTree(accounts), [accounts])
+  const flatData       = useMemo(() => flattenTree(accounts), [accounts])
+  const parentColorMap = useMemo(() => buildParentColorMap(accounts), [accounts])
 
   const toggleExpand = (id: number) =>
     setExpandedIds(prev => {
@@ -326,7 +370,7 @@ export default function AccountsPage() {
       return next
     })
 
-  const expandAll  = () => setExpandedIds(new Set(collectAllIds(treeData)))
+  const expandAll   = () => setExpandedIds(new Set(collectAllIds(treeData)))
   const collapseAll = () => setExpandedIds(new Set())
 
   function openCreate() {
@@ -342,6 +386,7 @@ export default function AccountsPage() {
     setDialogOpen(true)
     setExpandedIds(prev => new Set(prev).add(parent.id))
   }
+
   function openEdit(a: Account) {
     setEditing(a)
     setForm({ code: a.code, name: a.name, type: a.type, sub_type: a.sub_type, parent_id: a.parent_id, is_active: a.is_active })
@@ -352,8 +397,14 @@ export default function AccountsPage() {
     e.preventDefault()
     setSaving(true); setFormError(null)
     try {
-      if (editing) await accountsApi.update(editing.id, form)
-      else         await accountsApi.create(form)
+      if (editing) {
+        await accountsApi.update(editing.id, form)
+      } else {
+        const created = await accountsApi.create(form)
+        if (highlightTimer.current) clearTimeout(highlightTimer.current)
+        setNewlyAddedId(created.id)
+        highlightTimer.current = setTimeout(() => setNewlyAddedId(null), 2500)
+      }
       await load(); setDialogOpen(false)
     } catch (err) { setFormError(extractError(err)) }
     finally { setSaving(false) }
@@ -386,7 +437,6 @@ export default function AccountsPage() {
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          {/* Expand/collapse controls — tree view only */}
           {viewMode === 'tree' && !loading && (
             <Box sx={{ display: 'flex', gap: 0.5 }}>
               <Button size="small" variant="text" onClick={expandAll}   sx={{ fontSize: 12 }}>توسيع الكل</Button>
@@ -394,7 +444,6 @@ export default function AccountsPage() {
             </Box>
           )}
 
-          {/* View toggle */}
           <ToggleButtonGroup
             value={viewMode} exclusive size="small"
             onChange={(_, v) => v && setViewMode(v)}
@@ -417,12 +466,11 @@ export default function AccountsPage() {
         </Box>
       </Box>
 
-      {/* ── Tree View ── */}
+      {/* ── Tree view ── */}
       {viewMode === 'tree' && (
         <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-          {/* Tree header */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 2, py: 1,
-            bgcolor: 'grey.100', borderBottom: '1px solid', borderColor: 'divider' }}>
+            bgcolor: 'grey.50', borderBottom: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ width: 26 }} />
             <Typography variant="caption" sx={{ fontWeight: 700, minWidth: 64, color: 'text.secondary' }}>الكود</Typography>
             <Typography variant="caption" sx={{ flex: 1, fontWeight: 700, color: 'text.secondary' }}>اسم الحساب</Typography>
@@ -446,6 +494,8 @@ export default function AccountsPage() {
                 node={node}
                 depth={0}
                 expandedIds={expandedIds}
+                parentColorMap={parentColorMap}
+                newlyAddedId={newlyAddedId}
                 onToggle={toggleExpand}
                 onEdit={openEdit}
                 onDelete={confirmDelete}
@@ -456,7 +506,7 @@ export default function AccountsPage() {
         </Paper>
       )}
 
-      {/* ── Table View ── */}
+      {/* ── Table view ── */}
       {viewMode === 'table' && (
         <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
           <Table size="small">
@@ -484,7 +534,11 @@ export default function AccountsPage() {
                 </TableRow>
               ) : flatData.map(node => (
                 <TableRow key={node.id}
-                  sx={{ opacity: node.is_active ? 1 : 0.45, '&:hover': { bgcolor: 'action.hover' } }}>
+                  sx={{
+                    opacity: node.is_active ? 1 : 0.45,
+                    '&:hover': { bgcolor: 'action.hover' },
+                    animation: node.id === newlyAddedId ? `${highlightFade} 2s ease-out forwards` : undefined,
+                  }}>
                   <TableCell sx={{ fontFamily: 'monospace', fontSize: 13, color: 'text.secondary' }}>
                     {node.code}
                   </TableCell>
@@ -613,26 +667,36 @@ export default function AccountsPage() {
       </Dialog>
 
       {/* ── Delete Confirmation ── */}
-      <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeleteError(null) }} maxWidth="xs" fullWidth>
-        <DialogTitle>تأكيد الحذف</DialogTitle>
-        <Divider />
-        <DialogContent sx={{ pt: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            هل أنت متأكد من حذف الحساب{' '}
-            <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
-              {deleteTarget?.code} — {deleteTarget?.name}
-            </Box>؟
-          </Typography>
-          {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}
-        </DialogContent>
-        <Divider />
-        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-          <Button variant="outlined" onClick={() => { setDeleteOpen(false); setDeleteError(null) }}>إلغاء</Button>
-          <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}>
-            {deleting ? 'جارٍ الحذف…' : 'حذف'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {(() => {
+        const hasChildren = !!deleteTarget && accounts.some(a => a.parent_id === deleteTarget.id)
+        return (
+          <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeleteError(null) }} maxWidth="xs" fullWidth>
+            <DialogTitle>تأكيد الحذف</DialogTitle>
+            <Divider />
+            <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                هل أنت متأكد من حذف الحساب{' '}
+                <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                  {deleteTarget?.code} — {deleteTarget?.name}
+                </Box>؟
+              </Typography>
+              {hasChildren && (
+                <Alert severity="warning">
+                  لا يمكن الحذف — هذا الحساب يحتوي على حسابات فرعية. احذف الحسابات الفرعية أولاً.
+                </Alert>
+              )}
+              {deleteError && <Alert severity="error">{deleteError}</Alert>}
+            </DialogContent>
+            <Divider />
+            <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+              <Button variant="outlined" onClick={() => { setDeleteOpen(false); setDeleteError(null) }}>إلغاء</Button>
+              <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting || hasChildren}>
+                {deleting ? 'جارٍ الحذف…' : 'حذف'}
+              </Button>
+            </DialogActions>
+          </Dialog>
+        )
+      })()}
     </Box>
   )
 }

@@ -15,6 +15,9 @@ import SettingsPage from '@/pages/SettingsPage'
 import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
 import FiscalYearsPage from '@/pages/FiscalYearsPage'
 import CashVouchersPage from '@/pages/CashVouchersPage'
+import PettyCashPage from '@/pages/PettyCashPage'
+import UsersPage from '@/pages/UsersPage'
+import BackupPage from '@/pages/BackupPage'
 
 export default function App() {
   return (
@@ -33,6 +36,9 @@ export default function App() {
           <Route path="/transactions/new" element={<JournalEntryFormPage />} />
           <Route path="/transactions/:id/edit" element={<JournalEntryFormPage />} />
           <Route path="/cash-vouchers" element={<CashVouchersPage />} />
+          <Route path="/petty-cash" element={<PettyCashPage />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/backup" element={<BackupPage />} />
           <Route path="/parties" element={<PartiesPage />} />
           <Route path="/reports" element={<TrialBalancePage />} />
           <Route path="/reports/trial-balance" element={<TrialBalancePage />} />
