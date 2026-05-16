@@ -32,6 +32,8 @@ export interface PettyCashRequest {
   paid_at: string | null
   expense_account_id: number | null
   expense_account?: { id: number; code: string; name: string }
+  document_path: string | null
+  document_original_name: string | null
 }
 
 export type ReplenishmentStatus = 'pending' | 'approved' | 'rejected'

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, LinearProgress, MenuItem,
+  DialogContent, DialogTitle, Divider, IconButton, LinearProgress, MenuItem,
   Paper, Tab, Tabs, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Tooltip,
   Typography,
@@ -14,6 +14,8 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import HelpIcon from '@mui/icons-material/Help'
+import AttachFileOutlinedIcon from '@mui/icons-material/AttachFileOutlined'
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 
 import { pettyCashApi } from '@/api/pettyCash'
 import { accountsApi } from '@/api/accounts'
@@ -154,6 +156,7 @@ export default function PettyCashPage() {
     requester_name: user?.name ?? '', date: new Date().toISOString().slice(0, 10),
     amount: '', category: 'other' as RequestCategory,
     description: '', reference: '', expense_account_id: '',
+    document: null as File | null,
   })
 
   // Replenishment form
@@ -202,15 +205,33 @@ export default function PettyCashPage() {
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
+  const openDocument = async (req: PettyCashRequest) => {
+    try {
+      const blob = await pettyCashApi.fetchDocument(req.id)
+      const url  = URL.createObjectURL(blob)
+      const win  = window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30_000)
+      if (!win) setError('يرجى السماح بالنوافذ المنبثقة في المتصفح')
+    } catch {
+      setError('تعذّر فتح المستند')
+    }
+  }
+
   const handleCreateRequest = async () => {
     try {
-      await pettyCashApi.createRequest({
-        ...reqForm,
-        amount: Number(reqForm.amount) as unknown as string,
-        expense_account_id: reqForm.expense_account_id ? Number(reqForm.expense_account_id) : null,
-      })
+      const fd = new FormData()
+      fd.append('requester_name', reqForm.requester_name)
+      fd.append('date', reqForm.date)
+      fd.append('amount', reqForm.amount)
+      fd.append('category', reqForm.category)
+      fd.append('description', reqForm.description)
+      if (reqForm.reference) fd.append('reference', reqForm.reference)
+      if (reqForm.expense_account_id) fd.append('expense_account_id', reqForm.expense_account_id)
+      if (reqForm.document) fd.append('document', reqForm.document)
+
+      await pettyCashApi.createRequest(fd)
       setReqDialog(false)
-      setReqForm({ requester_name: defaultRequesterName(), date: new Date().toISOString().slice(0, 10), amount: '', category: 'other', description: '', reference: '', expense_account_id: '' })
+      setReqForm({ requester_name: defaultRequesterName(), date: new Date().toISOString().slice(0, 10), amount: '', category: 'other', description: '', reference: '', expense_account_id: '', document: null })
       loadAll()
     } catch { setError('فشل إنشاء الطلب') }
   }
@@ -322,12 +343,13 @@ export default function PettyCashPage() {
                 <TableCell>البيان</TableCell>
                 <TableCell align="center">المبلغ</TableCell>
                 <TableCell align="center">الحالة</TableCell>
+                <TableCell align="center">مستند</TableCell>
                 <TableCell align="center">إجراء</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {requests.length === 0 && (
-                <TableRow><TableCell colSpan={7} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد طلبات</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد طلبات</TableCell></TableRow>
               )}
               {requests.map(req => (
                 <TableRow key={req.id} hover
@@ -349,6 +371,17 @@ export default function PettyCashPage() {
                   </TableCell>
                   <TableCell align="center">
                     <Chip label={STATUS_LABELS[req.status]} color={STATUS_COLORS[req.status]} size="small" />
+                  </TableCell>
+                  <TableCell align="center">
+                    {req.document_path ? (
+                      <Tooltip title={req.document_original_name ?? 'عرض المستند'}>
+                        <IconButton size="small" color="error" onClick={() => openDocument(req)}>
+                          <PictureAsPdfOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    ) : (
+                      <Typography variant="caption" color="text.disabled">—</Typography>
+                    )}
                   </TableCell>
                   <TableCell align="center">
                     <RequestActions
@@ -490,6 +523,33 @@ export default function PettyCashPage() {
               onChange={(_, v) => setReqForm(p => ({ ...p, expense_account_id: v ? String(v.id) : '' }))}
               renderInput={params => <TextField {...params} label="حساب المصروف (اختياري)" size="small" />}
             />
+            {/* PDF upload */}
+            <Box>
+              <Button
+                component="label"
+                variant="outlined"
+                size="small"
+                startIcon={<AttachFileOutlinedIcon />}
+                color={reqForm.document ? 'success' : 'inherit'}
+                fullWidth
+                sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+              >
+                {reqForm.document
+                  ? reqForm.document.name
+                  : 'إرفاق مستند PDF (اختياري)'}
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  hidden
+                  onChange={e => setReqForm(p => ({ ...p, document: e.target.files?.[0] ?? null }))}
+                />
+              </Button>
+              {reqForm.document && (
+                <Button size="small" color="error" onClick={() => setReqForm(p => ({ ...p, document: null }))}>
+                  إزالة الملف
+                </Button>
+              )}
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
