@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
+import AiChatButton from '@/components/AiChat/AiChatButton'
 
 export const TOPBAR_HEIGHT = 64
 
@@ -18,6 +19,7 @@ export default function AppLayout() {
           <Outlet />
         </Box>
       </Box>
+      <AiChatButton />
     </Box>
   )
 }

@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Alert, Autocomplete, Box, Button, CircularProgress,
-  Divider, IconButton, Paper, Table, TableBody,
+  Divider, IconButton, InputAdornment, Paper, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow,
   TextField, Tooltip, Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import { aiApi } from '@/api/ai'
 import { journalApi } from '@/api/journal'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
@@ -53,7 +55,25 @@ export default function JournalEntryFormPage() {
   const [lines, setLines] = useState<LineForm[]>([emptyLine(), emptyLine()])
   const [dateWarning, setDateWarning] = useState<string | null>(null)
 
+  const [suggestingLine, setSuggestingLine] = useState<number | null>(null)
   const firstAccountRef = useRef<HTMLInputElement>(null)
+
+  const suggestLineDescription = async (i: number) => {
+    const line = lines[i]
+    setSuggestingLine(i)
+    try {
+      const suggestion = await aiApi.suggestDescription({
+        debit_account:  line.debit  && line.account ? `${line.account.code} ${line.account.name}` : undefined,
+        credit_account: line.credit && line.account ? `${line.account.code} ${line.account.name}` : undefined,
+        amount: line.debit ? Number(line.debit) : line.credit ? Number(line.credit) : undefined,
+      })
+      updateLine(i, { description: suggestion })
+    } finally {
+      setSuggestingLine(null)
+    }
+  }
+
+  const parentIds = new Set(accounts.map(a => a.parent_id).filter(id => id !== null))
 
   useEffect(() => {
     Promise.all([accountsApi.list(), partiesApi.list()])
@@ -244,6 +264,22 @@ export default function JournalEntryFormPage() {
                       onChange={(_, v) => updateLine(i, { account: v })}
                       getOptionLabel={a => `${a.code} — ${a.name}`}
                       isOptionEqualToValue={(a, b) => a.id === b.id}
+                      getOptionDisabled={a => parentIds.has(a.id)}
+                      renderOption={(props, a) => {
+                        const isParent  = parentIds.has(a.id)
+                        const isRoot    = a.parent_id === null
+                        return (
+                          <li {...props} key={a.id} style={{
+                            fontWeight:   isRoot ? 700 : isParent ? 600 : 400,
+                            color:        isRoot ? '#1565c0' : isParent ? '#2e7d32' : 'inherit',
+                            paddingRight: isRoot ? 8 : isParent ? 20 : 32,
+                            fontSize:     '0.82rem',
+                            opacity:      isParent ? 1 : undefined,
+                          }}>
+                            {a.code} — {a.name}
+                          </li>
+                        )
+                      }}
                       renderInput={params => (
                         <TextField
                           {...params}
@@ -279,6 +315,26 @@ export default function JournalEntryFormPage() {
                       value={line.description}
                       onChange={e => updateLine(i, { description: e.target.value })}
                       placeholder="بيان السطر"
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <Tooltip title="اقتراح بيان بالذكاء الاصطناعي">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={suggestingLine === i}
+                                  onClick={() => suggestLineDescription(i)}
+                                  sx={{ color: 'primary.main', opacity: 0.7 }}
+                                >
+                                  {suggestingLine === i
+                                    ? <CircularProgress size={14} />
+                                    : <AutoAwesomeIcon sx={{ fontSize: 16 }} />}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </InputAdornment>
+                        ),
+                      }}
                     />
                   </TableCell>
                   <TableCell>
