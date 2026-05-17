@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:hostinger": "vite build --mode hostinger",
     "build:server6": "vite build --mode server6",
+    "build:diagnostic": "vite build --mode diagnostic",
     "lint": "eslint .",
     "preview": "vite preview"
   },

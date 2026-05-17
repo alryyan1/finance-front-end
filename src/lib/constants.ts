@@ -3,6 +3,7 @@ import 'dayjs/locale/ar'
 
 dayjs.locale('ar')
 
+
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost/finance-api/public'
 
 export const CURRENCY_CODE = 'SDG'
