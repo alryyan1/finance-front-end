@@ -6,6 +6,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow,
   Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
 import SwapHorizOutlinedIcon from '@mui/icons-material/SwapHorizOutlined'
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined'
@@ -121,9 +122,23 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700 }} gutterBottom>
-        مرحباً، {user?.name}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          مرحباً، {user?.name}
+        </Typography>
+        <HelpButton title="دليل استخدام لوحة التحكم">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>لوحة التحكم</Typography>
+              <Typography variant="body2">لوحة التحكم تُقدّم ملخصاً سريعاً للوضع المالي الحالي: إجمالي الأصول، الخصوم، الإيرادات والمصروفات لهذا الشهر.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>بطاقات الإحصاء</Typography>
+              <Typography variant="body2">كل بطاقة تُظهر قيمة مالية إجمالية. اضغط على البطاقة للانتقال إلى الصفحة التفصيلية المقابلة.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>آخر القيود</Typography>
+              <Typography variant="body2">يُعرض في أسفل الصفحة جدول بآخر القيود المحاسبية المسجّلة. للمزيد من التفاصيل انتقل لصفحة "القيود".</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>التنقل في النظام</Typography>
+              <Typography variant="body2">استخدم القائمة الجانبية للتنقل بين صفحات النظام. الأقسام: المحاسبة، التقارير، النثريات، الإعدادات.</Typography></Box>
+          </Box>
+        </HelpButton>
+      </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         ملخص النشاط المالي لشهر {new Date().toLocaleDateString('ar-SA-u-nu-latn', { month: 'long', year: 'numeric' })}
       </Typography>

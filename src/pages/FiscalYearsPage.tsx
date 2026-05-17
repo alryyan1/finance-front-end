@@ -6,6 +6,7 @@ import {
   TableContainer, TableHead, TableRow, TextField, ToggleButton,
   ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import AddIcon from '@mui/icons-material/Add'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined'
@@ -192,9 +193,23 @@ export default function FiscalYearsPage() {
             إدارة الفترات المالية السنوية والشهرية
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
-          فترة جديدة
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <HelpButton title="دليل استخدام الفترات المالية">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي الفترة المالية؟</Typography>
+                <Typography variant="body2">الفترة المالية هي النطاق الزمني الذي يُسجَّل فيه النشاط المحاسبي. عادةً سنة كاملة (يناير–ديسمبر)، أو يمكن تقسيمها لفترات شهرية.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إنشاء فترة جديدة</Typography>
+                <Typography variant="body2">اضغط "فترة جديدة"، حدد تاريخ البداية والنهاية. يمكن إنشاء فترة سنوية وتقسيمها تلقائياً لـ 12 فترة شهرية.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>قفل الفترة</Typography>
+                <Typography variant="body2">بعد إغلاق الفترة المالية اضغط أيقونة القفل لمنع إضافة أو تعديل أي قيود فيها. الفترات المقفولة محمية من التغيير.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الفترة النشطة</Typography>
+                <Typography variant="body2">الفترة المحددة في منتقي السنة المالية هي التي تُستخدم في جميع صفحات النظام تلقائياً عند عرض البيانات.</Typography></Box>
+            </Box>
+          </HelpButton>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
+            فترة جديدة
+          </Button>
+        </Box>
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}

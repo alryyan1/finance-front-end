@@ -7,6 +7,7 @@ import {
   MenuItem, Paper, Select, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -131,7 +132,32 @@ export default function TransactionsPage() {
 
   return (
     <Box>
-  
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>القيود المحاسبية</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {postedCount} مرحّل · {draftCount} مسودة
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <HelpButton title="دليل استخدام القيود المحاسبية">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هو القيد المحاسبي؟</Typography>
+                <Typography variant="body2">القيد المحاسبي هو تسجيل عملية مالية وفق مبدأ القيد المزدوج: كل مبلغ يُدان في حساب يُقابله دائن في حساب آخر. مجموع المدين = مجموع الدائن دائماً.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إنشاء قيد جديد</Typography>
+                <Typography variant="body2">اضغط "قيد جديد"، أدخل التاريخ والبيان، ثم أضف الأسطر (حساب + مبلغ مدين أو دائن). لا يُحفظ القيد إلا عند التوازن التام.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الترحيل والمسودة</Typography>
+                <Typography variant="body2">القيد المسودة لا يؤثر على الأرصدة. اضغط أيقونة الترحيل لتأكيد القيد وتحديث الأرصدة. لا يمكن تعديل القيد بعد الترحيل.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>القيد العكسي</Typography>
+                <Typography variant="body2">لإلغاء تأثير قيد مرحّل، استخدم "قيد عكسي" بدلاً من حذفه. يُنشئ النظام قيداً جديداً بنفس المبالغ لكن معكوسة.</Typography></Box>
+            </Box>
+          </HelpButton>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/journal/new')}>
+            قيد جديد
+          </Button>
+        </Box>
+      </Box>
 
       {/* Filter bar */}
       <Paper sx={{ p: 2, mb: 2 }}>

@@ -4,6 +4,7 @@ import {
   Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined'
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import api from '@/lib/axios'
@@ -225,13 +226,27 @@ export default function BalanceSheetPage() {
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
           الميزانية العمومية
         </Typography>
-        {data && (
-          <Chip
-            icon={<AccountBalanceOutlinedIcon />}
-            label={data.balanced ? 'متوازنة' : 'غير متوازنة'}
-            color={data.balanced ? 'success' : 'error'}
-          />
-        )}
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {data && (
+            <Chip
+              icon={<AccountBalanceOutlinedIcon />}
+              label={data.balanced ? 'متوازنة' : 'غير متوازنة'}
+              color={data.balanced ? 'success' : 'error'}
+            />
+          )}
+          <HelpButton title="دليل استخدام الميزانية العمومية">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي الميزانية العمومية؟</Typography>
+                <Typography variant="body2">الميزانية العمومية تُظهر المركز المالي للشركة في تاريخ محدد: الأصول (ما تملكه) في مقابل الخصوم وحقوق الملكية (ما عليك).</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>المعادلة المحاسبية</Typography>
+                <Typography variant="body2">الأصول = الخصوم + حقوق الملكية. إذا كانت الميزانية "غير متوازنة" فهناك خطأ في القيود يجب تصحيحه.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>اختيار التاريخ</Typography>
+                <Typography variant="body2">تُعرض الميزانية "كما في تاريخ" معين. اختر نهاية الفترة المالية (مثلاً 31/12) للحصول على ميزانية ختامية.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تصدير PDF</Typography>
+                <Typography variant="body2">اضغط زر PDF لتصدير الميزانية كتقرير رسمي قابل للطباعة والمشاركة.</Typography></Box>
+            </Box>
+          </HelpButton>
+        </Box>
       </Box>
 
       {/* Filter */}

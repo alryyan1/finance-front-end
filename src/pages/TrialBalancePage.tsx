@@ -4,6 +4,7 @@ import {
   Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import BalanceIcon from '@mui/icons-material/Balance'
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import api from '@/lib/axios'
@@ -119,13 +120,27 @@ export default function TrialBalancePage() {
             }[viewType]}
           </Typography>
         </Box>
-        {data && (
-          <Chip
-            icon={<BalanceIcon />}
-            label={data.totals.balanced ? 'متوازن' : 'غير متوازن'}
-            color={data.totals.balanced ? 'success' : 'error'}
-          />
-        )}
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {data && (
+            <Chip
+              icon={<BalanceIcon />}
+              label={data.totals.balanced ? 'متوازن' : 'غير متوازن'}
+              color={data.totals.balanced ? 'success' : 'error'}
+            />
+          )}
+          <HelpButton title="دليل استخدام ميزان المراجعة">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هو ميزان المراجعة؟</Typography>
+                <Typography variant="body2">ميزان المراجعة يُظهر مجموع المدين والدائن لكل حساب في فترة محددة. يُستخدم للتحقق من توازن القيود المحاسبية وصحة البيانات.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>أنواع العرض</Typography>
+                <Typography variant="body2">بالمجاميع: يُظهر إجمالي المدين والدائن. بالأرصدة: يُظهر الرصيد الصافي فقط. بالمجاميع والأرصدة: يجمع الاثنين معاً.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>التوازن</Typography>
+                <Typography variant="body2">إجمالي المدين يجب أن يساوي إجمالي الدائن دائماً. إذا ظهرت "غير متوازن" فهناك قيد غير مكتمل يحتاج مراجعة.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تصدير PDF</Typography>
+                <Typography variant="body2">اضغط زر PDF لتصدير الميزان بصيغة قابلة للطباعة. يمكن اختيار الفترة الزمنية قبل التصدير.</Typography></Box>
+            </Box>
+          </HelpButton>
+        </Box>
       </Box>
 
       {/* Filters */}

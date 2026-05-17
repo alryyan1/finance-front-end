@@ -11,6 +11,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 
 import { backupApi } from '@/api/users'
 import type { BackupFile } from '@/api/users'
+import HelpButton from '@/components/common/HelpButton'
 
 export default function BackupPage() {
   const [backups, setBackups]   = useState<BackupFile[]>([])
@@ -69,6 +70,18 @@ export default function BackupPage() {
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
+          <HelpButton title="دليل استخدام النسخ الاحتياطية">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي النسخة الاحتياطية؟</Typography>
+                <Typography variant="body2">النسخة الاحتياطية تحفظ جميع بيانات قاعدة البيانات (القيود، الحسابات، المستخدمين…) في ملف مضغوط يمكن استخدامه للاستعادة عند الحاجة.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إنشاء نسخة احتياطية</Typography>
+                <Typography variant="body2">اضغط "إنشاء نسخة احتياطية" وانتظر حتى تكتمل العملية. تُحفظ النسخة على الخادم ويمكن تنزيلها على جهازك.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تنزيل النسخة</Typography>
+                <Typography variant="body2">اضغط أيقونة التنزيل بجانب أي نسخة لحفظها على جهازك. يُنصح بالاحتفاظ بنسخ دورية (يومية أو أسبوعية).</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>حذف النسخ القديمة</Typography>
+                <Typography variant="body2">احذف النسخ القديمة لتوفير المساحة على الخادم. احرص على الاحتفاظ دائماً بآخر نسختين على الأقل.</Typography></Box>
+            </Box>
+          </HelpButton>
           <Button startIcon={<RefreshIcon />} onClick={load} disabled={loading}>تحديث</Button>
           <Button
             variant="contained"

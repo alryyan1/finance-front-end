@@ -5,6 +5,7 @@ import {
   TableContainer, TableHead, TableRow, TextField,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
 import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined'
@@ -248,6 +249,18 @@ export default function IncomeStatementPage() {
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>قائمة الدخل</Typography>
+        <HelpButton title="دليل استخدام قائمة الدخل">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي قائمة الدخل؟</Typography>
+              <Typography variant="body2">قائمة الدخل (حساب الأرباح والخسائر) تُظهر نتيجة النشاط خلال فترة محددة: الإيرادات ناقص المصروفات = صافي الربح أو الخسارة.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الإيرادات والمصروفات</Typography>
+              <Typography variant="body2">الإيرادات: المبالغ المحصّلة من النشاط الرئيسي. المصروفات: التكاليف المتكبّدة لتحقيق تلك الإيرادات. الفرق بينهما هو صافي النتيجة.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>اختيار الفترة</Typography>
+              <Typography variant="body2">حدد "من تاريخ" و"إلى تاريخ" لعرض نتائج فترة محددة. يمكن استخدام منتقي السنة المالية للاختيار السريع.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>طريقة العرض</Typography>
+              <Typography variant="body2">يمكن التبديل بين العرض الجدولي والعرض التفصيلي. تصدير PDF يُنتج تقريراً رسمياً يحمل اسم الشركة.</Typography></Box>
+          </Box>
+        </HelpButton>
       </Box>
 
       {/* Filters */}

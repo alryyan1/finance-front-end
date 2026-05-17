@@ -16,6 +16,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined'
 import { usersApi } from '@/api/users'
 import type { UserRecord, UserPayload, RoleRecord } from '@/api/users'
 import { useAuth } from '@/context/AuthContext'
+import HelpButton from '@/components/common/HelpButton'
 
 const ROLE_LABELS: Record<string, string> = {
   admin:      'مدير النظام',
@@ -122,7 +123,21 @@ export default function UsersPage() {
             <Typography variant="body2" color="text.secondary">{users.length} مستخدم مسجّل</Typography>
           </Box>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>مستخدم جديد</Button>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <HelpButton title="دليل استخدام إدارة المستخدمين">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إدارة المستخدمين</Typography>
+                <Typography variant="body2">يمكن للمدير إضافة مستخدمين جدد وتعديل بياناتهم وصلاحياتهم وحذفهم. لا يمكن حذف حسابك الشخصي.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الأدوار والصلاحيات</Typography>
+                <Typography variant="body2">مدير النظام: وصول كامل لجميع الوظائف. محاسب: يمكنه إدخال القيود والتقارير. مشاهد: عرض فقط بدون تعديل.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إضافة مستخدم</Typography>
+                <Typography variant="body2">اضغط "مستخدم جديد"، أدخل الاسم والبريد الإلكتروني وكلمة المرور، ثم حدد الدور المناسب.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تغيير كلمة المرور</Typography>
+                <Typography variant="body2">عند تعديل المستخدم، اترك حقل كلمة المرور فارغاً للاحتفاظ بالكلمة الحالية، أو أدخل كلمة جديدة لتغييرها.</Typography></Box>
+            </Box>
+          </HelpButton>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>مستخدم جديد</Button>
+        </Box>
       </Box>
 
       {error   && <Alert severity="error"   sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}

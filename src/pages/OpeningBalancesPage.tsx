@@ -4,6 +4,7 @@ import {
   Snackbar, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined'
 import api from '@/lib/axios'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
@@ -114,14 +115,26 @@ export default function OpeningBalancesPage() {
             {periodLabel || 'اختر الفترة المحاسبية لعرض أرصدتها الافتتاحية'}
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}
-          onClick={handleSave}
-          disabled={saving || loading || rows.length === 0}
-        >
-          حفظ الأرصدة
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <HelpButton title="دليل استخدام الأرصدة الافتتاحية">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي الأرصدة الافتتاحية؟</Typography>
+                <Typography variant="body2">الأرصدة الافتتاحية هي أرصدة الحسابات في بداية الفترة المالية. تُسجَّل عند بدء استخدام النظام لنقل الأرصدة من النظام القديم.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>كيفية الإدخال</Typography>
+                <Typography variant="body2">اختر الفترة المالية من منتقي السنة، ثم أدخل الرصيد الافتتاحي لكل حساب مع تحديد الجهة (مدين/دائن). اضغط "حفظ الأرصدة" عند الانتهاء.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تنبيه مهم</Typography>
+                <Typography variant="body2">تأكد أن مجموع أرصدة المدين يساوي مجموع أرصدة الدائن قبل الحفظ. الأرصدة الافتتاحية غير المتوازنة ستؤثر على دقة جميع التقارير.</Typography></Box>
+            </Box>
+          </HelpButton>
+          <Button
+            variant="contained"
+            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}
+            onClick={handleSave}
+            disabled={saving || loading || rows.length === 0}
+          >
+            حفظ الأرصدة
+          </Button>
+        </Box>
       </Box>
 
       {/* Period selector */}

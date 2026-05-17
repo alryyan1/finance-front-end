@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import HelpButton from '@/components/common/HelpButton'
 import { keyframes } from '@emotion/react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -437,6 +438,18 @@ export default function AccountsPage() {
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+          <HelpButton title="دليل استخدام شجرة الحسابات">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي شجرة الحسابات؟</Typography>
+                <Typography variant="body2">شجرة الحسابات هي الهيكل الأساسي للنظام المحاسبي. تُنظَّم الحسابات في مستويات هرمية: حسابات رئيسية → حسابات فرعية. كل حساب له رمز ونوع (أصول، خصوم، حقوق ملكية، إيرادات، مصروفات).</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إضافة حساب جديد</Typography>
+                <Typography variant="body2">اضغط "حساب جديد"، أدخل الرمز والاسم، حدد النوع، واختر الحساب الأب إذا كان حساباً فرعياً. الحسابات التي لها قيود لا يمكن حذفها.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>العرض الشجري والجدولي</Typography>
+                <Typography variant="body2">يمكن التبديل بين العرض الشجري (يُظهر التسلسل الهرمي) والعرض الجدولي (يُظهر قائمة مسطحة). في العرض الشجري يمكن توسيع وطي الشجرة بالكامل.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الأنواع الخمسة للحسابات</Typography>
+                <Typography variant="body2">أصول (Assets) · خصوم (Liabilities) · حقوق الملكية (Equity) · إيرادات (Revenue) · مصروفات (Expenses). النوع يحدد طبيعة الحساب في التقارير المالية.</Typography></Box>
+            </Box>
+          </HelpButton>
           {viewMode === 'tree' && !loading && (
             <Box sx={{ display: 'flex', gap: 0.5 }}>
               <Button size="small" variant="text" onClick={expandAll}   sx={{ fontSize: 12 }}>توسيع الكل</Button>

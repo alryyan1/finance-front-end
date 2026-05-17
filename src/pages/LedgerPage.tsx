@@ -5,6 +5,7 @@ import {
   Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import api from '@/lib/axios'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
@@ -104,9 +105,21 @@ export default function LedgerPage() {
   return (
     <Box>
       {/* Header */}
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
-        كشف حساب
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>كشف حساب</Typography>
+        <HelpButton title="دليل استخدام كشف الحساب">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هو كشف الحساب؟</Typography>
+              <Typography variant="body2">كشف الحساب يُظهر جميع الحركات (مدين/دائن) لحساب محدد خلال فترة زمنية، مع الرصيد التراكمي بعد كل حركة.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>اختيار الحساب</Typography>
+              <Typography variant="body2">اختر الحساب من القائمة المنسدلة (يمكن البحث بالاسم أو الرمز). حدد الفترة الزمنية ثم اضغط "عرض" لتحميل البيانات.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>التصفية بالطرف</Typography>
+              <Typography variant="body2">يمكن تصفية الحركات بطرف محدد (عميل/مورد) لعرض كشف حساب مفصّل للتعاملات مع تلك الجهة فقط.</Typography></Box>
+            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الرصيد الافتتاحي والختامي</Typography>
+              <Typography variant="body2">يُعرض الرصيد الافتتاحي في بداية الفترة والرصيد الختامي في نهايتها. يمكن تصدير الكشف كـ PDF.</Typography></Box>
+          </Box>
+        </HelpButton>
+      </Box>
 
       {/* Filters */}
       <Paper sx={{ p: 2.5, mb: 3 }}>

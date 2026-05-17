@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
+import HelpButton from '@/components/common/HelpButton'
 import Paper from '@mui/material/Paper'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
@@ -155,9 +156,21 @@ export default function PartiesPage() {
           <Typography variant="h5" sx={{ fontWeight: 700 }}>الأطراف</Typography>
           <Typography variant="body2" color="text.secondary">العملاء والموردون والموظفون</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreate}>
-          إضافة طرف
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <HelpButton title="دليل استخدام الأطراف">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هم الأطراف؟</Typography>
+                <Typography variant="body2">الأطراف هم الجهات التي تتعامل معها الشركة: عملاء (يدفعون لك)، موردون (تدفع لهم)، موظفون (تستحق لهم رواتب). ربط الطرف بالقيود يتيح كشف حساب مفصّل لكل جهة.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إضافة طرف جديد</Typography>
+                <Typography variant="body2">اضغط "إضافة طرف"، أدخل الاسم والنوع ومعلومات الاتصال الاختيارية. يمكن استخدام الطرف لاحقاً في القيود وإذونات القبض والصرف.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>كشف حساب الطرف</Typography>
+                <Typography variant="body2">لعرض كشف حساب طرف معين، استخدم صفحة "كشف الحساب" واختر الحساب المرتبط ثم صفّح بالطرف المحدد.</Typography></Box>
+            </Box>
+          </HelpButton>
+          <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreate}>
+            إضافة طرف
+          </Button>
+        </Box>
       </Box>
 
       {/* Table */}

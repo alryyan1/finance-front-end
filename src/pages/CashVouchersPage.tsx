@@ -6,6 +6,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, TextField,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
+import HelpButton from '@/components/common/HelpButton'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
@@ -165,9 +166,23 @@ export default function CashVouchersPage() {
             تسجيل الحركات النقدية وإصدار الإذونات
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-          إذن جديد
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <HelpButton title="دليل استخدام إذونات القبض والصرف">
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي إذونات القبض والصرف؟</Typography>
+                <Typography variant="body2">إذن القبض يُسجَّل عند استلام مبلغ نقدي أو بنكي. إذن الصرف يُسجَّل عند دفع مبلغ. كل إذن يُنشئ قيداً محاسبياً تلقائياً.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>طريقة الدفع</Typography>
+                <Typography variant="body2">نقد: مباشر من الخزينة. تحويل بنكي: من حساب البنك. شيك: بموجب شيك بنكي. يجب تحديد الحساب المقابل في كل حالة.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تصفية الإذونات</Typography>
+                <Typography variant="body2">يمكن التصفية بنوع الإذن (قبض/صرف) وبالتاريخ وبطريقة الدفع. استخدم الفترة الزمنية لمراجعة إذونات فترة معينة.</Typography></Box>
+              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>طباعة الإذن</Typography>
+                <Typography variant="body2">اضغط على أيقونة PDF لطباعة أو تصدير الإذن. يحتوي الإذن على البيان والمبلغ والطرف والتوقيع.</Typography></Box>
+            </Box>
+          </HelpButton>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            إذن جديد
+          </Button>
+        </Box>
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
