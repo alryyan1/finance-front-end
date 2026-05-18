@@ -217,7 +217,7 @@ export default function BalanceSheetPage() {
     load(aof, fyId)
   }
 
-  useEffect(() => { load() }, [])
+  // FiscalYearSelector calls handlePeriodChange on mount, which triggers the initial load
 
   return (
     <Box>

@@ -16,7 +16,9 @@ import UnpublishedIcon from '@mui/icons-material/Unpublished'
 import SearchIcon from '@mui/icons-material/Search'
 import FilterAltOffIcon from '@mui/icons-material/FilterAltOff'
 import SwapVertIcon from '@mui/icons-material/SwapVert'
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
 import { journalApi } from '@/api/journal'
+import { openPdf } from '@/api/pdf'
 import type { JournalEntry, JournalEntryLine } from '@/types/journal'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
 
@@ -27,35 +29,76 @@ const debitLines  = (lines: JournalEntryLine[]) => lines.filter(l => Number(l.de
 const creditLines = (lines: JournalEntryLine[]) => lines.filter(l => Number(l.credit) > 0)
 
 function AccountLine({
-  prefix, name, tag, indent = false, prefixColor,
+  prefix, name, amount, indent = false, prefixColor,
 }: {
-  prefix: string; name: string; tag: string; indent?: boolean; prefixColor: string
+  prefix: string; name: string; amount: string; indent?: boolean; prefixColor: string
 }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', pl: indent ? 3 : 0, gap: 2 }}>
-      <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-        {tag}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: indent ? 400 : 600 }}>
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', pl: indent ? 3 : 0, gap: 1 }}>
+      <Typography variant="body2" sx={{ fontWeight: indent ? 400 : 600, flexShrink: 1, minWidth: 0 }}>
         <Box component="span" sx={{ color: prefixColor, fontWeight: 700, ml: 0.5 }}>{prefix}</Box>
         {name}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: prefixColor, whiteSpace: 'nowrap', direction: 'ltr', flexShrink: 0 }}>
+        {amount}
+      </Typography>
+    </Box>
+  )
+}
+
+function MozkourinHeader({ label, total, color }: { label: string; total: number; color: string }) {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1, mt: 0.25 }}>
+      <Typography variant="caption" sx={{ color, fontWeight: 700 }}>{label}</Typography>
+      <Typography variant="body2" sx={{ color, fontWeight: 700, direction: 'ltr', flexShrink: 0 }}>
+        {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
       </Typography>
     </Box>
   )
 }
 
 function BayanCell({ entry }: { entry: JournalEntry }) {
-  const lines   = entry.lines ?? []
-  const debits  = debitLines(lines)
-  const credits = creditLines(lines)
+  const lines       = entry.lines ?? []
+  const debits      = debitLines(lines)
+  const credits     = creditLines(lines)
+  const multiDebit  = debits.length  > 1
+  const multiCredit = credits.length > 1
+
+  const debitTotal  = debits.reduce((s, l)  => s + Number(l.debit),  0)
+  const creditTotal = credits.reduce((s, l) => s + Number(l.credit), 0)
+
   return (
     <Box sx={{ py: 0.75 }}>
+      {/* Debit side */}
+      {multiDebit && (
+        <MozkourinHeader label="من مذكورين:" total={debitTotal} color="primary.main" />
+      )}
       {debits.map((l, i) => (
-        <AccountLine key={`d-${i}`} prefix="من ح/" name={l.account?.name ?? '—'} tag="(مدين)" prefixColor="primary.main" />
+        <AccountLine
+          key={`d-${i}`}
+          prefix="من ح/"
+          name={l.account?.name ?? '—'}
+          amount={fmt(l.debit)}
+          indent={multiDebit}
+          prefixColor="primary.main"
+        />
       ))}
+
+      {/* Credit side */}
+      {multiCredit && (
+        <MozkourinHeader label="إلى مذكورين:" total={creditTotal} color="success.main" />
+      )}
       {credits.map((l, i) => (
-        <AccountLine key={`c-${i}`} prefix="إلى ح/" name={l.account?.name ?? '—'} tag="(دائن)" indent prefixColor="success.main" />
+        <AccountLine
+          key={`c-${i}`}
+          prefix="إلى ح/"
+          name={l.account?.name ?? '—'}
+          amount={fmt(l.credit)}
+          indent={multiCredit || !multiDebit}
+          prefixColor="success.main"
+        />
       ))}
+
       <Typography variant="caption" color="text.disabled" sx={{ display: 'block', textAlign: 'center', mt: 0.5, fontStyle: 'italic' }}>
         ({entry.description})
       </Typography>
@@ -125,6 +168,22 @@ export default function TransactionsPage() {
     }
   }
 
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  const handlePdf = async () => {
+    setPdfLoading(true)
+    try {
+      await openPdf('/api/journal-entries/pdf', {
+        from:   from   || undefined,
+        to:     to     || undefined,
+        search: search || undefined,
+        status: status !== 'all' ? status : undefined,
+      })
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   const grandTotal   = entries.reduce((s, e) => s + Number(e.lines_sum_debit ?? 0), 0)
   const postedCount  = entries.filter(e => e.is_posted).length
   const draftCount   = entries.filter(e => !e.is_posted).length
@@ -153,9 +212,9 @@ export default function TransactionsPage() {
                 <Typography variant="body2">لإلغاء تأثير قيد مرحّل، استخدم "قيد عكسي" بدلاً من حذفه. يُنشئ النظام قيداً جديداً بنفس المبالغ لكن معكوسة.</Typography></Box>
             </Box>
           </HelpButton>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/journal/new')}>
+          {/* <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/journal/new')}>
             قيد جديد
-          </Button>
+          </Button> */}
         </Box>
       </Box>
 
@@ -198,6 +257,14 @@ export default function TransactionsPage() {
             <MenuItem value="draft">مسودة</MenuItem>
           </Select>
           <Button variant="contained" onClick={() => load()}>بحث</Button>
+          <Button
+            variant="outlined" color="error" size="small"
+            startIcon={pdfLoading ? <CircularProgress size={14} color="inherit" /> : <PictureAsPdfOutlinedIcon />}
+            onClick={handlePdf}
+            disabled={pdfLoading || entries.length === 0}
+          >
+            طباعة PDF
+          </Button>
           {hasFilters && (
             <Tooltip title="إلغاء الفلاتر">
               <IconButton onClick={handleReset} color="default">
@@ -232,7 +299,8 @@ export default function TransactionsPage() {
           <Table sx={{ tableLayout: 'fixed' }}>
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell align="center" sx={{ ...CELL_BORDER, width: 150 }}>التاريخ</TableCell>
+                <TableCell align="center" sx={{ ...CELL_BORDER, width: 70 }}>رقم القيد</TableCell>
+                <TableCell align="center" sx={{ ...CELL_BORDER, width: 140 }}>التاريخ</TableCell>
                 <TableCell align="center" sx={CELL_BORDER}>البيان</TableCell>
                 <TableCell align="center" sx={{ ...CELL_BORDER, width: 130 }}>دائن</TableCell>
                 <TableCell align="center" sx={{ ...CELL_BORDER, width: 130 }}>مدين</TableCell>
@@ -243,7 +311,7 @@ export default function TransactionsPage() {
             <TableBody>
               {entries.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6, color: 'text.secondary' }}>
                     لا توجد قيود بعد
                   </TableCell>
                 </TableRow>
@@ -263,6 +331,18 @@ export default function TransactionsPage() {
                   }}
                   onClick={() => navigate(`/transactions/${entry.id}/edit`)}
                 >
+                  {/* رقم القيد */}
+                  <TableCell align="center" sx={{ ...CELL_BORDER, py: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary', direction: 'ltr' }}>
+                      #{entry.id}
+                    </Typography>
+                    {entry.reference && (
+                      <Typography variant="caption" color="text.disabled" sx={{ display: 'block', direction: 'ltr' }}>
+                        {entry.reference}
+                      </Typography>
+                    )}
+                  </TableCell>
+
                   {/* التاريخ + الحالة */}
                   <TableCell align="center" sx={{ ...CELL_BORDER, py: 1 }}>
                     <Typography variant="body2" sx={{ direction: 'ltr', color: 'text.secondary' }}>
@@ -346,7 +426,7 @@ export default function TransactionsPage() {
               {/* Totals row */}
               {entries.length > 0 && (
                 <TableRow sx={{ bgcolor: 'grey.100' }}>
-                  <TableCell colSpan={2} align="center" sx={{ ...CELL_BORDER, fontWeight: 700, borderTop: '2px solid', borderTopColor: 'divider' }}>
+                  <TableCell colSpan={3} align="center" sx={{ ...CELL_BORDER, fontWeight: 700, borderTop: '2px solid', borderTopColor: 'divider' }}>
                     الإجمالي
                   </TableCell>
                   <TableCell sx={{ ...AMOUNT_CELL, fontWeight: 700, borderTop: '2px solid', borderTopColor: 'divider', color: 'success.main' }}>

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
+import type { FiscalYear } from '@/api/fiscalYears'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import { fiscalYearsApi } from '@/api/fiscalYears'
-import type { FiscalYear } from '@/api/fiscalYears'
+import { useFiscalYears } from '@/context/FiscalYearsContext'
 import AppBar from '@mui/material/AppBar'
 import Toolbar from '@mui/material/Toolbar'
 import Box from '@mui/material/Box'
@@ -37,26 +37,17 @@ export default function Topbar() {
   const { mode, toggleMode } = useThemeMode()
   const navigate = useNavigate()
   const [anchor, setAnchor] = useState<null | HTMLElement>(null)
-  const [activePeriod, setActivePeriod] = useState<FiscalYear | null | undefined>(undefined)
-  const [todayCovered, setTodayCovered] = useState<boolean>(false)
+  const { years } = useFiscalYears()
 
-  useEffect(() => {
+  const activePeriod = useMemo<FiscalYear | null>(() => {
+    return years.find(y => y.status === 'open') ?? null
+  }, [years])
+
+  const todayCovered = useMemo<boolean>(() => {
+    if (!activePeriod) return false
     const iso = today.toISOString().slice(0, 10)
-    fiscalYearsApi.list()
-      .then(years => {
-        const open = years.find(y => y.status === 'open') ?? null
-        setActivePeriod(open)
-        // warn separately if open period doesn't cover today
-        if (open) {
-          const from = open.start_date <= iso
-          const to   = open.end_date   >= iso
-          setTodayCovered(from && to)
-        } else {
-          setTodayCovered(false)
-        }
-      })
-      .catch(() => setActivePeriod(null))
-  }, [])
+    return activePeriod.start_date <= iso && activePeriod.end_date >= iso
+  }, [activePeriod])
 
   const initials = user?.name
     .split(' ')

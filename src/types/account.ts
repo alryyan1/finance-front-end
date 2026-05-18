@@ -1,5 +1,5 @@
 export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
-export type AccountSubType = 'current' | 'non_current' | 'long_term' | null
+export type AccountSubType = 'main' | 'sub' | 'detail' | 'current' | 'non_current' | 'long_term' | null
 
 export interface Account {
   id: number

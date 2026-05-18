@@ -92,7 +92,7 @@ export default function TrialBalancePage() {
     load(f, t, fyId)
   }
 
-  useEffect(() => { load() }, [])
+  // FiscalYearSelector calls handlePeriodChange on mount, which triggers the initial load
 
   const grouped = data
     ? (['asset', 'liability', 'equity', 'revenue', 'expense'] as const).map(type => ({

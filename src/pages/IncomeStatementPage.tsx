@@ -240,7 +240,6 @@ export default function IncomeStatementPage() {
   }
 
   useEffect(() => {
-    load()
     api.get<Settings>('/api/settings').then(r => setSettings(r.data)).catch(() => {})
   }, [])
 

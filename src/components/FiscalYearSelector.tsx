@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Box, FormControl, InputLabel, MenuItem, Select } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material/Select'
-import { fiscalYearsApi } from '@/api/fiscalYears'
 import type { FiscalYear } from '@/api/fiscalYears'
+import { useFiscalYears } from '@/context/FiscalYearsContext'
 
 interface Props {
   /** Called when selection changes. fiscalYearId=null means "custom / no period" */
@@ -16,27 +16,24 @@ const today     = () => new Date().toISOString().slice(0, 10)
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
 export default function FiscalYearSelector({ onChange, defaultFrom, defaultTo, size = 'small' }: Props) {
-  const [years, setYears]     = useState<FiscalYear[]>([])
+  const { years } = useFiscalYears()
   const [selected, setSelected] = useState<string>('custom')
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    fiscalYearsApi.list().then(data => {
-      setYears(data)
-      // Auto-select the current open period that covers today
-      const todayStr = today()
-      const current = data.find(
-        y => y.status === 'open' && y.start_date <= todayStr && y.end_date >= todayStr
-      )
-      if (current) {
-        setSelected(String(current.id))
-        onChange(current.id, current.start_date, current.end_date)
-      } else {
-        onChange(null, defaultFrom, defaultTo)
-      }
-    }).catch(() => {
+    if (years.length === 0 || initialized) return
+    setInitialized(true)
+    const todayStr = today()
+    const current = years.find(
+      y => y.status === 'open' && y.start_date <= todayStr && y.end_date >= todayStr
+    )
+    if (current) {
+      setSelected(String(current.id))
+      onChange(current.id, current.start_date, current.end_date)
+    } else {
       onChange(null, defaultFrom, defaultTo)
-    })
-  }, [])
+    }
+  }, [years])
 
   const handleChange = (e: SelectChangeEvent) => {
     const val = e.target.value
