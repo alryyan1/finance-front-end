@@ -1,4 +1,4 @@
-export type PartyType = 'customer' | 'supplier' | 'employee' | 'other'
+export type PartyType = 'customer' | 'supplier' | 'employee' | 'other' | 'doctor'
 
 export interface Party {
   id: number

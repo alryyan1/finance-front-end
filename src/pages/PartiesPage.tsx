@@ -40,6 +40,7 @@ const TYPE_LABELS: Record<PartyType, string> = {
   supplier: 'مورد',
   employee: 'موظف',
   other:    'أخرى',
+  doctor:   'طبيب',
 }
 
 const TYPE_COLOR: Record<PartyType, 'success' | 'warning' | 'primary' | 'default'> = {
@@ -47,6 +48,7 @@ const TYPE_COLOR: Record<PartyType, 'success' | 'warning' | 'primary' | 'default
   supplier: 'warning',
   employee: 'primary',
   other:    'default',
+  doctor:   'primary',
 }
 
 function extractError(err: unknown): string {

@@ -297,7 +297,14 @@ export default function JournalEntryFormPage() {
                     <Autocomplete
                       options={parties}
                       value={line.party}
-                      onChange={(_, v) => updateLine(i, { party: v })}
+                      onChange={(_, v) => {
+                        const update: Partial<LineForm> = { party: v }
+                        if (v?.account && !line.account) {
+                          const full = accounts.find(a => a.id === v.account!.id)
+                          if (full) update.account = full
+                        }
+                        updateLine(i, update)
+                      }}
                       getOptionLabel={p => p.name}
                       isOptionEqualToValue={(a, b) => a.id === b.id}
                       renderInput={params => (

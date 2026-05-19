@@ -57,6 +57,16 @@ const TYPE_COLOR: Record<AccountType, 'primary' | 'error' | 'secondary' | 'succe
   expense:   'warning',
 }
 
+// ─── Depth background palette ────────────────────────────────────────────────
+const DEPTH_BG = [
+  '#f1f5f9',  // depth 0 — slate-100
+  '#eff6ff',  // depth 1 — blue-50
+  '#f0fdf4',  // depth 2 — green-50
+  '#faf5ff',  // depth 3 — purple-50
+  '#fff7ed',  // depth 4 — orange-50
+  '#fdf2f8',  // depth 5 — pink-50
+]
+
 // ─── Sibling color palette ────────────────────────────────────────────────────
 
 const SIBLING_COLORS = [
@@ -222,7 +232,7 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
           borderColor: 'divider',
           borderLeft: siblingColor ? `3px solid ${siblingColor}` : '3px solid transparent',
           opacity: node.is_active ? 1 : 0.45,
-          bgcolor: depth === 0 ? 'grey.50' : 'background.paper',
+          bgcolor: DEPTH_BG[depth % DEPTH_BG.length],
           '&:hover': { bgcolor: 'action.hover' },
           transition: 'background-color 0.1s',
           animation: node.id === newlyAddedId ? `${highlightFade} 2s ease-out forwards` : undefined,
