@@ -19,6 +19,7 @@ import TextField from '@mui/material/TextField'
 import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import Select from '@mui/material/Select'
+import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Switch from '@mui/material/Switch'
 import IconButton from '@mui/material/IconButton'
@@ -210,20 +211,18 @@ interface TreeNodeProps {
   parentColorMap: Map<number, string>
   newlyAddedId: number | null
   onToggle: (id: number) => void
-  onEdit: (a: Account) => void
-  onDelete: (a: Account) => void
-  onAddChild: (a: Account) => void
+  onRowClick: (e: React.MouseEvent<HTMLElement>, node: TreeNode) => void
 }
 
-function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedId, onToggle, onEdit, onDelete, onAddChild }: TreeNodeProps) {
+function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedId, onToggle, onRowClick }: TreeNodeProps) {
   const hasChildren = node.children.length > 0
   const isExpanded  = expandedIds.has(node.id)
-  // Color shared by all siblings (nodes with same parent_id)
   const siblingColor = node.parent_id !== null ? (parentColorMap.get(node.parent_id) ?? null) : null
 
   return (
     <>
       <Box
+        onClick={(e) => onRowClick(e, node)}
         sx={{
           display: 'flex', alignItems: 'center', gap: 0.5,
           px: 1, py: 0.6,
@@ -233,6 +232,7 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
           borderLeft: siblingColor ? `3px solid ${siblingColor}` : '3px solid transparent',
           opacity: node.is_active ? 1 : 0.45,
           bgcolor: DEPTH_BG[depth % DEPTH_BG.length],
+          cursor: 'pointer',
           '&:hover': { bgcolor: 'action.hover' },
           transition: 'background-color 0.1s',
           animation: node.id === newlyAddedId ? `${highlightFade} 2s ease-out forwards` : undefined,
@@ -240,7 +240,11 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
       >
         <Box sx={{ width: 26, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
           {hasChildren ? (
-            <IconButton size="small" onClick={() => onToggle(node.id)} sx={{ p: 0.25 }}>
+            <IconButton
+              size="small"
+              onClick={(e) => { e.stopPropagation(); onToggle(node.id) }}
+              sx={{ p: 0.25 }}
+            >
               {isExpanded
                 ? <ExpandMoreIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
                 : <ChevronLeftIcon sx={{ fontSize: 18, color: 'text.secondary' }} />}
@@ -296,22 +300,6 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
         >
           {node.is_active ? 'نشط' : 'موقوف'}
         </Typography>
-
-        <Tooltip title="إضافة حساب فرعي">
-          <IconButton size="small" onClick={() => onAddChild(node)} sx={{ color: 'primary.main' }}>
-            <AddOutlinedIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="تعديل">
-          <IconButton size="small" onClick={() => onEdit(node)} sx={{ color: 'text.secondary' }}>
-            <EditOutlinedIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="حذف">
-          <IconButton size="small" onClick={() => onDelete(node)} sx={{ color: 'error.main' }}>
-            <DeleteOutlineOutlinedIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Tooltip>
       </Box>
 
       {hasChildren && (
@@ -325,9 +313,7 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
               parentColorMap={parentColorMap}
               newlyAddedId={newlyAddedId}
               onToggle={onToggle}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onAddChild={onAddChild}
+              onRowClick={onRowClick}
             />
           ))}
         </Collapse>
@@ -357,6 +343,15 @@ export default function AccountsPage() {
 
   const [newlyAddedId, setNewlyAddedId] = useState<number | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const [menuNode, setMenuNode]     = useState<TreeNode | null>(null)
+
+  function handleRowClick(e: React.MouseEvent<HTMLElement>, node: TreeNode) {
+    setMenuAnchor(e.currentTarget)
+    setMenuNode(node)
+  }
+  function closeMenu() { setMenuAnchor(null); setMenuNode(null) }
 
   useEffect(() => { load() }, [])
 
@@ -534,9 +529,7 @@ export default function AccountsPage() {
                 parentColorMap={parentColorMap}
                 newlyAddedId={newlyAddedId}
                 onToggle={toggleExpand}
-                onEdit={openEdit}
-                onDelete={confirmDelete}
-                onAddChild={openAddChild}
+                onRowClick={handleRowClick}
               />
             ))
           )}
@@ -613,6 +606,27 @@ export default function AccountsPage() {
           </Table>
         </TableContainer>
       )}
+
+      {/* ── Row action menu ── */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={!!menuAnchor}
+        onClose={closeMenu}
+        slotProps={{ paper: { elevation: 3, sx: { minWidth: 180, borderRadius: 1.5 } } }}
+      >
+        <MenuItem onClick={() => { closeMenu(); openAddChild(menuNode!) }}>
+          <AddOutlinedIcon sx={{ fontSize: 16, mr: 1, color: 'primary.main' }} />
+          إضافة حساب فرعي
+        </MenuItem>
+        <MenuItem onClick={() => { closeMenu(); openEdit(menuNode!) }}>
+          <EditOutlinedIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
+          تعديل
+        </MenuItem>
+        <MenuItem onClick={() => { closeMenu(); confirmDelete(menuNode!) }} sx={{ color: 'error.main' }}>
+          <DeleteOutlineOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+          حذف
+        </MenuItem>
+      </Menu>
 
       {/* ── Create / Edit Dialog ── */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
