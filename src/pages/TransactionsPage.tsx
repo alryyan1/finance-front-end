@@ -34,13 +34,13 @@ function AccountLine({
   prefix: string; name: string; amount: string; indent?: boolean; prefixColor: string
 }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', pl: indent ? 3 : 0, gap: 1 }}>
+    <Box sx={{ display: 'flex', alignItems: 'baseline', direction: 'ltr', pl: indent ? 3 : 0, gap: 0.75 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, color: prefixColor, whiteSpace: 'nowrap', direction: 'ltr', flexShrink: 0 }}>
+        {amount}
+      </Typography>
       <Typography variant="body2" sx={{ fontWeight: indent ? 400 : 600, flexShrink: 1, minWidth: 0 }}>
         <Box component="span" sx={{ color: prefixColor, fontWeight: 700, ml: 0.5 }}>{prefix}</Box>
         {name}
-      </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: prefixColor, whiteSpace: 'nowrap', direction: 'ltr', flexShrink: 0 }}>
-        {amount}
       </Typography>
     </Box>
   )
@@ -48,11 +48,11 @@ function AccountLine({
 
 function MozkourinHeader({ label, total, color }: { label: string; total: number; color: string }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1, mt: 0.25 }}>
-      <Typography variant="caption" sx={{ color, fontWeight: 700 }}>{label}</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'baseline', direction: 'rtl', gap: 0.75, mt: 0.25 }}>
       <Typography variant="body2" sx={{ color, fontWeight: 700, direction: 'ltr', flexShrink: 0 }}>
         {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
       </Typography>
+      <Typography variant="caption" sx={{ color, fontWeight: 700 }}>{label}</Typography>
     </Box>
   )
 }

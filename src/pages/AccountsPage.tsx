@@ -365,9 +365,10 @@ export default function AccountsPage() {
     try {
       const data = await accountsApi.list()
       setAccounts(data)
-      const tree = buildTree(data)
-      setExpandedIds(new Set(collectAllIds(tree)))
-    } finally { setLoading(false) }
+      setExpandedIds(new Set(collectAllIds(buildTree(data))))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const treeData       = useMemo(() => buildTree(accounts), [accounts])
@@ -409,15 +410,21 @@ export default function AccountsPage() {
     setSaving(true); setFormError(null)
     try {
       if (editing) {
-        await accountsApi.update(editing.id, form)
+        const updated = await accountsApi.update(editing.id, form)
+        setDialogOpen(false)
+        setAccounts(prev => prev.map(a => a.id === editing.id ? { ...a, ...updated } : a))
       } else {
+        setDialogOpen(false)
         const created = await accountsApi.create(form)
+        setAccounts(prev => [...prev, created])
         if (highlightTimer.current) clearTimeout(highlightTimer.current)
         setNewlyAddedId(created.id)
         highlightTimer.current = setTimeout(() => setNewlyAddedId(null), 2500)
       }
-      await load(); setDialogOpen(false)
-    } catch (err) { setFormError(extractError(err)) }
+    } catch (err) {
+      setFormError(extractError(err))
+      setDialogOpen(true)
+    }
     finally { setSaving(false) }
   }
 
@@ -427,11 +434,18 @@ export default function AccountsPage() {
   async function handleDelete() {
     if (!deleteTarget) return
     setDeleting(true); setDeleteError(null)
+    const snapshot = accounts
+    setAccounts(prev => prev.filter(a => a.id !== deleteTarget.id))
+    setDeleteOpen(false)
     try {
       await accountsApi.remove(deleteTarget.id)
-      await load(); setDeleteOpen(false)
-    } catch (err) { setDeleteError(extractError(err)) }
-    finally { setDeleting(false) }
+    } catch (err) {
+      setAccounts(snapshot)
+      setDeleteError(extractError(err))
+      setDeleteOpen(true)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const excludeIds = editing
