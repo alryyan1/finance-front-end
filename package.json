@@ -10,6 +10,7 @@
     "build:server6": "vite build --mode server6",
     "build:diagnostic": "vite build --mode diagnostic",
     "build:nova": "vite build --mode nova",
+    "build:altohami": "vite build --mode altohami",
     "lint": "eslint .",
     "preview": "vite preview"
   },
