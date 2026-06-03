@@ -21,6 +21,8 @@
     "@fontsource-variable/cairo": "^5.2.7",
     "@mui/icons-material": "^9.0.0",
     "@mui/material": "^9.0.0",
+    "@univerjs/preset-sheets-core": "^0.23.0",
+    "@univerjs/presets": "^0.23.0",
     "axios": "^1.15.2",
     "dayjs": "^1.11.20",
     "react": "^19.2.5",

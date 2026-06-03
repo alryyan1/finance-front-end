@@ -23,6 +23,7 @@ import PlaylistAddOutlinedIcon from '@mui/icons-material/PlaylistAddOutlined'
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined'
 
 import type { SvgIconProps } from '@mui/material'
 import type { ComponentType } from 'react'
@@ -66,6 +67,7 @@ const navGroups: NavGroup[] = [
       { to: '/cash-vouchers', label: 'إذونات القبض والصرف',  icon: AccountBalanceWalletOutlinedIcon },
       { to: '/petty-cash',   label: 'صندوق النثريات',        icon: SavingsOutlinedIcon },
       { to: '/parties',      label: 'الأطراف',               icon: PeopleOutlinedIcon },
+      { to: '/prepaid-rent', label: 'الإيجار المقدم',        icon: HomeWorkOutlinedIcon },
     ],
   },
   {
@@ -341,7 +343,7 @@ export default function Sidebar() {
         flexShrink: 0,
       }}>
         <Typography sx={{ fontSize: 10, color: TEXT_DIM, textAlign: 'center' }}>
-          v1.0 · نظام المحاسبة العربي
+          v1.0 · نظام جودة المحاسبي 
         </Typography>
       </Box>
     </Box>

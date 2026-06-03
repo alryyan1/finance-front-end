@@ -69,7 +69,7 @@ export default function FiscalYearsPage() {
 
   // Monthly form
   const [monthYear,  setMonthYear]  = useState(currentYear)
-  const [monthMonth, setMonthMonth] = useState(0) // 0 = all 12 months
+  const [monthMonth, setMonthMonth] = useState(new Date().getMonth() + 1)
 
   const [creating, setCreating] = useState(false)
 
@@ -107,7 +107,7 @@ export default function FiscalYearsPage() {
   const openCreateDialog = () => {
     setYearlyForm({ name: '', start_date: yearStart(), end_date: yearEnd() })
     setMonthYear(currentYear)
-    setMonthMonth(0)
+    setMonthMonth(new Date().getMonth() + 1)
     setError(null)
     setCreateOpen(true)
   }

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Alert, Box, Button, CircularProgress, Divider,
-  Paper, Snackbar, TextField, ToggleButton, ToggleButtonGroup,
-  Typography, Tooltip, IconButton,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle,
+  Divider, IconButton, InputAdornment, Paper, Snackbar, Stack, TextField,
+  ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import HelpButton from '@/components/common/HelpButton'
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined'
@@ -12,7 +12,14 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import AlignRightIcon from '@mui/icons-material/AlignHorizontalRight'
 import AlignLeftIcon from '@mui/icons-material/AlignHorizontalLeft'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
-import { settingsApi, type CompanySettings, type LogoPosition } from '@/api/settings'
+import KeyIcon from '@mui/icons-material/Key'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import AddIcon from '@mui/icons-material/Add'
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined'
+import api from '@/lib/axios'
+import { settingsApi, journalSettingsApi, type CompanySettings, type LogoPosition, type GlobalJournalSettings } from '@/api/settings'
+import { accountsApi } from '@/api/accounts'
+import type { Account } from '@/types/account'
 
 const EMPTY: CompanySettings = {
   company_name:       '',
@@ -39,11 +46,38 @@ export default function SettingsPage() {
   const [error, setError]         = useState<string | null>(null)
   const fileRef                   = useRef<HTMLInputElement>(null)
 
+  // Journal settings state
+  const [accounts,       setAccounts]       = useState<Account[]>([])
+  const [journalGlobal,  setJournalGlobal]  = useState<GlobalJournalSettings>({
+    journal_clinic_revenue_account_id:      null,
+    journal_doctor_receivables_account_id:  null,
+    journal_doctor_fees_expense_account_id: null,
+  })
+  const [journalLoading, setJournalLoading] = useState(true)
+  const [journalSaving,  setJournalSaving]  = useState(false)
+
   useEffect(() => {
     settingsApi.get()
       .then(setForm)
       .finally(() => setLoading(false))
+
+    Promise.all([accountsApi.list(), journalSettingsApi.getGlobal()])
+      .then(([accs, g]) => { setAccounts(accs); setJournalGlobal(g) })
+      .finally(() => setJournalLoading(false))
   }, [])
+
+  const handleJournalSave = async () => {
+    setJournalSaving(true)
+    try {
+      const g = await journalSettingsApi.updateGlobal(journalGlobal)
+      setJournalGlobal(g)
+      setSuccess(true)
+    } catch {
+      setError('تعذّر حفظ إعدادات القيود')
+    } finally {
+      setJournalSaving(false)
+    }
+  }
 
   const set = (key: keyof CompanySettings) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -329,6 +363,58 @@ export default function SettingsPage() {
         </Box>
       </Paper>
 
+      {/* Journal account settings */}
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
+          <AccountBalanceOutlinedIcon color="primary" />
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>إعدادات القيود المحاسبية</Typography>
+        </Box>
+        <Divider sx={{ mb: 3 }} />
+
+        {journalLoading ? <CircularProgress size={22} /> : (
+          <Stack gap={3}>
+            {/* Phase 1 — global */}
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5, fontWeight: 600 }}>
+                حسابات مشتركة لجميع المستخدمين
+              </Typography>
+              <Stack gap={1.5}>
+                {([
+                  ['journal_clinic_revenue_account_id',      'إيرادات العيادة *'],
+                  ['journal_doctor_receivables_account_id',  'ذمم الأطباء (مستحقات الطبيب) *'],
+                  ['journal_doctor_fees_expense_account_id', 'مصروف أتعاب الأطباء *'],
+                ] as [keyof GlobalJournalSettings, string][]).map(([key, label]) => (
+                  <Autocomplete
+                    key={key}
+                    size="small"
+                    options={accounts}
+                    value={accounts.find(a => a.id === journalGlobal[key]) ?? null}
+                    onChange={(_, v) => setJournalGlobal(g => ({ ...g, [key]: v?.id ?? null }))}
+                    getOptionLabel={a => `${a.code} — ${a.name}`}
+                    isOptionEqualToValue={(a, b) => a.id === b.id}
+                    renderInput={p => <TextField {...p} label={label} />}
+                  />
+                ))}
+              </Stack>
+            </Box>
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                variant="contained"
+                startIcon={journalSaving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}
+                onClick={handleJournalSave}
+                disabled={journalSaving}
+              >
+                حفظ إعدادات القيود
+              </Button>
+            </Box>
+          </Stack>
+        )}
+      </Paper>
+
+      {/* API Tokens */}
+      <ApiTokensSection />
+
       <Snackbar
         open={success}
         autoHideDuration={3000}
@@ -340,6 +426,158 @@ export default function SettingsPage() {
         </Alert>
       </Snackbar>
     </Box>
+  )
+}
+
+// ── API Tokens section ────────────────────────────────────────────────────────
+
+interface ApiToken { id: number; name: string; created_at: string; last_used_at: string | null }
+
+function ApiTokensSection() {
+  const [tokens, setTokens]         = useState<ApiToken[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [tokenName, setTokenName]   = useState('')
+  const [creating, setCreating]     = useState(false)
+  const [plainToken, setPlainToken] = useState<string | null>(null)
+  const [copied, setCopied]         = useState(false)
+
+  const load = () => {
+    setLoading(true)
+    api.get<ApiToken[]>('/api/tokens')
+      .then(r => setTokens(r.data))
+      .catch(() => setTokens([]))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleCreate = async () => {
+    if (!tokenName.trim()) return
+    setCreating(true)
+    try {
+      const { data } = await api.post<{ plain_token: string } & ApiToken>('/api/tokens', { name: tokenName.trim() })
+      setPlainToken(data.plain_token)
+      setTokenName('')
+      load()
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('حذف هذا الرمز؟ لا يمكن التراجع.')) return
+    await api.delete(`/api/tokens/${id}`)
+    load()
+  }
+
+  const handleCopy = () => {
+    if (!plainToken) return
+    navigator.clipboard.writeText(plainToken)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <>
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
+          <KeyIcon color="primary" />
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>رموز API</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
+            (تُستخدم لربط الأنظمة الخارجية كنظام العيادة)
+          </Typography>
+        </Box>
+        <Divider sx={{ mb: 2.5 }} />
+
+        {/* Create new token */}
+        <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
+          <TextField
+            size="small"
+            label="اسم الرمز"
+            placeholder="مثال: نظام العيادة"
+            value={tokenName}
+            onChange={e => setTokenName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleCreate()}
+            sx={{ minWidth: 220 }}
+          />
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={creating ? <CircularProgress size={14} color="inherit" /> : <AddIcon />}
+            onClick={handleCreate}
+            disabled={!tokenName.trim() || creating}
+          >
+            إنشاء رمز
+          </Button>
+        </Box>
+
+        {/* Token list */}
+        {loading ? (
+          <CircularProgress size={22} />
+        ) : tokens.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">لا توجد رموز API بعد.</Typography>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {tokens.map(t => (
+              <Box
+                key={t.id}
+                sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}
+              >
+                <KeyIcon fontSize="small" color="action" />
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{t.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    أُنشئ {new Date(t.created_at).toLocaleDateString('ar')}
+                    {t.last_used_at ? ` · آخر استخدام ${new Date(t.last_used_at).toLocaleDateString('ar')}` : ' · لم يُستخدم بعد'}
+                  </Typography>
+                </Box>
+                <Chip label="نشط" color="success" size="small" variant="outlined" />
+                <Tooltip title="حذف الرمز">
+                  <IconButton size="small" color="error" onClick={() => handleDelete(t.id)}>
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Paper>
+
+      {/* Plain token dialog — shown ONCE after creation */}
+      <Dialog open={!!plainToken} onClose={() => setPlainToken(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <KeyIcon color="warning" />
+          احفظ الرمز الآن — لن يظهر مجدداً
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            انسخ هذا الرمز والصقه في إعدادات نظام العيادة. بعد إغلاق هذه النافذة لن تتمكن من رؤيته مرة أخرى.
+          </Alert>
+          <TextField
+            fullWidth
+            value={plainToken ?? ''}
+            slotProps={{
+              input: {
+                readOnly: true,
+                sx: { fontFamily: 'monospace', fontSize: 13, direction: 'ltr' },
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title={copied ? 'تم النسخ!' : 'نسخ'}>
+                      <IconButton onClick={handleCopy} edge="end" color={copied ? 'success' : 'default'}>
+                        <ContentCopyIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+            <Button variant="contained" onClick={() => setPlainToken(null)}>تم، أغلق</Button>
+          </Box>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

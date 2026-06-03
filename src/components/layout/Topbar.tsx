@@ -113,7 +113,7 @@ export default function Topbar() {
                   :                       `${activePeriod.name} • خارج نطاق اليوم`
               }
               size="small"
-              onClick={() => navigate('/fiscal-years')}
+              onClick={() => navigate('/settings/fiscal-years')}
               color={
                 activePeriod === undefined ? 'default'
                   : !activePeriod         ? 'error'

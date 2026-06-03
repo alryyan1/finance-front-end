@@ -246,7 +246,7 @@ export default function JournalEntryFormPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: '28%' }}>الحساب</TableCell>
+                <TableCell sx={{ width: '38%' }}>الحساب</TableCell>
                 <TableCell sx={{ width: '16%' }}>الجهة</TableCell>
                 <TableCell>البيان</TableCell>
                 <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>

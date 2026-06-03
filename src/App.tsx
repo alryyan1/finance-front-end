@@ -18,6 +18,8 @@ import CashVouchersPage from '@/pages/CashVouchersPage'
 import PettyCashPage from '@/pages/PettyCashPage'
 import UsersPage from '@/pages/UsersPage'
 import BackupPage from '@/pages/BackupPage'
+import JournalSpreadsheetPage from '@/pages/JournalSpreadsheetPage'
+import PrepaidRentPage from '@/pages/PrepaidRentPage'
 
 export default function App() {
   return (
@@ -49,6 +51,10 @@ export default function App() {
           <Route path="/settings/opening-balances" element={<OpeningBalancesPage />} />
           <Route path="/settings/fiscal-years" element={<FiscalYearsPage />} />
         </Route>
+
+        {/* Full-screen pages — same ProtectedRoute, but outside AppLayout */}
+        <Route path="/journal-spreadsheet" element={<JournalSpreadsheetPage />} />
+        <Route path="/prepaid-rent"        element={<PrepaidRentPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

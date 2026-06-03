@@ -48,3 +48,44 @@ export const settingsApi = {
   deleteLogo: (): Promise<{ company_logo: null }> =>
     api.delete('/api/settings/logo').then(() => ({ company_logo: null })),
 }
+
+// ── Journal account settings ──────────────────────────────────────────────────
+
+export interface GlobalJournalSettings {
+  journal_clinic_revenue_account_id:      number | null
+  journal_doctor_receivables_account_id:  number | null
+  journal_doctor_fees_expense_account_id: number | null
+}
+
+export interface UserJournalAccounts {
+  cash_box_account_id: number | null
+  bank_account_id:     number | null
+}
+
+function toIntOrNull(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+export const journalSettingsApi = {
+  getGlobal: (): Promise<GlobalJournalSettings> =>
+    api.get<Record<string, unknown>>('/api/settings').then(r => ({
+      journal_clinic_revenue_account_id:      toIntOrNull(r.data.journal_clinic_revenue_account_id),
+      journal_doctor_receivables_account_id:  toIntOrNull(r.data.journal_doctor_receivables_account_id),
+      journal_doctor_fees_expense_account_id: toIntOrNull(r.data.journal_doctor_fees_expense_account_id),
+    })),
+
+  updateGlobal: (data: GlobalJournalSettings): Promise<GlobalJournalSettings> =>
+    api.put<Record<string, unknown>>('/api/settings', data).then(r => ({
+      journal_clinic_revenue_account_id:      toIntOrNull(r.data.journal_clinic_revenue_account_id),
+      journal_doctor_receivables_account_id:  toIntOrNull(r.data.journal_doctor_receivables_account_id),
+      journal_doctor_fees_expense_account_id: toIntOrNull(r.data.journal_doctor_fees_expense_account_id),
+    })),
+
+  getUser: (): Promise<UserJournalAccounts> =>
+    api.get<UserJournalAccounts>('/api/user/journal-accounts').then(d),
+
+  updateUser: (data: UserJournalAccounts): Promise<UserJournalAccounts> =>
+    api.put<UserJournalAccounts>('/api/user/journal-accounts', data).then(d),
+}

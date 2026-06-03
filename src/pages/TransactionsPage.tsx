@@ -17,6 +17,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import FilterAltOffIcon from '@mui/icons-material/FilterAltOff'
 import SwapVertIcon from '@mui/icons-material/SwapVert'
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
+import TableViewIcon from '@mui/icons-material/TableView'
 import { journalApi } from '@/api/journal'
 import { openPdf } from '@/api/pdf'
 import type { JournalEntry, JournalEntryLine } from '@/types/journal'
@@ -264,6 +265,22 @@ export default function TransactionsPage() {
             disabled={pdfLoading || entries.length === 0}
           >
             طباعة PDF
+          </Button>
+          <Button
+            variant="outlined" color="success" size="small"
+            startIcon={<TableViewIcon />}
+            disabled={entries.length === 0}
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (from)             params.set('from',   from)
+              if (to)               params.set('to',     to)
+              if (search)           params.set('search', search)
+              if (status !== 'all') params.set('status', status)
+              const qs = params.toString()
+              navigate(`/journal-spreadsheet${qs ? `?${qs}` : ''}`)
+            }}
+          >
+            Excel
           </Button>
           {hasFilters && (
             <Tooltip title="إلغاء الفلاتر">
