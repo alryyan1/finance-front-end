@@ -8,6 +8,8 @@ import {
   TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material'
 import HelpButton from '@/components/common/HelpButton'
+import FirebaseImportDialog from '@/components/FirebaseImportDialog'
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -115,7 +117,8 @@ export default function TransactionsPage() {
   const navigate = useNavigate()
   const [entries, setEntries]         = useState<JournalEntry[]>([])
   const [loading, setLoading]         = useState(true)
-  const [reversing, setReversing]     = useState<number | null>(null)
+  const [reversing,   setReversing]   = useState<number | null>(null)
+  const [togglingId,  setTogglingId]  = useState<number | null>(null)
   const [confirmEntry, setConfirmEntry] = useState<JournalEntry | null>(null)
 
   const [search, setSearch] = useState('')
@@ -149,12 +152,17 @@ export default function TransactionsPage() {
   const handleDelete = async (entry: JournalEntry) => {
     if (!confirm(`حذف القيد: ${entry.description}؟`)) return
     await journalApi.remove(entry.id)
-    load()
+    setEntries(prev => prev.filter(e => e.id !== entry.id))
   }
 
   const handleTogglePost = async (entry: JournalEntry) => {
-    await journalApi.togglePost(entry.id)
-    load()
+    setTogglingId(entry.id)
+    try {
+      const updated = await journalApi.togglePost(entry.id)
+      setEntries(prev => prev.map(e => e.id === updated.id ? updated : e))
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   const handleReverse = async () => {
@@ -169,7 +177,8 @@ export default function TransactionsPage() {
     }
   }
 
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfLoading,    setPdfLoading]    = useState(false)
+  const [importOpen,    setImportOpen]    = useState(false)
 
   const handlePdf = async () => {
     setPdfLoading(true)
@@ -216,6 +225,13 @@ export default function TransactionsPage() {
           {/* <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/journal/new')}>
             قيد جديد
           </Button> */}
+          <Button
+            variant="outlined" color="primary" size="small"
+            startIcon={<CloudDownloadIcon />}
+            onClick={() => setImportOpen(true)}
+          >
+            استيراد من Firebase
+          </Button>
         </Box>
       </Box>
 
@@ -316,7 +332,7 @@ export default function TransactionsPage() {
           <Table sx={{ tableLayout: 'fixed' }}>
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell align="center" sx={{ ...CELL_BORDER, width: 70 }}>رقم القيد</TableCell>
+                <TableCell align="center" sx={{ ...CELL_BORDER, width: 100 }}>رقم القيد</TableCell>
                 <TableCell align="center" sx={{ ...CELL_BORDER, width: 140 }}>التاريخ</TableCell>
                 <TableCell align="center" sx={CELL_BORDER}>البيان</TableCell>
                 <TableCell align="center" sx={{ ...CELL_BORDER, width: 130 }}>دائن</TableCell>
@@ -401,8 +417,17 @@ export default function TransactionsPage() {
                   <TableCell sx={{ ...CELL_BORDER, px: 0.5, py: 0 }} onClick={e => e.stopPropagation()}>
                     <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
                       <Tooltip title={entry.is_posted ? 'إلغاء الترحيل' : 'ترحيل'}>
-                        <IconButton size="small" color={entry.is_posted ? 'warning' : 'success'} onClick={() => handleTogglePost(entry)}>
-                          {entry.is_posted ? <UnpublishedIcon sx={{ fontSize: 18 }} /> : <CheckCircleIcon sx={{ fontSize: 18 }} />}
+                        <IconButton
+                          size="small"
+                          color={entry.is_posted ? 'warning' : 'success'}
+                          disabled={togglingId === entry.id}
+                          onClick={() => handleTogglePost(entry)}
+                        >
+                          {togglingId === entry.id
+                            ? <CircularProgress size={18} color="inherit" />
+                            : entry.is_posted
+                              ? <UnpublishedIcon sx={{ fontSize: 18 }} />
+                              : <CheckCircleIcon sx={{ fontSize: 18 }} />}
                         </IconButton>
                       </Tooltip>
 
@@ -480,6 +505,12 @@ export default function TransactionsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <FirebaseImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onDone={() => { setImportOpen(false); load() }}
+      />
     </Box>
   )
 }

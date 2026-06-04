@@ -45,7 +45,8 @@ const yearStart   = () => `${currentYear}-01-01`
 const yearEnd     = () => `${currentYear}-12-31`
 
 function lastDayOfMonth(year: number, month: number): string {
-  return new Date(year, month, 0).toISOString().slice(0, 10)
+  const d = new Date(year, month, 0)   // day 0 of next month = last day of this month
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 function firstDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}-01`
