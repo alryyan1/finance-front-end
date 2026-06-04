@@ -7,9 +7,9 @@ import {
 // ── init ──────────────────────────────────────────────────────────────────────
 
 const firebaseConfig = {
-  apiKey:    import.meta.env.VITE_FIREBASE_API_KEY    as string,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
-  appId:     import.meta.env.VITE_FIREBASE_APP_ID     as string,
+  apiKey:    (import.meta.env.VITE_FIREBASE_API_KEY    as string | undefined) || 'AIzaSyBivFl3oyBtjUOCUhycPW51P_2GzQ7E2Jw',
+  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined) || 'sales-9e9b8',
+  appId:     (import.meta.env.VITE_FIREBASE_APP_ID     as string | undefined) || '1:849598643135:web:e866e665a0eb7acbafff0a',
 }
 
 function getDb(): Firestore {
@@ -21,7 +21,7 @@ function getDb(): Firestore {
 
 // ── storage name ──────────────────────────────────────────────────────────────
 
-const STORAGE_NAME = (import.meta.env.VITE_JAWDA_STORAGE_NAME as string | undefined) || 'jawda-medical'
+const STORAGE_NAME = (import.meta.env.VITE_JAWDA_STORAGE_NAME as string | undefined) || 'alroomy'
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
