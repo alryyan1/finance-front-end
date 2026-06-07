@@ -58,7 +58,7 @@ const TYPE_COLORS: Record<string, 'primary' | 'error' | 'secondary' | 'success' 
 const numFmt = (v: string) =>
   Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
 export default function TrialBalancePage() {

@@ -208,7 +208,7 @@ function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick:
   )
 }
 
-const today     = () => new Date().toISOString().slice(0, 10)
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
 export default function LedgerPage() {

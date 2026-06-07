@@ -45,7 +45,7 @@ export default function Topbar() {
 
   const todayCovered = useMemo<boolean>(() => {
     if (!activePeriod) return false
-    const iso = today.toISOString().slice(0, 10)
+    const d = new Date(); const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     return activePeriod.start_date <= iso && activePeriod.end_date >= iso
   }, [activePeriod])
 

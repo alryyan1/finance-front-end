@@ -153,7 +153,7 @@ export default function PettyCashPage() {
 
   // Request form
   const [reqForm, setReqForm] = useState({
-    requester_name: user?.name ?? '', date: new Date().toISOString().slice(0, 10),
+    requester_name: user?.name ?? '', date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })(),
     amount: '', category: 'other' as RequestCategory,
     description: '', reference: '', expense_account_id: '',
     document: null as File | null,
@@ -231,7 +231,7 @@ export default function PettyCashPage() {
 
       await pettyCashApi.createRequest(fd)
       setReqDialog(false)
-      setReqForm({ requester_name: defaultRequesterName(), date: new Date().toISOString().slice(0, 10), amount: '', category: 'other', description: '', reference: '', expense_account_id: '', document: null })
+      setReqForm({ requester_name: defaultRequesterName(), date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })(), amount: '', category: 'other', description: '', reference: '', expense_account_id: '', document: null })
       loadAll()
     } catch { setError('فشل إنشاء الطلب') }
   }
@@ -420,7 +420,7 @@ export default function PettyCashPage() {
                 <TableRow key={r.id} hover
                   sx={{ bgcolor: r.status === 'pending' ? 'rgba(237,108,2,0.04)' : undefined }}>
                   <TableCell sx={{ color: 'text.secondary', direction: 'ltr' }}>
-                    {new Date(r.created_at).toISOString().slice(0, 10)}
+                    {new Date(r.created_at).toLocaleDateString('en-CA')}
                   </TableCell>
                   <TableCell>{r.requested_by}</TableCell>
                   <TableCell>
