@@ -12,8 +12,10 @@ interface Props {
   size?: 'small' | 'medium'
 }
 
-const today     = () => new Date().toISOString().slice(0, 10)
-const yearStart = () => `${new Date().getFullYear()}-01-01`
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function FiscalYearSelector({ onChange, defaultFrom, defaultTo, size = 'small' }: Props) {
   const { years } = useFiscalYears()

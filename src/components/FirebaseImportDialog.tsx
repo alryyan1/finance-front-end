@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Box, Button, Chip, CircularProgress,
+  Alert, Backdrop, Box, Button, Chip, CircularProgress,
   Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, LinearProgress, Stack, Tooltip, Typography,
+  IconButton, Stack, Tooltip, Typography,
 } from '@mui/material'
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
 import CheckCircleIcon   from '@mui/icons-material/CheckCircle'
@@ -112,6 +112,17 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
         استيراد القيود من Firebase
       </DialogTitle>
 
+      {/* Centered import progress overlay */}
+      <Backdrop open={importing} sx={{ zIndex: theme => theme.zIndex.modal + 1, flexDirection: 'column', gap: 2 }}>
+        <CircularProgress size={64} thickness={4} variant="determinate" value={progress} sx={{ color: 'white' }} />
+        <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
+          جاري الاستيراد... {progress}%
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+          يرجى الانتظار، لا تغلق النافذة
+        </Typography>
+      </Backdrop>
+
       <DialogContent>
         {loading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -164,12 +175,6 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
           </>
         )}
 
-        {importing && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="body2" sx={{ mb: 1 }}>جاري الاستيراد... {progress}%</Typography>
-            <LinearProgress variant="determinate" value={progress} />
-          </Box>
-        )}
 
         {done && (
           <Stack spacing={1.5} sx={{ mt: 1 }}>

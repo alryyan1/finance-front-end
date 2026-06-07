@@ -41,7 +41,10 @@ interface Settings { company_name: string; address?: string; phone?: string }
 const numFmt = (v: string | number) =>
   Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-const today     = () => new Date().toISOString().slice(0, 10)
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
 // ── Shared section header ──────────────────────────────────────────────────
@@ -220,7 +223,7 @@ export default function IncomeStatementPage() {
 
   const handlePdf = async () => {
     setPdfLoading(true)
-    try { await openPdf('/api/reports/income-statement/pdf', { from, to }) }
+    try { await openPdf('/api/reports/income-statement/pdf', { from, to, view_type: viewMode }) }
     finally { setPdfLoading(false) }
   }
 
@@ -238,6 +241,9 @@ export default function IncomeStatementPage() {
     setFiscalYearId(fyId); setFrom(f); setTo(t)
     load(f, t, fyId)
   }
+
+  const handleFromChange = (f: string) => { setFrom(f); setFiscalYearId(null) }
+  const handleToChange   = (t: string) => { setTo(t);   setFiscalYearId(null) }
 
   useEffect(() => {
     api.get<Settings>('/api/settings').then(r => setSettings(r.data)).catch(() => {})
@@ -268,12 +274,12 @@ export default function IncomeStatementPage() {
           <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={yearStart()} defaultTo={today()} />
           <TextField
             label="من تاريخ" type="date" value={from}
-            onChange={e => setFrom(e.target.value)}
+            onChange={e => handleFromChange(e.target.value)}
             size="small" slotProps={{ inputLabel: { shrink: true } }}
           />
           <TextField
             label="إلى تاريخ" type="date" value={to}
-            onChange={e => setTo(e.target.value)}
+            onChange={e => handleToChange(e.target.value)}
             size="small" slotProps={{ inputLabel: { shrink: true } }}
           />
           <Button variant="contained" onClick={() => load()} disabled={loading}>
