@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import {
   Alert, Box, Button, Chip, CircularProgress,
   Dialog, DialogActions, DialogContent, DialogTitle,
-  LinearProgress, Stack, Typography,
+  IconButton, LinearProgress, Stack, Tooltip, Typography,
 } from '@mui/material'
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
 import CheckCircleIcon   from '@mui/icons-material/CheckCircle'
+import DeleteIcon        from '@mui/icons-material/Delete'
 import {
-  fetchPendingEntries, fetchDoctorMappings, markAsImported, toJournalPayload,
+  fetchPendingEntries, fetchDoctorMappings, markAsImported, toJournalPayload, deleteEntry,
   type FirebaseJournalEntry,
 } from '@/lib/firebaseImport'
 import { journalApi } from '@/api/journal'
@@ -28,6 +29,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
   const [progress,  setProgress]  = useState(0)        // 0-100
   const [done,      setDone]      = useState(false)
   const [failed,    setFailed]    = useState<string[]>([])
+  const [deleting,  setDeleting]  = useState<string | null>(null)  // firebaseId being deleted
 
   // Load pending entries whenever dialog opens
   useEffect(() => {
@@ -65,6 +67,32 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
     setDone(true)
     setImporting(false)
     if (errors.length === 0) onDone()
+  }
+
+  const handleDelete = async (entry: FirebaseJournalEntry) => {
+    if (!window.confirm(`حذف "${entry.description}" من Firebase نهائياً؟`)) return
+    setDeleting(entry.firebaseId)
+    try {
+      await deleteEntry(entry.firebaseId)
+      setEntries(prev => prev.filter(e => e.firebaseId !== entry.firebaseId))
+    } catch (e) {
+      setError((e as Error).message ?? 'فشل الحذف')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm(`حذف جميع القيود (${entries.length}) من Firebase نهائياً؟`)) return
+    setDeleting('__all__')
+    try {
+      await Promise.all(entries.map(e => deleteEntry(e.firebaseId)))
+      setEntries([])
+    } catch (e) {
+      setError((e as Error).message ?? 'فشل الحذف')
+    } finally {
+      setDeleting(null)
+    }
   }
 
   const handleClose = () => {
@@ -105,9 +133,25 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
 
                 {entries.map(e => (
                   <Box key={e.firebaseId} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{e.description}</Typography>
-                      <Chip label={`${fmt(entryTotal(e))} ج.س`} size="small" color="primary" variant="outlined" />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip label={`${fmt(entryTotal(e))} ج.س`} size="small" color="primary" variant="outlined" />
+                        <Tooltip title="حذف من Firebase">
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              disabled={importing || deleting !== null}
+                              onClick={() => handleDelete(e)}
+                            >
+                              {deleting === e.firebaseId
+                                ? <CircularProgress size={16} color="error" />
+                                : <DeleteIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Box>
                     </Box>
                     <Typography variant="caption" color="text.secondary">
                       {e.date} · {e.lines.length} سطر
@@ -154,14 +198,24 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
           {done ? 'إغلاق' : 'إلغاء'}
         </Button>
         {!done && entries.length > 0 && (
-          <Button
-            variant="contained"
-            disabled={loading || importing || entries.length === 0}
-            onClick={handleImportAll}
-            startIcon={importing ? <CircularProgress size={16} color="inherit" /> : <CloudDownloadIcon />}
-          >
-            {importing ? 'جاري الاستيراد...' : `استيراد ${entries.length} قيد`}
-          </Button>
+          <>
+            <Button
+              color="error"
+              disabled={loading || importing || deleting !== null}
+              onClick={handleDeleteAll}
+              startIcon={deleting === '__all__' ? <CircularProgress size={16} color="error" /> : <DeleteIcon />}
+            >
+              حذف الكل
+            </Button>
+            <Button
+              variant="contained"
+              disabled={loading || importing || deleting !== null || entries.length === 0}
+              onClick={handleImportAll}
+              startIcon={importing ? <CircularProgress size={16} color="inherit" /> : <CloudDownloadIcon />}
+            >
+              {importing ? 'جاري الاستيراد...' : `استيراد ${entries.length} قيد`}
+            </Button>
+          </>
         )}
       </DialogActions>
     </Dialog>

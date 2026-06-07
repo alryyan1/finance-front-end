@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app'
 import {
-  getFirestore, collection, getDocs, doc, updateDoc,
+  getFirestore, collection, getDocs, doc, updateDoc, deleteDoc,
   query, where, type Firestore,
 } from 'firebase/firestore'
 
@@ -114,6 +114,13 @@ export async function fetchPendingEntries(): Promise<FirebaseJournalEntry[]> {
       createdAt:   d.data().createdAt   as string,
       lines:       (d.data().lines ?? []) as FirebaseJournalLine[],
     }))
+}
+
+/** Permanently delete a journal entry from Firebase. */
+export async function deleteEntry(firebaseId: string): Promise<void> {
+  const db  = getDb()
+  const ref = doc(db, 'finance', STORAGE_NAME, 'journal_entries', firebaseId)
+  await deleteDoc(ref)
 }
 
 /** Mark a Firebase entry as imported so it won't be fetched again. */
