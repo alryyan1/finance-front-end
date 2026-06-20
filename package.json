@@ -11,6 +11,7 @@
     "build:diagnostic": "vite build --mode diagnostic",
     "build:nova": "vite build --mode nova",
     "build:altohami": "vite build --mode altohami",
+    "build:auger": "vite build --mode auger",
     "lint": "eslint .",
     "preview": "vite preview"
   },
