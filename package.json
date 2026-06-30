@@ -12,6 +12,7 @@
     "build:nova": "vite build --mode nova",
     "build:altohami": "vite build --mode altohami",
     "build:auger": "vite build --mode auger",
+    "build:jawda": "vite build --mode jawda",
     "lint": "eslint .",
     "preview": "vite preview"
   },
