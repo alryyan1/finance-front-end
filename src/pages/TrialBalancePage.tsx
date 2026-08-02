@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import {
-  Button, Flex, Segmented, Spin, Tag, Typography,
+  Button, Flex, Segmented, Spin, Table, Tag, Typography,
 } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
 import { FileDown, Scale } from 'lucide-react'
@@ -40,6 +41,10 @@ interface TrialBalanceData {
   }
 }
 
+type DisplayRow =
+  | { key: string; isGroupHeader: true; type: string }
+  | (TrialBalanceRow & { key: string; isGroupHeader?: false })
+
 const TYPE_LABELS: Record<string, string> = {
   asset:     'أصول',
   liability: 'خصوم',
@@ -56,10 +61,19 @@ const TYPE_COLORS: Record<string, string> = {
   expense:   'warning',
 }
 
-const numFmt = (v: string) => Math.round(Number(v)).toLocaleString('en-US')
+const numFmt = (v: string | number) => Math.round(Number(v)).toLocaleString('en-US')
+const fmtCell = (v: string) => (Number(v) > 0 ? numFmt(v) : '—')
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
+
+// Cell renderer that collapses to a single spanning cell on group-header rows
+function cell(render: (row: TrialBalanceRow) => React.ReactNode) {
+  return (_: unknown, record: DisplayRow) => {
+    if (record.isGroupHeader) return { children: null, props: { colSpan: 0 } }
+    return render(record)
+  }
+}
 
 export default function TrialBalancePage() {
   const toast = useToast()
@@ -93,24 +107,72 @@ export default function TrialBalancePage() {
 
   // FiscalYearSelector calls handlePeriodChange on mount, which triggers the initial load
 
-  const grouped = data
-    ? (['asset', 'liability', 'equity', 'revenue', 'expense'] as const).map(type => ({
-        type,
-        rows: data.rows.filter(r => r.type === type),
-      })).filter(g => g.rows.length > 0)
-    : []
-
-  // Column config per view type
   const showTotals   = viewType === 'totals'   || viewType === 'both'
   const showBalances = viewType === 'balances' || viewType === 'both'
+
+  const dataSource: DisplayRow[] = data
+    ? (['asset', 'liability', 'equity', 'revenue', 'expense'] as const).flatMap(type => {
+        const rows = data.rows.filter(r => r.type === type)
+        if (rows.length === 0) return []
+        return [
+          { key: `hdr-${type}`, isGroupHeader: true as const, type },
+          ...rows.map(r => ({ ...r, key: String(r.account_id) })),
+        ]
+      })
+    : []
+
+  const columns: ColumnsType<DisplayRow> = [
+    {
+      title: 'الرمز', dataIndex: 'code', width: 84,
+      render: (v: string, record) => record.isGroupHeader
+        ? { children: <Text style={{ fontWeight: 700, fontSize: 12 }} type="secondary">{TYPE_LABELS[record.type]}</Text>, props: { colSpan: 3 + (showTotals ? 2 : 0) + (showBalances ? 2 : 0) } }
+        : <Text style={{ fontFamily: 'monospace', fontSize: 12, direction: 'ltr' }} type="secondary">{v}</Text>,
+    },
+    {
+      title: 'اسم الحساب', dataIndex: 'name',
+      render: (v: string, record) => record.isGroupHeader ? { children: null, props: { colSpan: 0 } } : v,
+    },
+    {
+      title: 'النوع', width: 88,
+      render: (_: unknown, record) => record.isGroupHeader
+        ? { children: null, props: { colSpan: 0 } }
+        : <Tag color={TYPE_COLORS[record.type]} style={{ marginInlineEnd: 0 }}>{TYPE_LABELS[record.type]}</Tag>,
+    },
+    ...(showTotals ? [{
+      title: 'المجاميع',
+      children: [
+        {
+          title: 'مدين', dataIndex: 'total_debit', width: 110, align: 'right' as const,
+          render: cell(row => <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{fmtCell(row.total_debit)}</span>),
+        },
+        {
+          title: 'دائن', dataIndex: 'total_credit', width: 110, align: 'right' as const,
+          render: cell(row => <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{fmtCell(row.total_credit)}</span>),
+        },
+      ],
+    }] : []),
+    ...(showBalances ? [{
+      title: 'الأرصدة',
+      children: [
+        {
+          title: 'مدين', dataIndex: 'balance_debit', width: 110, align: 'right' as const,
+          render: cell(row => <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtCell(row.balance_debit)}</span>),
+        },
+        {
+          title: 'دائن', dataIndex: 'balance_credit', width: 110, align: 'right' as const,
+          render: cell(row => <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtCell(row.balance_credit)}</span>),
+        },
+      ],
+    }] : []),
+  ]
 
   return (
     <div>
       {/* Header */}
-      <Flex justify="space-between" align="center" style={{ marginBottom: 24 }}>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 16 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>ميزان المراجعة</Title>
-          <Text type="secondary">
+          <Text type="secondary" style={{ fontSize: 12 }}>
             {{
               totals:   'بالمجاميع',
               balances: 'بالأرصدة',
@@ -140,187 +202,103 @@ export default function TrialBalancePage() {
       </Flex>
 
       {/* Filters */}
-      <div style={{ padding: 20, marginBottom: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-        <Flex gap={16} align="flex-end" wrap="wrap">
-          <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={yearStart()} defaultTo={today()} />
-          <Flex vertical gap={4}>
-            <Text type="secondary" style={{ fontSize: 12 }}>من تاريخ</Text>
-            <DateInput value={from} onChange={e => setFrom(e.target.value)} />
+      <div style={{ padding: 14, marginBottom: 16, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+        <Flex gap={20} align="flex-end" wrap="wrap">
+          <Flex gap={10} align="flex-end" wrap="wrap">
+            <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={yearStart()} defaultTo={today()} />
+            <Flex vertical gap={4}>
+              <Text type="secondary" style={{ fontSize: 12 }}>من تاريخ</Text>
+              <DateInput value={from} onChange={e => setFrom(e.target.value)} />
+            </Flex>
+            <Flex vertical gap={4}>
+              <Text type="secondary" style={{ fontSize: 12 }}>إلى تاريخ</Text>
+              <DateInput value={to} onChange={e => setTo(e.target.value)} />
+            </Flex>
+            <Button type="primary" onClick={() => load()} disabled={loading}>
+              {loading ? <Spin size="small" /> : 'عرض'}
+            </Button>
+            <Button
+              danger
+              icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />}
+              onClick={handlePdf}
+              disabled={pdfLoading || !data}
+            >
+              طباعة PDF
+            </Button>
           </Flex>
-          <Flex vertical gap={4}>
-            <Text type="secondary" style={{ fontSize: 12 }}>إلى تاريخ</Text>
-            <DateInput value={to} onChange={e => setTo(e.target.value)} />
-          </Flex>
-          <Button type="primary" onClick={() => load()} disabled={loading}>
-            {loading ? <Spin size="small" /> : 'عرض'}
-          </Button>
-          <Button
-            danger
-            icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />}
-            onClick={handlePdf}
-            disabled={pdfLoading || !data}
-          >
-            طباعة PDF
-          </Button>
-        </Flex>
 
-        {/* View type toggle */}
-        <div style={{ marginTop: 16 }}>
-          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
-            نوع الميزان
-          </Text>
-          <Segmented
-            value={viewType}
-            onChange={v => setViewType(v as ViewType)}
-            options={[
-              { label: 'بالمجاميع', value: 'totals' },
-              { label: 'بالأرصدة', value: 'balances' },
-              { label: 'بالمجاميع والأرصدة', value: 'both' },
-            ]}
-          />
-        </div>
+          <Flex vertical gap={4}>
+            <Text type="secondary" style={{ fontSize: 12 }}>نوع الميزان</Text>
+            <Segmented
+              size="middle"
+              value={viewType}
+              onChange={v => setViewType(v as ViewType)}
+              options={[
+                { label: 'بالمجاميع', value: 'totals' },
+                { label: 'بالأرصدة', value: 'balances' },
+                { label: 'بالمجاميع والأرصدة', value: 'both' },
+              ]}
+            />
+          </Flex>
+        </Flex>
       </div>
 
-      {loading && (
-        <Flex justify="center" style={{ padding: '64px 0' }}>
-          <Spin size="large" />
-        </Flex>
-      )}
-
-      {!loading && data && (
-        <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
-                <th style={headCell('right', 80)}>الرمز</th>
-                <th style={headCell('right')}>اسم الحساب</th>
-                <th style={headCell('right', 80)}>النوع</th>
-                {showTotals && (
-                  <th colSpan={2} style={{ ...headCell('center'), borderBottom: '2px solid var(--ant-color-primary)', color: 'var(--ant-color-primary)' }}>
-                    المجاميع
-                  </th>
-                )}
-                {showBalances && (
-                  <th colSpan={2} style={{ ...headCell('center'), borderBottom: '2px solid var(--ant-color-success)', color: 'var(--ant-color-success)' }}>
-                    الأرصدة
-                  </th>
-                )}
-              </tr>
-              <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
-                <th /><th /><th />
+      <Table
+        size="small"
+        bordered
+        loading={loading}
+        columns={columns}
+        dataSource={dataSource}
+        rowKey="key"
+        pagination={false}
+        sticky
+        rowClassName={record => record.isGroupHeader ? 'tb-group-row' : ''}
+        locale={{ emptyText: 'لا توجد بيانات في هذه الفترة' }}
+        summary={() => {
+          if (!data || data.rows.length === 0) return null
+          const totalsStart   = 3
+          const balancesStart = totalsStart + (showTotals ? 2 : 0)
+          return (
+            <Table.Summary fixed>
+              <Table.Summary.Row style={{ fontWeight: 700, background: 'var(--ant-color-fill-alter)' }}>
+                <Table.Summary.Cell index={0} colSpan={3} align="center">الإجمالي</Table.Summary.Cell>
                 {showTotals && (
                   <>
-                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-primary)' }}>مجموع مدين</th>
-                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-primary)' }}>مجموع دائن</th>
-                  </>
-                )}
-                {showBalances && (
-                  <>
-                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-success)' }}>رصيد مدين</th>
-                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-success)' }}>رصيد دائن</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-
-            <tbody>
-              {grouped.map(({ type, rows }) => (
-                <>
-                  <tr key={`hdr-${type}`} style={{ background: 'var(--ant-color-fill-secondary)' }}>
-                    <td colSpan={3 + (showTotals ? 2 : 0) + (showBalances ? 2 : 0)} style={{ padding: '6px 12px' }}>
-                      <Text style={{ fontWeight: 700, fontSize: 12 }} type="secondary">{TYPE_LABELS[type]}</Text>
-                    </td>
-                  </tr>
-
-                  {rows.map(row => (
-                    <tr key={row.account_id} style={{ borderTop: '1px solid var(--ant-color-border-secondary)' }}>
-                      <td style={{ ...bodyCell('right'), color: 'var(--ant-color-text-secondary)', direction: 'ltr', textAlign: 'right' }}>
-                        {row.code}
-                      </td>
-                      <td style={bodyCell('right')}>{row.name}</td>
-                      <td style={bodyCell('right')}>
-                        <Tag color={TYPE_COLORS[row.type]}>{TYPE_LABELS[row.type]}</Tag>
-                      </td>
-                      {showTotals && (
-                        <>
-                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
-                            {Number(row.total_debit) > 0 ? numFmt(row.total_debit) : '—'}
-                          </td>
-                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
-                            {Number(row.total_credit) > 0 ? numFmt(row.total_credit) : '—'}
-                          </td>
-                        </>
-                      )}
-                      {showBalances && (
-                        <>
-                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                            {Number(row.balance_debit) > 0 ? numFmt(row.balance_debit) : '—'}
-                          </td>
-                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                            {Number(row.balance_credit) > 0 ? numFmt(row.balance_credit) : '—'}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </>
-              ))}
-
-              {/* Totals row */}
-              {data.rows.length > 0 && (
-                <tr style={{ background: 'var(--ant-color-fill-alter)', borderTop: '2px solid var(--ant-color-border-secondary)', fontWeight: 700 }}>
-                  <td colSpan={3} style={{ ...bodyCell('center'), fontWeight: 700 }}>الإجمالي</td>
-                  {showTotals && (
-                    <>
-                      <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'var(--ant-color-primary)', fontWeight: 700 }}>
-                        {numFmt(data.totals.debit)}
-                      </td>
-                      <td style={{
-                        ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700,
+                    <Table.Summary.Cell index={totalsStart} align="right">
+                      <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'var(--ant-color-primary)' }}>{numFmt(data.totals.debit)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={totalsStart + 1} align="right">
+                      <span style={{
+                        direction: 'ltr', fontVariantNumeric: 'tabular-nums',
                         color: viewType === 'totals'
                           ? (data.totals.balanced ? 'var(--ant-color-success)' : 'var(--ant-color-error)')
                           : 'var(--ant-color-primary)',
                       }}>
-                        {numFmt(data.totals.credit)}
-                        {viewType === 'totals' && (data.totals.balanced ? ' ✓' : ' ✗')}
-                      </td>
-                    </>
-                  )}
-                  {showBalances && (
-                    <>
-                      <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'var(--ant-color-success)', fontWeight: 700 }}>
-                        {numFmt(data.totals.balance_debit)}
-                      </td>
-                      <td style={{
-                        ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700,
+                        {numFmt(data.totals.credit)}{viewType === 'totals' && (data.totals.balanced ? ' ✓' : ' ✗')}
+                      </span>
+                    </Table.Summary.Cell>
+                  </>
+                )}
+                {showBalances && (
+                  <>
+                    <Table.Summary.Cell index={balancesStart} align="right">
+                      <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'var(--ant-color-success)' }}>{numFmt(data.totals.balance_debit)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={balancesStart + 1} align="right">
+                      <span style={{
+                        direction: 'ltr', fontVariantNumeric: 'tabular-nums',
                         color: data.totals.balanced ? 'var(--ant-color-success)' : 'var(--ant-color-error)',
                       }}>
-                        {numFmt(data.totals.balance_credit)}
-                        {data.totals.balanced ? ' ✓' : ' ✗'}
-                      </td>
-                    </>
-                  )}
-                </tr>
-              )}
-
-              {data.rows.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ ...bodyCell('center'), padding: '48px 12px', color: 'var(--ant-color-text-secondary)' }}>
-                    لا توجد بيانات في هذه الفترة
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                        {numFmt(data.totals.balance_credit)}{data.totals.balanced ? ' ✓' : ' ✗'}
+                      </span>
+                    </Table.Summary.Cell>
+                  </>
+                )}
+              </Table.Summary.Row>
+            </Table.Summary>
+          )
+        }}
+      />
     </div>
   )
-}
-
-function headCell(align: 'right' | 'center' | 'left', width?: number): React.CSSProperties {
-  return { padding: '8px 12px', textAlign: align, fontWeight: 600, fontSize: 12, color: 'var(--ant-color-text-secondary)', width }
-}
-function bodyCell(align: 'right' | 'center' | 'left'): React.CSSProperties {
-  return { padding: '8px 12px', textAlign: align }
 }

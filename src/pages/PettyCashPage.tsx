@@ -12,7 +12,7 @@ import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
   Banknote, CheckCircle2, CircleAlert, CircleMinus, ClipboardCheck, Eye, FileDown, FileText, FileX,
-  Gavel, Landmark, MessageCircle, Paperclip, Plus, Search, Settings, Sheet, Trash2, TriangleAlert, UserRound,
+  Gavel, Landmark, MessageCircle, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, TriangleAlert, UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
@@ -169,6 +169,9 @@ export default function PettyCashPage() {
 
   // PDF export
   const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Sync expense accounts to WhatsApp (Firestore)
+  const [syncingAccounts, setSyncingAccounts] = useState(false)
 
   // Rows just reconciled from a remote (WhatsApp-tap) approval — briefly highlighted + chimed
   const [updatedIds, setUpdatedIds] = useState<Set<number>>(new Set())
@@ -462,6 +465,18 @@ export default function PettyCashPage() {
     }
   }
 
+  const handleSyncExpenseAccounts = async () => {
+    setSyncingAccounts(true)
+    try {
+      const { message } = await pettyCashApi.syncExpenseAccounts()
+      toast.success(message)
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّرت مزامنة حسابات المصروفات')
+    } finally {
+      setSyncingAccounts(false)
+    }
+  }
+
   const handleApprove = async (t: PettyCashTransaction, role: 'auditor' | 'manager') => {
     setApproving(t.id)
     try {
@@ -505,7 +520,7 @@ export default function PettyCashPage() {
     {
       title: 'البيان',
       render: (_: unknown, t) => (
-        <div style={{ maxWidth: 320 }}>
+        <div style={{ maxWidth: 280 }}>
           <div style={{ fontWeight: 500, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5 }}>
             {t.description || (t.type === 'expense' ? 'مصروف نثرية' : 'تغذية الصندوق')}
           </div>
@@ -514,7 +529,7 @@ export default function PettyCashPage() {
       ),
     },
     {
-      title: 'الحساب المقابل', width: 170,
+      title: 'الحساب المقابل', width: 200,
       render: (_: unknown, t) => <Text type="secondary" style={{ fontSize: 12.5 }}>{t.contra_account.name}</Text>,
     },
     {
@@ -710,6 +725,10 @@ export default function PettyCashPage() {
                   const qs = p.toString()
                   navigate(`/petty-cash-spreadsheet${qs ? `?${qs}` : ''}`)
                 }} icon={<Sheet size={16} />} />
+              </Tooltip>
+              <Tooltip title="مزامنة حسابات المصروفات مع واتساب">
+                <Button type="text" shape="circle" size="small" onClick={handleSyncExpenseAccounts} disabled={syncingAccounts}
+                  icon={syncingAccounts ? <Spin size="small" /> : <RefreshCw size={16} />} />
               </Tooltip>
             </Flex>
           </div>

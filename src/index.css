@@ -57,6 +57,16 @@
   animation: highlight-fade 2s ease-out forwards;
 }
 
+/* TrialBalancePage: account-type group header rows inside the antd Table */
+.tb-group-row > td {
+  background: var(--ant-color-fill-secondary) !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+.tb-group-row:hover > td {
+  background: var(--ant-color-fill-secondary) !important;
+}
+
 /* Shared native <input type="date"> styling — matches antd Input's look since
    antd has no plain string-based date text field (DatePicker uses dayjs objects). */
 .date-input {

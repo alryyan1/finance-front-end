@@ -126,4 +126,7 @@ export const pettyCashApi = {
 
   sendNotification: (id: number): Promise<NotificationsResponse> =>
     api.post<NotificationsResponse>(`/api/petty-cash/transactions/${id}/notify`).then(r => r.data),
+
+  syncExpenseAccounts: (): Promise<{ message: string }> =>
+    api.post<{ message: string }>('/api/petty-cash/sync-expense-accounts').then(r => r.data),
 }
