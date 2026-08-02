@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Backdrop, Box, Button, Chip, CircularProgress,
-  Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, Stack, Tooltip, Typography,
-} from '@mui/material'
-import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
-import CheckCircleIcon   from '@mui/icons-material/CheckCircle'
-import DeleteIcon        from '@mui/icons-material/Delete'
+  Alert, Button, Flex, Modal, Progress, Spin, Tag, Tooltip, Typography,
+} from 'antd'
+import { CheckCircle2, CloudDownload, Trash2 } from 'lucide-react'
 import {
   fetchPendingEntries, fetchDoctorMappings, markAsImported, toJournalPayload, deleteEntry,
   type FirebaseJournalEntry,
 } from '@/lib/firebaseImport'
 import { journalApi } from '@/api/journal'
+import { useToast } from '@/lib/toast'
+
+const { Text } = Typography
 
 interface Props {
   open:    boolean
@@ -20,10 +19,10 @@ interface Props {
 }
 
 export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
+  const toast = useToast()
   const [loading,        setLoading]        = useState(false)
   const [entries,        setEntries]        = useState<FirebaseJournalEntry[]>([])
   const [doctorMappings, setDoctorMappings] = useState<Record<string, string>>({})
-  const [error,          setError]          = useState<string | null>(null)
 
   const [importing, setImporting] = useState(false)
   const [progress,  setProgress]  = useState(0)        // 0-100
@@ -34,10 +33,10 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
   // Load pending entries whenever dialog opens
   useEffect(() => {
     if (!open) return
-    setLoading(true); setError(null); setDone(false); setFailed([])
+    setLoading(true); setDone(false); setFailed([])
     Promise.all([fetchPendingEntries(), fetchDoctorMappings()])
       .then(([e, m]) => { setEntries(e); setDoctorMappings(m) })
-      .catch(e => setError((e as Error).message ?? 'فشل التحميل'))
+      .catch(e => toast.error((e as Error).message ?? 'فشل التحميل'))
       .finally(() => setLoading(false))
   }, [open])
 
@@ -76,7 +75,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
       await deleteEntry(entry.firebaseId)
       setEntries(prev => prev.filter(e => e.firebaseId !== entry.firebaseId))
     } catch (e) {
-      setError((e as Error).message ?? 'فشل الحذف')
+      toast.error((e as Error).message ?? 'فشل الحذف')
     } finally {
       setDeleting(null)
     }
@@ -89,7 +88,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
       await Promise.all(entries.map(e => deleteEntry(e.firebaseId)))
       setEntries([])
     } catch (e) {
-      setError((e as Error).message ?? 'فشل الحذف')
+      toast.error((e as Error).message ?? 'فشل الحذف')
     } finally {
       setDeleting(null)
     }
@@ -101,128 +100,137 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
     onClose()
   }
 
-  const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2 })
+  const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
   const entryTotal = (e: FirebaseJournalEntry) =>
     e.lines.reduce((s, l) => s + l.debit, 0)
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <CloudDownloadIcon color="primary" />
-        استيراد القيود من Firebase
-      </DialogTitle>
-
+    <Modal
+      open={open}
+      onCancel={handleClose}
+      width={720}
+      title={
+        <Flex align="center" gap={8}>
+          <CloudDownload size={18} color="var(--ant-color-primary)" />
+          استيراد القيود من Firebase
+        </Flex>
+      }
+      footer={
+        <Flex justify="flex-end" gap={8}>
+          <Button onClick={handleClose} disabled={importing}>
+            {done ? 'إغلاق' : 'إلغاء'}
+          </Button>
+          {!done && entries.length > 0 && (
+            <>
+              <Button
+                danger
+                disabled={loading || importing || deleting !== null}
+                onClick={handleDeleteAll}
+                icon={deleting === '__all__' ? <Spin size="small" /> : <Trash2 size={16} />}
+              >
+                حذف الكل
+              </Button>
+              <Button
+                type="primary"
+                disabled={loading || importing || deleting !== null || entries.length === 0}
+                onClick={handleImportAll}
+                icon={importing ? <Spin size="small" /> : <CloudDownload size={16} />}
+              >
+                {importing ? 'جاري الاستيراد...' : `استيراد ${entries.length} قيد`}
+              </Button>
+            </>
+          )}
+        </Flex>
+      }
+    >
       {/* Centered import progress overlay */}
-      <Backdrop open={importing} sx={{ zIndex: theme => theme.zIndex.modal + 1, flexDirection: 'column', gap: 2 }}>
-        <CircularProgress size={64} thickness={4} variant="determinate" value={progress} sx={{ color: 'white' }} />
-        <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
-          جاري الاستيراد... {progress}%
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-          يرجى الانتظار، لا تغلق النافذة
-        </Typography>
-      </Backdrop>
+      {importing && (
+        <Flex
+          vertical align="center" justify="center" gap={16}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1100,
+            background: 'rgba(0,0,0,0.65)',
+          }}
+        >
+          <Progress type="circle" percent={progress} size={64} strokeColor="white" trailColor="rgba(255,255,255,0.3)" />
+          <Text style={{ color: 'white', fontWeight: 600, fontSize: 16 }}>
+            جاري الاستيراد... {progress}%
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.7)' }}>
+            يرجى الانتظار، لا تغلق النافذة
+          </Text>
+        </Flex>
+      )}
 
-      <DialogContent>
-        {loading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
-          </Box>
-        )}
+      {loading && (
+        <Flex justify="center" style={{ padding: '32px 0' }}>
+          <Spin />
+        </Flex>
+      )}
 
-        {error && <Alert severity="error">{error}</Alert>}
+      {!loading && !done && (
+        <>
+          {entries.length === 0 ? (
+            <Alert type="success" message="لا توجد قيود معلّقة — كل شيء محدَّث." showIcon />
+          ) : (
+            <Flex vertical gap={8}>
+              <Text type="secondary" style={{ marginBottom: 4 }}>
+                {entries.length} قيد في Firebase جاهز للاستيراد إلى نظام المحاسبة:
+              </Text>
 
-        {!loading && !error && !done && (
-          <>
-            {entries.length === 0 ? (
-              <Alert severity="success">لا توجد قيود معلّقة — كل شيء محدَّث.</Alert>
-            ) : (
-              <Stack spacing={1}>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  {entries.length} قيد في Firebase جاهز للاستيراد إلى نظام المحاسبة:
-                </Typography>
+              {entries.map(e => (
+                <div key={e.firebaseId} style={{ padding: 12, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 6 }}>
+                  <Flex justify="space-between" align="center">
+                    <Text style={{ fontWeight: 600 }}>{e.description}</Text>
+                    <Flex align="center" gap={8}>
+                      <Tag color="blue">{fmt(entryTotal(e))}</Tag>
+                      <Tooltip title="حذف من Firebase">
+                        <Button
+                          type="text"
+                          danger
+                          size="small"
+                          shape="circle"
+                          disabled={importing || deleting !== null}
+                          onClick={() => handleDelete(e)}
+                          icon={deleting === e.firebaseId ? <Spin size="small" /> : <Trash2 size={15} />}
+                        />
+                      </Tooltip>
+                    </Flex>
+                  </Flex>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {e.date} · {e.lines.length} سطر
+                    {e.reference ? ` · ${e.reference}` : ''}
+                  </Text>
+                </div>
+              ))}
+            </Flex>
+          )}
+        </>
+      )}
 
-                {entries.map(e => (
-                  <Box key={e.firebaseId} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{e.description}</Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Chip label={`${fmt(entryTotal(e))} ج.س`} size="small" color="primary" variant="outlined" />
-                        <Tooltip title="حذف من Firebase">
-                          <span>
-                            <IconButton
-                              size="small"
-                              color="error"
-                              disabled={importing || deleting !== null}
-                              onClick={() => handleDelete(e)}
-                            >
-                              {deleting === e.firebaseId
-                                ? <CircularProgress size={16} color="error" />
-                                : <DeleteIcon fontSize="small" />}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </Box>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">
-                      {e.date} · {e.lines.length} سطر
-                      {e.reference ? ` · ${e.reference}` : ''}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
-            )}
-          </>
-        )}
-
-
-        {done && (
-          <Stack spacing={1.5} sx={{ mt: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <CheckCircleIcon color="success" />
-              <Typography variant="body1" color="success.main" sx={{ fontWeight: 600 }}>
-                {entries.length - failed.length} قيد تم استيراده بنجاح
-              </Typography>
-            </Box>
-            {failed.length > 0 && (
-              <Alert severity="warning">
-                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                  {failed.length} قيد فشل:
-                </Typography>
-                {failed.map((msg, i) => (
-                  <Typography key={i} variant="caption" display="block">• {msg}</Typography>
-                ))}
-              </Alert>
-            )}
-          </Stack>
-        )}
-      </DialogContent>
-
-      <DialogActions>
-        <Button onClick={handleClose} disabled={importing}>
-          {done ? 'إغلاق' : 'إلغاء'}
-        </Button>
-        {!done && entries.length > 0 && (
-          <>
-            <Button
-              color="error"
-              disabled={loading || importing || deleting !== null}
-              onClick={handleDeleteAll}
-              startIcon={deleting === '__all__' ? <CircularProgress size={16} color="error" /> : <DeleteIcon />}
-            >
-              حذف الكل
-            </Button>
-            <Button
-              variant="contained"
-              disabled={loading || importing || deleting !== null || entries.length === 0}
-              onClick={handleImportAll}
-              startIcon={importing ? <CircularProgress size={16} color="inherit" /> : <CloudDownloadIcon />}
-            >
-              {importing ? 'جاري الاستيراد...' : `استيراد ${entries.length} قيد`}
-            </Button>
-          </>
-        )}
-      </DialogActions>
-    </Dialog>
+      {done && (
+        <Flex vertical gap={12} style={{ marginTop: 4 }}>
+          <Flex align="center" gap={8}>
+            <CheckCircle2 size={18} color="var(--ant-color-success)" />
+            <Text style={{ color: 'var(--ant-color-success)', fontWeight: 600 }}>
+              {entries.length - failed.length} قيد تم استيراده بنجاح
+            </Text>
+          </Flex>
+          {failed.length > 0 && (
+            <Alert
+              type="warning"
+              message={`${failed.length} قيد فشل:`}
+              description={
+                <Flex vertical>
+                  {failed.map((msg, i) => (
+                    <Text key={i} style={{ fontSize: 12 }}>• {msg}</Text>
+                  ))}
+                </Flex>
+              }
+            />
+          )}
+        </Flex>
+      )}
+    </Modal>
   )
 }

@@ -1,15 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  Alert, Autocomplete, Box, Button, CircularProgress,
-  Divider, IconButton, InputAdornment, Paper, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow,
-  TextField, Tooltip, Typography,
-} from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
-import DeleteIcon from '@mui/icons-material/Delete'
-import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+  Alert, Button, Col, Divider, Flex, Input, InputNumber, Row, Select, Spin, Table, Tooltip, Typography,
+} from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { ArrowLeft, Plus, Sparkles, Trash2 } from 'lucide-react'
+import DateInput from '@/components/common/DateInput'
+import { useToast } from '@/lib/toast'
 import { aiApi } from '@/api/ai'
 import { journalApi } from '@/api/journal'
 import { accountsApi } from '@/api/accounts'
@@ -18,6 +15,8 @@ import { fiscalYearsApi } from '@/api/fiscalYears'
 import type { JournalEntryLinePayload } from '@/types/journal'
 import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
+
+const { Title, Text } = Typography
 
 interface LineForm {
   account: Account | null
@@ -41,13 +40,13 @@ export default function JournalEntryFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
+  const toast = useToast()
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [parties, setParties] = useState<Party[]>([])
   const [loadingMeta, setLoadingMeta] = useState(true)
   const [loadingEntry, setLoadingEntry] = useState(isEdit)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const [date, setDate] = useState(today())
   const [reference, setReference] = useState('')
@@ -56,7 +55,6 @@ export default function JournalEntryFormPage() {
   const [dateWarning, setDateWarning] = useState<string | null>(null)
 
   const [suggestingLine, setSuggestingLine] = useState<number | null>(null)
-  const firstAccountRef = useRef<HTMLInputElement>(null)
 
   const suggestLineDescription = async (i: number) => {
     const line = lines[i]
@@ -135,11 +133,10 @@ export default function JournalEntryFormPage() {
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault()
-    setError(null)
 
-    if (!description.trim()) { setError('الوصف مطلوب'); return }
-    if (!isBalanced) { setError('مجموع المدين يجب أن يساوي مجموع الدائن'); return }
-    if (lines.some(l => !l.account)) { setError('يجب اختيار الحساب لكل سطر'); return }
+    if (!description.trim()) { toast.error('الوصف مطلوب'); return }
+    if (!isBalanced) { toast.error('مجموع المدين يجب أن يساوي مجموع الدائن'); return }
+    if (lines.some(l => !l.account)) { toast.error('يجب اختيار الحساب لكل سطر'); return }
 
     const payload = {
       date,
@@ -158,13 +155,15 @@ export default function JournalEntryFormPage() {
     try {
       if (isEdit && id) {
         await journalApi.update(Number(id), payload)
+        toast.success('تم تحديث القيد')
       } else {
         await journalApi.create(payload)
+        toast.success('تم إنشاء القيد')
       }
       navigate('/transactions')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setError(msg ?? 'حدث خطأ، يرجى المحاولة مجدداً')
+      toast.error(msg ?? 'حدث خطأ، يرجى المحاولة مجدداً')
     } finally {
       setSaving(false)
     }
@@ -172,266 +171,230 @@ export default function JournalEntryFormPage() {
 
   if (loadingMeta || loadingEntry) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-        <CircularProgress />
-      </Box>
+      <Flex justify="center" style={{ padding: '80px 0' }}>
+        <Spin size="large" />
+      </Flex>
     )
   }
 
-  const numFmt = (n: number) =>
-    n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const numFmt = (n: number) => Math.round(n).toLocaleString('en-US')
+
+  const accountOptions = accounts.map(a => {
+    const isRoot = a.parent_id === null
+    const isParent = parentIds.has(a.id)
+    return {
+      value: a.id,
+      label: `${a.code} — ${a.name}`,
+      disabled: isParent,
+      isRoot,
+      isParent,
+    }
+  })
+
+  const partyOptions = parties.map(p => ({ value: p.id, label: p.name }))
+
+  const columns: ColumnsType<LineForm & { __i: number }> = [
+    {
+      title: 'الحساب',
+      width: '38%',
+      render: (_: unknown, line, i) => (
+        <Select
+          showSearch
+          allowClear
+          style={{ width: '100%' }}
+          placeholder="اختر حساباً"
+          value={line.account?.id}
+          onChange={v => updateLine(i, { account: accounts.find(a => a.id === v) ?? null })}
+          notFoundContent="لا توجد نتائج"
+          filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+          options={accountOptions}
+          optionRender={option => {
+            const { isRoot, isParent } = option.data as { isRoot: boolean; isParent: boolean }
+            return (
+              <span style={{
+                fontWeight: isRoot ? 700 : isParent ? 600 : 400,
+                color: isRoot ? '#1565c0' : isParent ? '#2e7d32' : 'inherit',
+                paddingRight: isRoot ? 0 : isParent ? 12 : 24,
+                fontSize: 13,
+              }}>
+                {option.label}
+              </span>
+            )
+          }}
+        />
+      ),
+    },
+    {
+      title: 'الجهة',
+      width: '16%',
+      render: (_: unknown, line, i) => (
+        <Select
+          showSearch
+          allowClear
+          style={{ width: '100%' }}
+          placeholder="اختياري"
+          value={line.party?.id}
+          onChange={v => {
+            const party = parties.find(p => p.id === v) ?? null
+            const update: Partial<LineForm> = { party }
+            if (party?.account && !line.account) {
+              const full = accounts.find(a => a.id === party.account!.id)
+              if (full) update.account = full
+            }
+            updateLine(i, update)
+          }}
+          notFoundContent="لا توجد نتائج"
+          filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+          options={partyOptions}
+        />
+      ),
+    },
+    {
+      title: 'البيان',
+      render: (_: unknown, line, i) => (
+        <Input
+          value={line.description}
+          onChange={e => updateLine(i, { description: e.target.value })}
+          placeholder="بيان السطر"
+          suffix={
+            <Tooltip title="اقتراح بيان بالذكاء الاصطناعي">
+              <Button
+                type="text" size="small" shape="circle"
+                disabled={suggestingLine === i}
+                onClick={() => suggestLineDescription(i)}
+                icon={suggestingLine === i ? <Spin size="small" /> : <Sparkles size={15} color="var(--ant-color-primary)" />}
+              />
+            </Tooltip>
+          }
+        />
+      ),
+    },
+    {
+      title: 'مدين',
+      align: 'left',
+      width: '12%',
+      render: (_: unknown, line, i) => (
+        <InputNumber
+          min={0} step={0.01} style={{ width: 110, direction: 'ltr' }}
+          value={line.debit === '' ? null : Number(line.debit)}
+          onChange={val => handleDebitChange(i, val == null ? '' : String(val))}
+        />
+      ),
+    },
+    {
+      title: 'دائن',
+      align: 'left',
+      width: '12%',
+      render: (_: unknown, line, i) => (
+        <InputNumber
+          min={0} step={0.01} style={{ width: 110, direction: 'ltr' }}
+          value={line.credit === '' ? null : Number(line.credit)}
+          onChange={val => handleCreditChange(i, val == null ? '' : String(val))}
+        />
+      ),
+    },
+    {
+      title: '',
+      width: 48,
+      render: (_: unknown, _line, i) => (
+        <Tooltip title="حذف السطر">
+          <Button
+            type="text" shape="circle" size="small" danger
+            onClick={() => removeLine(i)}
+            disabled={lines.length <= 2}
+            icon={<Trash2 size={15} />}
+          />
+        </Tooltip>
+      ),
+    },
+  ]
 
   return (
-    <Box component="form" onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+      <Flex align="center" gap={16} style={{ marginBottom: 24 }}>
         <Tooltip title="رجوع">
-          <IconButton onClick={() => navigate('/transactions')}>
-            <ArrowBackIcon />
-          </IconButton>
+          <Button shape="circle" onClick={() => navigate('/transactions')} icon={<ArrowLeft size={18} />} />
         </Tooltip>
-        <Typography variant="h5" sx={{ fontWeight: 700, flexGrow: 1 }}>
+        <Title level={4} style={{ margin: 0, flexGrow: 1 }}>
           {isEdit ? 'تعديل القيد' : 'قيد جديد'}
-        </Typography>
+        </Title>
         <Button
-          type="submit"
-          variant="contained"
+          type="primary"
+          htmlType="submit"
           disabled={saving || !isBalanced}
-          sx={{ minWidth: 120 }}
+          style={{ minWidth: 120 }}
         >
-          {saving ? <CircularProgress size={20} /> : 'حفظ القيد'}
+          {saving ? <Spin size="small" /> : 'حفظ القيد'}
         </Button>
-      </Box>
+      </Flex>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
       {dateWarning && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          {dateWarning}
-        </Alert>
+        <Alert type="warning" showIcon message={dateWarning} style={{ marginBottom: 16 }} />
       )}
 
       {/* Entry header fields */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 2fr' }, gap: 2 }}>
-          <TextField
-            label="التاريخ"
-            type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-            required
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            label="المرجع"
-            value={reference}
-            onChange={e => setReference(e.target.value)}
-            placeholder="اختياري"
-          />
-          <TextField
-            label="الوصف"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            required
-          />
-        </Box>
-      </Paper>
+      <div style={{ padding: 24, marginBottom: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+        <Row gutter={16}>
+          <Col xs={24} sm={6}>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>التاريخ</Text>
+            <DateInput value={date} onChange={e => setDate(e.target.value)} required style={{ width: '100%' }} />
+          </Col>
+          <Col xs={24} sm={6}>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>المرجع</Text>
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="اختياري" />
+          </Col>
+          <Col xs={24} sm={12}>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الوصف</Text>
+            <Input value={description} onChange={e => setDescription(e.target.value)} required />
+          </Col>
+        </Row>
+      </div>
 
       {/* Lines table */}
-      <Paper sx={{ mb: 2 }}>
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: '38%' }}>الحساب</TableCell>
-                <TableCell sx={{ width: '16%' }}>الجهة</TableCell>
-                <TableCell>البيان</TableCell>
-                <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
-                <TableCell align="left" sx={{ width: '12%' }}>دائن</TableCell>
-                <TableCell sx={{ width: 48 }} />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {lines.map((line, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <Autocomplete
-                      options={accounts}
-                      value={line.account}
-                      onChange={(_, v) => updateLine(i, { account: v })}
-                      getOptionLabel={a => `${a.code} — ${a.name}`}
-                      isOptionEqualToValue={(a, b) => a.id === b.id}
-                      getOptionDisabled={a => parentIds.has(a.id)}
-                      renderOption={(props, a) => {
-                        const isParent  = parentIds.has(a.id)
-                        const isRoot    = a.parent_id === null
-                        return (
-                          <li {...props} key={a.id} style={{
-                            fontWeight:   isRoot ? 700 : isParent ? 600 : 400,
-                            color:        isRoot ? '#1565c0' : isParent ? '#2e7d32' : 'inherit',
-                            paddingRight: isRoot ? 8 : isParent ? 20 : 32,
-                            fontSize:     '0.82rem',
-                            opacity:      isParent ? 1 : undefined,
-                          }}>
-                            {a.code} — {a.name}
-                          </li>
-                        )
-                      }}
-                      renderInput={params => (
-                        <TextField
-                          {...params}
-                          placeholder="اختر حساباً"
-                          size="small"
-                          inputRef={i === 0 ? firstAccountRef : undefined}
-                        />
-                      )}
-                      size="small"
-                      disableClearable={false}
-                      noOptionsText="لا توجد نتائج"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Autocomplete
-                      options={parties}
-                      value={line.party}
-                      onChange={(_, v) => {
-                        const update: Partial<LineForm> = { party: v }
-                        if (v?.account && !line.account) {
-                          const full = accounts.find(a => a.id === v.account!.id)
-                          if (full) update.account = full
-                        }
-                        updateLine(i, update)
-                      }}
-                      getOptionLabel={p => p.name}
-                      isOptionEqualToValue={(a, b) => a.id === b.id}
-                      renderInput={params => (
-                        <TextField {...params} placeholder="اختياري" size="small" />
-                      )}
-                      size="small"
-                      disableClearable={false}
-                      noOptionsText="لا توجد نتائج"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      value={line.description}
-                      onChange={e => updateLine(i, { description: e.target.value })}
-                      placeholder="بيان السطر"
-                      InputProps={{
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <Tooltip title="اقتراح بيان بالذكاء الاصطناعي">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={suggestingLine === i}
-                                  onClick={() => suggestLineDescription(i)}
-                                  sx={{ color: 'primary.main', opacity: 0.7 }}
-                                >
-                                  {suggestingLine === i
-                                    ? <CircularProgress size={14} />
-                                    : <AutoAwesomeIcon sx={{ fontSize: 16 }} />}
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={line.debit}
-                      onChange={e => handleDebitChange(i, e.target.value)}
-                      inputProps={{ min: 0, step: '0.01', style: { direction: 'ltr', textAlign: 'right' } }}
-                      sx={{ width: 110 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={line.credit}
-                      onChange={e => handleCreditChange(i, e.target.value)}
-                      inputProps={{ min: 0, step: '0.01', style: { direction: 'ltr', textAlign: 'right' } }}
-                      sx={{ width: 110 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Tooltip title="حذف السطر">
-                      <span>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => removeLine(i)}
-                          disabled={lines.length <= 2}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Button startIcon={<AddIcon />} onClick={addLine} size="small">
+      <div style={{ marginBottom: 16, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
+        <Table
+          size="small"
+          columns={columns}
+          dataSource={lines.map((l, i) => ({ ...l, __i: i }))}
+          rowKey="__i"
+          pagination={false}
+        />
+        <div style={{ padding: '12px 16px' }}>
+          <Button icon={<Plus size={14} />} onClick={addLine} size="small">
             إضافة سطر
           </Button>
-        </Box>
-      </Paper>
+        </div>
+      </div>
 
       {/* Balance summary */}
-      <Paper sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 4, alignItems: 'center' }}>
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary">إجمالي المدين</Typography>
-            <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Typography>
-          </Box>
-          <Divider orientation="vertical" flexItem />
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary">إجمالي الدائن</Typography>
-            <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Typography>
-          </Box>
-          <Divider orientation="vertical" flexItem />
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary">الفرق</Typography>
-            <Typography
-              sx={{
-                fontWeight: 700,
-                direction: 'ltr',
-                color: isBalanced ? 'success.main' : 'error.main',
-              }}
-            >
+      <div style={{ padding: 16, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+        <Flex justify="flex-end" gap={32} align="center">
+          <div style={{ textAlign: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي المدين</Text>
+            <Text style={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Text>
+          </div>
+          <Divider type="vertical" style={{ height: 32 }} />
+          <div style={{ textAlign: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي الدائن</Text>
+            <Text style={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Text>
+          </div>
+          <Divider type="vertical" style={{ height: 32 }} />
+          <div style={{ textAlign: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>الفرق</Text>
+            <Text style={{ fontWeight: 700, direction: 'ltr' }} type={isBalanced ? 'success' : 'danger'}>
               {numFmt(Math.abs(totalDebit - totalCredit))}
-            </Typography>
-          </Box>
-          <Box>
-            <Typography
-              sx={{
-                fontWeight: 700,
-                px: 2,
-                py: 0.5,
-                borderRadius: 1,
-                bgcolor: isBalanced ? 'success.light' : 'error.light',
-                color: isBalanced ? 'success.dark' : 'error.dark',
-              }}
-            >
-              {isBalanced ? 'متوازن' : 'غير متوازن'}
-            </Typography>
-          </Box>
-        </Box>
-      </Paper>
-    </Box>
+            </Text>
+          </div>
+          <div style={{
+            fontWeight: 700, padding: '4px 16px', borderRadius: 6,
+            background: isBalanced ? 'var(--ant-color-success-bg)' : 'var(--ant-color-error-bg)',
+            color: isBalanced ? 'var(--ant-color-success)' : 'var(--ant-color-error)',
+          }}>
+            {isBalanced ? 'متوازن' : 'غير متوازن'}
+          </div>
+        </Flex>
+      </div>
+    </form>
   )
 }

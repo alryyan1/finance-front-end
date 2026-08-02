@@ -1,31 +1,26 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Avatar, Box, Button, Chip, CircularProgress, Dialog, DialogActions,
-  DialogContent, DialogTitle, FormControl, IconButton, InputAdornment, InputLabel,
-  MenuItem, OutlinedInput, Paper, Select, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
-} from '@mui/material'
-import type { SelectChangeEvent } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
-import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
-import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined'
+  Avatar, Button, Flex, Input, Modal, Select, Spin, Table, Tag, Tooltip, Typography,
+} from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { useToast } from '@/lib/toast'
+import { Eye, EyeOff, Pencil, Plus, Trash2, User as UserIcon } from 'lucide-react'
 
 import { usersApi } from '@/api/users'
 import type { UserRecord, UserPayload, RoleRecord } from '@/api/users'
 import { useAuth } from '@/context/AuthContext'
 import HelpButton from '@/components/common/HelpButton'
 
+const { Title, Text } = Typography
+
 const ROLE_LABELS: Record<string, string> = {
   admin:      'مدير النظام',
   accountant: 'محاسب',
   viewer:     'مشاهد',
 }
-const ROLE_COLORS: Record<string, 'error' | 'primary' | 'default'> = {
+const ROLE_COLORS: Record<string, string> = {
   admin:      'error',
-  accountant: 'primary',
+  accountant: 'blue',
   viewer:     'default',
 }
 
@@ -42,11 +37,10 @@ function avatarColor(id: number) {
 
 export default function UsersPage() {
   const { user: me } = useAuth()
+  const toast = useToast()
   const [users, setUsers]       = useState<UserRecord[]>([])
   const [roles, setRoles]       = useState<RoleRecord[]>([])
   const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [success, setSuccess]   = useState<string | null>(null)
 
   const [open, setOpen]         = useState(false)
   const [editing, setEditing]   = useState<UserRecord | null>(null)
@@ -61,7 +55,7 @@ export default function UsersPage() {
     setLoading(true)
     Promise.all([usersApi.list(), usersApi.listRoles()])
       .then(([u, r]) => { setUsers(u); setRoles(r) })
-      .catch(() => setError('تعذّر تحميل البيانات'))
+      .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
   }
 
@@ -81,15 +75,15 @@ export default function UsersPage() {
     try {
       if (editing) {
         await usersApi.update(editing.id, form)
-        setSuccess('تم تحديث المستخدم بنجاح')
+        toast.success('تم تحديث المستخدم بنجاح')
       } else {
         await usersApi.create(form)
-        setSuccess('تم إنشاء المستخدم بنجاح')
+        toast.success('تم إنشاء المستخدم بنجاح')
       }
       setOpen(false); load()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setError(msg ?? 'فشل حفظ المستخدم')
+      toast.error(msg ?? 'فشل حفظ المستخدم')
     } finally { setSaving(false) }
   }
 
@@ -98,225 +92,202 @@ export default function UsersPage() {
     setDeleting(true)
     try {
       await usersApi.remove(delTarget.id)
-      setSuccess('تم حذف المستخدم'); setDelTarget(null); load()
+      toast.success('تم حذف المستخدم'); setDelTarget(null); load()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setError(msg ?? 'فشل حذف المستخدم'); setDelTarget(null)
+      toast.error(msg ?? 'فشل حذف المستخدم'); setDelTarget(null)
     } finally { setDeleting(false) }
-  }
-
-  const handleRoleChange = (e: SelectChangeEvent<string[]>) => {
-    const val = e.target.value
-    setForm(p => ({ ...p, roles: typeof val === 'string' ? val.split(',') : val }))
   }
 
   const isFormValid = form.name.trim() && form.username.trim() && form.email.trim() &&
     (!editing ? !!form.password : true)
 
-  return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <PersonOutlinedIcon sx={{ fontSize: 28, color: 'primary.main' }} />
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1.2 }}>إدارة المستخدمين</Typography>
-            <Typography variant="body2" color="text.secondary">{users.length} مستخدم مسجّل</Typography>
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <HelpButton title="دليل استخدام إدارة المستخدمين">
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إدارة المستخدمين</Typography>
-                <Typography variant="body2">يمكن للمدير إضافة مستخدمين جدد وتعديل بياناتهم وصلاحياتهم وحذفهم. لا يمكن حذف حسابك الشخصي.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الأدوار والصلاحيات</Typography>
-                <Typography variant="body2">مدير النظام: وصول كامل لجميع الوظائف. محاسب: يمكنه إدخال القيود والتقارير. مشاهد: عرض فقط بدون تعديل.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إضافة مستخدم</Typography>
-                <Typography variant="body2">اضغط "مستخدم جديد"، أدخل الاسم والبريد الإلكتروني وكلمة المرور، ثم حدد الدور المناسب.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تغيير كلمة المرور</Typography>
-                <Typography variant="body2">عند تعديل المستخدم، اترك حقل كلمة المرور فارغاً للاحتفاظ بالكلمة الحالية، أو أدخل كلمة جديدة لتغييرها.</Typography></Box>
-            </Box>
-          </HelpButton>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>مستخدم جديد</Button>
-        </Box>
-      </Box>
+  const columns: ColumnsType<UserRecord> = [
+    {
+      title: 'المستخدم',
+      dataIndex: 'name',
+      render: (_: string, u) => (
+        <Flex align="center" gap={12}>
+          <Avatar style={{ backgroundColor: avatarColor(u.id), fontSize: 13, fontWeight: 700 }}>
+            {initials(u.name)}
+          </Avatar>
+          <div>
+            <Text style={{ fontWeight: 600, display: 'block' }}>{u.name}</Text>
+            {u.id === me?.id && <Text type="secondary" style={{ fontSize: 12 }}>أنت</Text>}
+          </div>
+        </Flex>
+      ),
+    },
+    {
+      title: 'اسم المستخدم',
+      dataIndex: 'username',
+      render: (v: string) => <Text type="secondary" style={{ fontFamily: 'monospace' }}>{v}</Text>,
+    },
+    {
+      title: 'البريد الإلكتروني',
+      dataIndex: 'email',
+      render: (v: string) => <span style={{ direction: 'ltr', display: 'inline-block' }}>{v}</span>,
+    },
+    {
+      title: 'الصلاحيات',
+      dataIndex: 'roles',
+      render: (rs: string[]) => rs.length === 0
+        ? <Text type="secondary" style={{ fontSize: 12 }}>بدون صلاحية</Text>
+        : (
+          <Flex gap={4} wrap="wrap">
+            {rs.map(r => (
+              <Tag key={r} color={ROLE_COLORS[r] === 'default' ? undefined : ROLE_COLORS[r]}>
+                {ROLE_LABELS[r] ?? r}
+              </Tag>
+            ))}
+          </Flex>
+        ),
+    },
+    {
+      title: 'تاريخ الإنشاء',
+      dataIndex: 'created_at',
+      render: (v: string) => (
+        <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)', fontSize: 13 }}>
+          {new Date(v).toLocaleDateString('ar-SA')}
+        </span>
+      ),
+    },
+    {
+      title: 'إجراءات',
+      align: 'center',
+      render: (_: unknown, u) => (
+        <Flex gap={4} justify="center">
+          <Tooltip title="تعديل">
+            <Button type="text" shape="circle" size="small" color="primary" variant="text" onClick={() => openEdit(u)} icon={<Pencil size={15} />} />
+          </Tooltip>
+          <Tooltip title={u.id === me?.id ? 'لا يمكنك حذف حسابك' : 'حذف'}>
+            <Button type="text" shape="circle" size="small" danger disabled={u.id === me?.id} onClick={() => setDelTarget(u)} icon={<Trash2 size={15} />} />
+          </Tooltip>
+        </Flex>
+      ),
+    },
+  ]
 
-      {error   && <Alert severity="error"   sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>{success}</Alert>}
+  return (
+    <div>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 24 }}>
+        <Flex align="center" gap={12}>
+          <UserIcon size={28} color="var(--ant-color-primary)" />
+          <div>
+            <Title level={4} style={{ margin: 0, lineHeight: 1.2 }}>إدارة المستخدمين</Title>
+            <Text type="secondary">{users.length} مستخدم مسجّل</Text>
+          </div>
+        </Flex>
+        <Flex gap={8} align="center">
+          <HelpButton title="دليل استخدام إدارة المستخدمين">
+            <Flex vertical gap={16}>
+              <div><Title level={5}>إدارة المستخدمين</Title>
+                <Text>يمكن للمدير إضافة مستخدمين جدد وتعديل بياناتهم وصلاحياتهم وحذفهم. لا يمكن حذف حسابك الشخصي.</Text></div>
+              <div><Title level={5}>الأدوار والصلاحيات</Title>
+                <Text>مدير النظام: وصول كامل لجميع الوظائف. محاسب: يمكنه إدخال القيود والتقارير. مشاهد: عرض فقط بدون تعديل.</Text></div>
+              <div><Title level={5}>إضافة مستخدم</Title>
+                <Text>اضغط "مستخدم جديد"، أدخل الاسم والبريد الإلكتروني وكلمة المرور، ثم حدد الدور المناسب.</Text></div>
+              <div><Title level={5}>تغيير كلمة المرور</Title>
+                <Text>عند تعديل المستخدم، اترك حقل كلمة المرور فارغاً للاحتفاظ بالكلمة الحالية، أو أدخل كلمة جديدة لتغييرها.</Text></div>
+            </Flex>
+          </HelpButton>
+          <Button type="primary" icon={<Plus size={16} />} onClick={openAdd}>مستخدم جديد</Button>
+        </Flex>
+      </Flex>
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+        <Flex justify="center" style={{ padding: '80px 0' }}><Spin size="large" /></Flex>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell>المستخدم</TableCell>
-                <TableCell>اسم المستخدم</TableCell>
-                <TableCell>البريد الإلكتروني</TableCell>
-                <TableCell>الصلاحيات</TableCell>
-                <TableCell sx={{ direction: 'ltr', color: 'text.secondary' }}>تاريخ الإنشاء</TableCell>
-                <TableCell align="center">إجراءات</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 8, color: 'text.secondary' }}>
-                    لا يوجد مستخدمون بعد
-                  </TableCell>
-                </TableRow>
-              )}
-              {users.map(u => (
-                <TableRow key={u.id} hover>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Avatar sx={{ width: 36, height: 36, fontSize: 13, fontWeight: 700, bgcolor: avatarColor(u.id) }}>
-                        {initials(u.name)}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{u.name}</Typography>
-                        {u.id === me?.id && (
-                          <Typography variant="caption" color="primary.main">أنت</Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                      {u.username}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ direction: 'ltr', display: 'inline-block' }}>
-                      {u.email}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                      {u.roles.length === 0
-                        ? <Typography variant="caption" color="text.disabled">بدون صلاحية</Typography>
-                        : u.roles.map(r => (
-                          <Chip
-                            key={r}
-                            label={ROLE_LABELS[r] ?? r}
-                            color={ROLE_COLORS[r] ?? 'default'}
-                            size="small"
-                          />
-                        ))
-                      }
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ direction: 'ltr', color: 'text.secondary', fontSize: 13 }}>
-                    {new Date(u.created_at).toLocaleDateString('ar-SA')}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                      <Tooltip title="تعديل">
-                        <IconButton size="small" color="primary" onClick={() => openEdit(u)}>
-                          <EditOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title={u.id === me?.id ? 'لا يمكنك حذف حسابك' : 'حذف'}>
-                        <span>
-                          <IconButton size="small" color="error" onClick={() => setDelTarget(u)} disabled={u.id === me?.id}>
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Table
+          columns={columns}
+          dataSource={users}
+          rowKey="id"
+          pagination={false}
+          locale={{ emptyText: 'لا يوجد مستخدمون بعد' }}
+        />
       )}
 
       {/* ── Add / Edit Dialog ── */}
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          {editing ? 'تعديل مستخدم' : 'إضافة مستخدم جديد'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-            <TextField label="الاسم الكامل" size="small" fullWidth value={form.name}
-              onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-            <TextField
-              label="اسم المستخدم" size="small" fullWidth value={form.username}
+      <Modal
+        open={open}
+        onCancel={() => setOpen(false)}
+        width={420}
+        title={editing ? 'تعديل مستخدم' : 'إضافة مستخدم جديد'}
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setOpen(false)} disabled={saving}>إلغاء</Button>
+            <Button type="primary" onClick={handleSave} disabled={saving || !isFormValid}>
+              {saving ? <Spin size="small" /> : editing ? 'حفظ التعديلات' : 'إنشاء المستخدم'}
+            </Button>
+          </Flex>
+        }
+      >
+        <Flex vertical gap={16} style={{ paddingTop: 8 }}>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الاسم الكامل</Text>
+            <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>اسم المستخدم</Text>
+            <Input
+              value={form.username}
               onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
-              slotProps={{ htmlInput: { style: { fontFamily: 'monospace' } } }}
+              style={{ fontFamily: 'monospace' }}
             />
-            <TextField
-              label="البريد الإلكتروني" type="email" size="small" fullWidth value={form.email}
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>البريد الإلكتروني</Text>
+            <Input
+              type="email" value={form.email}
               onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-              slotProps={{ htmlInput: { style: { direction: 'ltr' } } }}
+              style={{ direction: 'ltr' }}
             />
-            <TextField
-              label={editing ? 'كلمة المرور (فارغة = بدون تغيير)' : 'كلمة المرور'}
-              size="small" fullWidth type={showPwd ? 'text' : 'password'} value={form.password}
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+              {editing ? 'كلمة المرور (فارغة = بدون تغيير)' : 'كلمة المرور'}
+            </Text>
+            <Input
+              type={showPwd ? 'text' : 'password'}
+              value={form.password}
               onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => setShowPwd(v => !v)} edge="end">
-                        {showPwd
-                          ? <VisibilityOffOutlinedIcon fontSize="small" />
-                          : <VisibilityOutlinedIcon fontSize="small" />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                },
-              }}
+              suffix={
+                <Button type="text" size="small" icon={showPwd ? <EyeOff size={16} /> : <Eye size={16} />} onClick={() => setShowPwd(v => !v)} />
+              }
             />
-            {/* Roles multi-select */}
-            <FormControl size="small" fullWidth>
-              <InputLabel>الأدوار والصلاحيات</InputLabel>
-              <Select
-                multiple
-                value={form.roles ?? []}
-                onChange={handleRoleChange}
-                input={<OutlinedInput label="الأدوار والصلاحيات" />}
-                renderValue={selected => (
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                    {(selected as string[]).map(r => (
-                      <Chip key={r} label={ROLE_LABELS[r] ?? r} size="small" color={ROLE_COLORS[r] ?? 'default'} />
-                    ))}
-                  </Box>
-                )}
-              >
-                {roles.map(r => (
-                  <MenuItem key={r.id} value={r.name}>
-                    {ROLE_LABELS[r.name] ?? r.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setOpen(false)} disabled={saving}>إلغاء</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving || !isFormValid}>
-            {saving ? <CircularProgress size={18} /> : editing ? 'حفظ التعديلات' : 'إنشاء المستخدم'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          </div>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الأدوار والصلاحيات</Text>
+            <Select
+              mode="multiple"
+              style={{ width: '100%' }}
+              value={form.roles ?? []}
+              onChange={val => setForm(p => ({ ...p, roles: val }))}
+              options={roles.map(r => ({ value: r.name, label: ROLE_LABELS[r.name] ?? r.name }))}
+            />
+          </div>
+        </Flex>
+      </Modal>
 
       {/* ── Delete Confirm ── */}
-      <Dialog open={!!delTarget} onClose={() => setDelTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, color: 'error.main' }}>تأكيد الحذف</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            هل أنت متأكد من حذف <strong>{delTarget?.name}</strong>؟ لا يمكن التراجع.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDelTarget(null)} disabled={deleting}>إلغاء</Button>
-          <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}>
-            {deleting ? <CircularProgress size={18} /> : 'حذف'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+      <Modal
+        open={!!delTarget}
+        onCancel={() => setDelTarget(null)}
+        width={400}
+        title={<span style={{ color: 'var(--ant-color-error)', fontWeight: 700 }}>تأكيد الحذف</span>}
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setDelTarget(null)} disabled={deleting}>إلغاء</Button>
+            <Button type="primary" danger onClick={handleDelete} disabled={deleting}>
+              {deleting ? <Spin size="small" /> : 'حذف'}
+            </Button>
+          </Flex>
+        }
+      >
+        <Text>
+          هل أنت متأكد من حذف <strong>{delTarget?.name}</strong>؟ لا يمكن التراجع.
+        </Text>
+      </Modal>
+    </div>
   )
 }

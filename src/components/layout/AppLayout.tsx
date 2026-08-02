@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom'
-import Box from '@mui/material/Box'
+import { Flex } from 'antd'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import AiChatButton from '@/components/AiChat/AiChatButton'
@@ -10,19 +10,18 @@ export const TOPBAR_HEIGHT = 64
 export default function AppLayout() {
   return (
     <FiscalYearsProvider>
-      <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <Flex style={{ height: '100vh', overflow: 'hidden' }}>
         <Sidebar />
-        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <Flex vertical style={{ flexGrow: 1, minWidth: 0 }}>
           <Topbar />
-          <Box
-            component="main"
-            sx={{ flexGrow: 1, overflow: 'auto', p: 3, bgcolor: 'background.default' }}
+          <div
+            style={{ flexGrow: 1, overflow: 'auto', padding: 24, background: 'var(--ant-color-bg-layout)' }}
           >
             <Outlet />
-          </Box>
-        </Box>
+          </div>
+        </Flex>
         <AiChatButton />
-      </Box>
+      </Flex>
     </FiscalYearsProvider>
   )
 }

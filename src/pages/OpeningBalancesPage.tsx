@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Box, Button, CircularProgress, Divider, Paper,
-  Snackbar, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Typography,
-} from '@mui/material'
+  Alert, Button, Divider, Flex, InputNumber, Spin, Typography,
+} from 'antd'
 import HelpButton from '@/components/common/HelpButton'
-import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined'
+import { Save } from 'lucide-react'
 import api from '@/lib/axios'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
+import { useToast } from '@/lib/toast'
+
+const { Title, Text } = Typography
 
 interface OBRow {
   account_id: number
@@ -27,23 +28,20 @@ const TYPE_LABELS: Record<string, string> = {
 }
 const TYPE_ORDER = ['asset', 'liability', 'equity']
 
-const numFmt = (v: string | number) =>
-  Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const numFmt = (v: string | number) => Math.round(Number(v)).toLocaleString('en-US')
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 
 export default function OpeningBalancesPage() {
+  const toast = useToast()
   const [rows, setRows]             = useState<EditRow[]>([])
   const [loading, setLoading]       = useState(false)
   const [saving, setSaving]         = useState(false)
-  const [success, setSuccess]       = useState(false)
-  const [error, setError]           = useState<string | null>(null)
   const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
   const [periodLabel, setPeriodLabel]   = useState<string>('')
 
   const load = (fyId: number | null) => {
     setLoading(true)
-    setError(null)
     const params = fyId ? { fiscal_year_id: fyId } : {}
     api.get<OBRow[]>('/api/opening-balances', { params })
       .then(r => setRows(r.data.map(row => ({
@@ -51,7 +49,7 @@ export default function OpeningBalancesPage() {
         _debit:  Number(row.debit)  > 0 ? String(Number(row.debit))  : '',
         _credit: Number(row.credit) > 0 ? String(Number(row.credit)) : '',
       }))))
-      .catch(() => setError('تعذّر تحميل الأرصدة'))
+      .catch(() => toast.error('تعذّر تحميل الأرصدة'))
       .finally(() => setLoading(false))
   }
 
@@ -71,7 +69,6 @@ export default function OpeningBalancesPage() {
 
   const handleSave = async () => {
     setSaving(true)
-    setError(null)
     try {
       const payload = {
         fiscal_year_id: fiscalYearId,
@@ -87,9 +84,9 @@ export default function OpeningBalancesPage() {
         _debit:  Number(row.debit)  > 0 ? String(Number(row.debit))  : '',
         _credit: Number(row.credit) > 0 ? String(Number(row.credit)) : '',
       })))
-      setSuccess(true)
+      toast.success('تم حفظ الأرصدة الافتتاحية بنجاح')
     } catch {
-      setError('تعذّر الحفظ، يرجى المحاولة مجدداً')
+      toast.error('تعذّر الحفظ، يرجى المحاولة مجدداً')
     } finally {
       setSaving(false)
     }
@@ -107,151 +104,155 @@ export default function OpeningBalancesPage() {
   })).filter(g => g.rows.length > 0)
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>الأرصدة الافتتاحية</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+    <div>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 24 }}>
+        <div>
+          <Title level={4} style={{ margin: 0 }}>الأرصدة الافتتاحية</Title>
+          <Text type="secondary">
             {periodLabel || 'اختر الفترة المحاسبية لعرض أرصدتها الافتتاحية'}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          </Text>
+        </div>
+        <Flex gap={8} align="center">
           <HelpButton title="دليل استخدام الأرصدة الافتتاحية">
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي الأرصدة الافتتاحية؟</Typography>
-                <Typography variant="body2">الأرصدة الافتتاحية هي أرصدة الحسابات في بداية الفترة المالية. تُسجَّل عند بدء استخدام النظام لنقل الأرصدة من النظام القديم.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>كيفية الإدخال</Typography>
-                <Typography variant="body2">اختر الفترة المالية من منتقي السنة، ثم أدخل الرصيد الافتتاحي لكل حساب مع تحديد الجهة (مدين/دائن). اضغط "حفظ الأرصدة" عند الانتهاء.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تنبيه مهم</Typography>
-                <Typography variant="body2">تأكد أن مجموع أرصدة المدين يساوي مجموع أرصدة الدائن قبل الحفظ. الأرصدة الافتتاحية غير المتوازنة ستؤثر على دقة جميع التقارير.</Typography></Box>
-            </Box>
+            <Flex vertical gap={16}>
+              <div><Title level={5}>ما هي الأرصدة الافتتاحية؟</Title>
+                <Text>الأرصدة الافتتاحية هي أرصدة الحسابات في بداية الفترة المالية. تُسجَّل عند بدء استخدام النظام لنقل الأرصدة من النظام القديم.</Text></div>
+              <div><Title level={5}>كيفية الإدخال</Title>
+                <Text>اختر الفترة المالية من منتقي السنة، ثم أدخل الرصيد الافتتاحي لكل حساب مع تحديد الجهة (مدين/دائن). اضغط "حفظ الأرصدة" عند الانتهاء.</Text></div>
+              <div><Title level={5}>تنبيه مهم</Title>
+                <Text>تأكد أن مجموع أرصدة المدين يساوي مجموع أرصدة الدائن قبل الحفظ. الأرصدة الافتتاحية غير المتوازنة ستؤثر على دقة جميع التقارير.</Text></div>
+            </Flex>
           </HelpButton>
           <Button
-            variant="contained"
-            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}
+            type="primary"
+            icon={saving ? <Spin size="small" /> : <Save size={16} />}
             onClick={handleSave}
             disabled={saving || loading || rows.length === 0}
           >
             حفظ الأرصدة
           </Button>
-        </Box>
-      </Box>
+        </Flex>
+      </Flex>
 
       {/* Period selector */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <div style={{ padding: 16, marginBottom: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+        <Flex align="flex-end" gap={16} wrap="wrap">
           <FiscalYearSelector
             onChange={handlePeriodChange}
             defaultFrom={`${new Date().getFullYear()}-01-01`}
             defaultTo={today()}
           />
           {periodLabel && (
-            <Typography variant="caption" color="text.secondary">
+            <Text type="secondary" style={{ fontSize: 12 }}>
               النطاق: {periodLabel}
-            </Typography>
+            </Text>
           )}
-        </Box>
-      </Paper>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+        </Flex>
+      </div>
 
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <Flex justify="center" style={{ padding: '64px 0' }}>
+          <Spin size="large" />
+        </Flex>
       )}
 
       {!loading && rows.length === 0 && (
-        <Alert severity="info">اختر فترة محاسبية لعرض الأرصدة الافتتاحية</Alert>
+        <Alert type="info" showIcon message="اختر فترة محاسبية لعرض الأرصدة الافتتاحية" />
       )}
 
       {!loading && rows.length > 0 && (
         <>
-          <TableContainer component={Paper} sx={{ mb: 2 }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell sx={{ width: 90 }}>الرمز</TableCell>
-                  <TableCell>اسم الحساب</TableCell>
-                  <TableCell align="center" sx={{ width: 160 }}>مدين</TableCell>
-                  <TableCell align="center" sx={{ width: 160 }}>دائن</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
+          <div style={{ marginBottom: 16, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+                  <th style={cellStyle('right', 90)}>الرمز</th>
+                  <th style={cellStyle('right')}>اسم الحساب</th>
+                  <th style={cellStyle('center', 160)}>مدين</th>
+                  <th style={cellStyle('center', 160)}>دائن</th>
+                </tr>
+              </thead>
+              <tbody>
                 {grouped.map(({ type, label, rows: groupRows }) => (
                   <>
-                    <TableRow key={`hdr-${type}`} sx={{ bgcolor: 'grey.100' }}>
-                      <TableCell colSpan={4} sx={{ py: 0.75 }}>
-                        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                    <tr key={`hdr-${type}`} style={{ background: 'var(--ant-color-fill-secondary)' }}>
+                      <td colSpan={4} style={{ padding: '6px 12px' }}>
+                        <Text style={{ fontWeight: 700, fontSize: 12 }} type="secondary">
                           {label}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
+                        </Text>
+                      </td>
+                    </tr>
                     {groupRows.map(row => (
-                      <TableRow key={row.account_id} hover>
-                        <TableCell sx={{ color: 'text.secondary' }}>{row.code}</TableCell>
-                        <TableCell>{row.name}</TableCell>
-                        <TableCell>
-                          <TextField
-                            size="small" type="number" value={row._debit}
-                            onChange={e => setDebit(row.account_id, e.target.value)}
-                            inputProps={{ min: 0, step: '0.01', style: { direction: 'ltr', textAlign: 'right' } }}
-                            sx={{ width: 140 }} placeholder="0.00"
+                      <tr key={row.account_id} style={{ borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+                        <td style={cellStyle('right')}><Text type="secondary">{row.code}</Text></td>
+                        <td style={cellStyle('right')}>{row.name}</td>
+                        <td style={{ padding: 8 }}>
+                          <InputNumber
+                            size="small" min={0} step={0.01} style={{ width: 140, direction: 'ltr' }}
+                            value={row._debit === '' ? null : Number(row._debit)}
+                            onChange={val => setDebit(row.account_id, val == null ? '' : String(val))}
+                            placeholder="0"
                           />
-                        </TableCell>
-                        <TableCell>
-                          <TextField
-                            size="small" type="number" value={row._credit}
-                            onChange={e => setCredit(row.account_id, e.target.value)}
-                            inputProps={{ min: 0, step: '0.01', style: { direction: 'ltr', textAlign: 'right' } }}
-                            sx={{ width: 140 }} placeholder="0.00"
+                        </td>
+                        <td style={{ padding: 8 }}>
+                          <InputNumber
+                            size="small" min={0} step={0.01} style={{ width: 140, direction: 'ltr' }}
+                            value={row._credit === '' ? null : Number(row._credit)}
+                            onChange={val => setCredit(row.account_id, val == null ? '' : String(val))}
+                            placeholder="0"
                           />
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ))}
                   </>
                 ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+              </tbody>
+            </table>
+          </div>
 
-          <Paper sx={{ p: 2.5 }}>
-            <Divider sx={{ mb: 2 }} />
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4 }}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">إجمالي المدين</Typography>
-                <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Typography>
-              </Box>
-              <Divider orientation="vertical" flexItem />
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">إجمالي الدائن</Typography>
-                <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Typography>
-              </Box>
-              <Divider orientation="vertical" flexItem />
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">الفرق</Typography>
-                <Typography sx={{ fontWeight: 700, direction: 'ltr', color: isBalanced ? 'success.main' : 'error.main' }}>
+          <div style={{ padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+            <Divider style={{ margin: '0 0 16px' }} />
+            <Flex justify="flex-end" align="center" gap={32}>
+              <div style={{ textAlign: 'center' }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي المدين</Text>
+                <Text style={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Text>
+              </div>
+              <Divider type="vertical" style={{ height: 32 }} />
+              <div style={{ textAlign: 'center' }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي الدائن</Text>
+                <Text style={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Text>
+              </div>
+              <Divider type="vertical" style={{ height: 32 }} />
+              <div style={{ textAlign: 'center' }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>الفرق</Text>
+                <Text style={{ fontWeight: 700, direction: 'ltr' }} type={isBalanced ? 'success' : 'danger'}>
                   {numFmt(diff)}
-                </Typography>
-              </Box>
-              <Box sx={{
-                px: 2, py: 0.75, borderRadius: 1,
-                bgcolor: isBalanced ? 'success.light' : 'error.light',
-                color:   isBalanced ? 'success.dark'  : 'error.dark',
+                </Text>
+              </div>
+              <div style={{
+                padding: '6px 16px', borderRadius: 6,
+                background: isBalanced ? 'var(--ant-color-success-bg)' : 'var(--ant-color-error-bg)',
+                color:      isBalanced ? 'var(--ant-color-success)'    : 'var(--ant-color-error)',
               }}>
-                <Typography sx={{ fontWeight: 700 }}>
+                <Text style={{ fontWeight: 700, color: 'inherit' }}>
                   {isBalanced ? 'متوازن' : 'غير متوازن'}
-                </Typography>
-              </Box>
-            </Box>
-          </Paper>
+                </Text>
+              </div>
+            </Flex>
+          </div>
         </>
       )}
-
-      <Snackbar open={success} autoHideDuration={3000} onClose={() => setSuccess(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity="success" onClose={() => setSuccess(false)}>تم حفظ الأرصدة الافتتاحية بنجاح</Alert>
-      </Snackbar>
-    </Box>
+    </div>
   )
+}
+
+function cellStyle(align: 'right' | 'center', width?: number): React.CSSProperties {
+  return {
+    padding: '8px 12px',
+    textAlign: align,
+    fontWeight: 600,
+    fontSize: 12,
+    color: 'var(--ant-color-text-secondary)',
+    width,
+  }
 }

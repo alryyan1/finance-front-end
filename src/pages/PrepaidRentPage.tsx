@@ -4,14 +4,11 @@ import { createUniver, defaultTheme, LocaleType } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverSheetsCorePresetEnUS from '@univerjs/preset-sheets-core/locales/en-US'
 import '@univerjs/preset-sheets-core/lib/index.css'
-import {
-  Box, Button, IconButton, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Typography,
-} from '@mui/material'
-import ArrowBackIcon    from '@mui/icons-material/ArrowBack'
-import AddIcon          from '@mui/icons-material/Add'
-import DeleteIcon       from '@mui/icons-material/Delete'
-import CalculateIcon    from '@mui/icons-material/Calculate'
+import { Button, Flex, Input, Typography } from 'antd'
+import { ArrowLeft, Calculator, Plus, Trash2 } from 'lucide-react'
+import DateInput from '@/components/common/DateInput'
+
+const { Title } = Typography
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const MONTH_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']
@@ -192,8 +189,8 @@ function initUniver(container: HTMLDivElement, entries: RentEntry[]) {
 
     // Number format
     if (entries.length > 0) {
-      sheet.getRange(1, 4, rows.length, 1).setNumberFormat('#,##0.00')
-      sheet.getRange(1, FIXED_HEADERS.length, rows.length, cols.length).setNumberFormat('#,##0.00')
+      sheet.getRange(1, 4, rows.length, 1).setNumberFormat('#,##0')
+      sheet.getRange(1, FIXED_HEADERS.length, rows.length, cols.length).setNumberFormat('#,##0')
     }
 
     // Column widths
@@ -255,93 +252,94 @@ export default function PrepaidRentPage() {
   const removeRow = (id: number) => setRows(prev => prev.filter(r => r.id !== id))
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <Flex vertical style={{ height: '100vh', overflow: 'hidden' }}>
 
       {/* ── Top bar ── */}
-      <Box sx={{
-        display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1,
-        borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', flexShrink: 0,
+      <Flex align="center" gap={12} style={{
+        padding: '8px 16px',
+        borderBottom: '1px solid var(--ant-color-border-secondary)',
+        background: 'var(--ant-color-bg-container)', flexShrink: 0,
       }}>
-        <Button size="small" startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>رجوع</Button>
-        <Typography variant="h6" sx={{ fontWeight: 700, flex: 1 }}>توزيع الإيجار المقدم على الأشهر</Typography>
-        <Button variant="contained" startIcon={<CalculateIcon />} onClick={handleCalculate}>
+        <Button size="small" icon={<ArrowLeft size={16} />} onClick={() => navigate(-1)}>رجوع</Button>
+        <Title level={5} style={{ margin: 0, flex: 1 }}>توزيع الإيجار المقدم على الأشهر</Title>
+        <Button type="primary" icon={<Calculator size={16} />} onClick={handleCalculate}>
           احسب التوزيع
         </Button>
-      </Box>
+      </Flex>
 
       {/* ── Input table ── */}
-      <Box sx={{ flexShrink: 0, p: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: '#FAFAFA' }}>
-        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 260, overflow: 'auto' }}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#1976D2', color: '#fff', textAlign: 'center' } }}>
-                <TableCell width={40}>#</TableCell>
-                <TableCell width={220}>الوصف</TableCell>
-                <TableCell width={140}>من</TableCell>
-                <TableCell width={140}>إلى</TableCell>
-                <TableCell width={140}>المبلغ الكلي</TableCell>
-                <TableCell width={48} />
-              </TableRow>
-            </TableHead>
-            <TableBody>
+      <div style={{ flexShrink: 0, padding: 12, borderBottom: '1px solid var(--ant-color-border-secondary)', background: 'var(--ant-color-fill-alter)' }}>
+        <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#1976D2' }}>
+                <th style={inputHeadStyle(40)}>#</th>
+                <th style={inputHeadStyle(220)}>الوصف</th>
+                <th style={inputHeadStyle(140)}>من</th>
+                <th style={inputHeadStyle(140)}>إلى</th>
+                <th style={inputHeadStyle(140)}>المبلغ الكلي</th>
+                <th style={inputHeadStyle(48)} />
+              </tr>
+            </thead>
+            <tbody>
               {rows.map((row, i) => (
-                <TableRow key={row.id} sx={{ '&:nth-of-type(even)': { bgcolor: '#F5F5F5' } }}>
-                  <TableCell align="center" sx={{ color: 'text.secondary', fontSize: 12 }}>{i + 1}</TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small" fullWidth variant="standard"
+                <tr key={row.id} style={{ background: i % 2 === 1 ? 'var(--ant-color-fill-alter)' : undefined }}>
+                  <td style={{ textAlign: 'center', color: 'var(--ant-color-text-secondary)', fontSize: 12, padding: 6 }}>{i + 1}</td>
+                  <td style={{ padding: 4 }}>
+                    <Input
+                      size="small" variant="borderless"
                       placeholder="وصف الإيجار"
                       value={row.description}
                       onChange={e => updateRow(row.id, 'description', e.target.value)}
                     />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small" fullWidth variant="standard"
-                      type="date"
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <DateInput
+                      size="small" variant="borderless"
                       value={row.from}
                       onChange={e => updateRow(row.id, 'from', e.target.value)}
-                      slotProps={{ inputLabel: { shrink: true } }}
+                      style={{ width: '100%' }}
                     />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small" fullWidth variant="standard"
-                      type="date"
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <DateInput
+                      size="small" variant="borderless"
                       value={row.to}
                       onChange={e => updateRow(row.id, 'to', e.target.value)}
-                      slotProps={{ inputLabel: { shrink: true } }}
+                      style={{ width: '100%' }}
                     />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small" fullWidth variant="standard"
+                  </td>
+                  <td style={{ padding: 4 }}>
+                    <Input
+                      size="small" variant="borderless"
                       placeholder="120000"
                       value={row.total}
                       onChange={e => updateRow(row.id, 'total', e.target.value)}
                     />
-                  </TableCell>
-                  <TableCell align="center">
-                    <IconButton size="small" color="error" onClick={() => removeRow(row.id)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                  <td style={{ textAlign: 'center', padding: 4 }}>
+                    <Button type="text" shape="circle" size="small" danger onClick={() => removeRow(row.id)} icon={<Trash2 size={14} />} />
+                  </td>
+                </tr>
               ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+            </tbody>
+          </table>
+        </div>
 
-        <Button size="small" startIcon={<AddIcon />} onClick={addRow} sx={{ mt: 1 }}>
+        <Button size="small" icon={<Plus size={14} />} onClick={addRow} style={{ marginTop: 8 }}>
           إضافة سطر
         </Button>
-      </Box>
+      </div>
 
       {/* ── Univer spreadsheet result ── */}
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
         <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      </Box>
+      </div>
 
-    </Box>
+    </Flex>
   )
+}
+
+function inputHeadStyle(width: number): React.CSSProperties {
+  return { width, padding: '6px 8px', color: '#fff', fontWeight: 700, textAlign: 'center', fontSize: 12 }
 }

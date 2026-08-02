@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress,
-  Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Typography, ToggleButton, ToggleButtonGroup,
-} from '@mui/material'
+  Button, Flex, Segmented, Select, Spin, Tag, Tooltip, Typography,
+} from 'antd'
 import HelpButton from '@/components/common/HelpButton'
+import DateInput from '@/components/common/DateInput'
+import { useToast } from '@/lib/toast'
 import api from '@/lib/axios'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
 import { openPdf } from '@/api/pdf'
 import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
-import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
-import TableRowsIcon from '@mui/icons-material/TableRows'
-import MenuBookIcon from '@mui/icons-material/MenuBook'
+import { BookOpen, FileDown, Rows3 } from 'lucide-react'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
+
+const { Title, Text } = Typography
 
 interface LedgerRow {
   entry_id: number
@@ -42,8 +42,7 @@ interface LedgerData {
   totals: { debit: string; credit: string }
 }
 
-const numFmt = (v: string) =>
-  Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const numFmt = (v: string) => Math.round(Number(v)).toLocaleString('en-US')
 
 const sideLbl  = (s: 'debit' | 'credit') => (s === 'debit' ? 'م' : 'د')
 const sideEn   = (s: 'debit' | 'credit') => (s === 'debit' ? 'Dr' : 'Cr')
@@ -55,156 +54,119 @@ const GL_RED    = '#c0001a'
 const GL_HEADER = '#1a3a8f'
 
 function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick: (id: number) => void }) {
+  const th = (i: number, label: string): React.CSSProperties => ({
+    background: GL_HEADER, color: '#fff', fontWeight: 700,
+    fontFamily: 'inherit', fontSize: 14,
+    border: '1px solid #2756c5',
+    width: i === 2 ? 'auto' : i === 0 ? 95 : i === 1 ? 80 : 110,
+    padding: '8px 6px',
+    textAlign: i >= 3 ? 'right' : 'center',
+  })
+
   return (
-    <Box sx={{ fontFamily: '"Times New Roman", serif', maxWidth: 900, mx: 'auto' }}>
+    <div style={{ fontFamily: '"Times New Roman", serif', maxWidth: 900, margin: '0 auto' }}>
 
       {/* Title bar */}
-      <Box sx={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'stretch',
-        border: `2px solid ${GL_BLUE}`, borderRadius: '6px 6px 0 0', overflow: 'hidden',
-      }}>
-        <Box sx={{
-          flex: 1, textAlign: 'center', py: 1.25,
+      <Flex style={{ border: `2px solid ${GL_BLUE}`, borderRadius: '6px 6px 0 0', overflow: 'hidden' }}>
+        <div style={{
+          flex: 1, textAlign: 'center', padding: '10px 0',
           background: `linear-gradient(135deg, ${GL_HEADER} 0%, #2756c5 100%)`,
-          borderRight: `2px solid ${GL_BLUE}`,
+          borderInlineEnd: `2px solid ${GL_BLUE}`,
         }}>
-          <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 18, letterSpacing: 1, fontFamily: 'inherit' }}>
+          <span style={{ color: '#fff', fontWeight: 800, fontSize: 18, letterSpacing: 1, fontFamily: 'inherit' }}>
             General Ledger
-          </Typography>
-        </Box>
-        <Box sx={{
-          flex: 1, textAlign: 'center', py: 1.25,
-          background: 'linear-gradient(135deg, #2756c5 0%, #1a3a8f 100%)',
-        }}>
-          <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 18, fontFamily: 'inherit' }}>
+          </span>
+        </div>
+        <div style={{ flex: 1, textAlign: 'center', padding: '10px 0', background: 'linear-gradient(135deg, #2756c5 0%, #1a3a8f 100%)' }}>
+          <span style={{ color: '#fff', fontWeight: 800, fontSize: 18, fontFamily: 'inherit' }}>
             دفتر الأستاذ العام
-          </Typography>
-        </Box>
-      </Box>
+          </span>
+        </div>
+      </Flex>
 
       {/* Account info */}
-      <Box sx={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      <Flex justify="space-between" align="center" style={{
         border: `2px solid ${GL_BLUE}`, borderTop: 'none',
-        px: 3, py: 1.25, bgcolor: '#f5f8ff',
+        padding: '10px 24px', background: '#f5f8ff',
       }}>
-        <Typography sx={{ color: GL_RED, fontWeight: 700, fontSize: 15, fontFamily: 'inherit', direction: 'ltr' }}>
+        <span style={{ color: GL_RED, fontWeight: 700, fontSize: 15, fontFamily: 'inherit', direction: 'ltr' }}>
           Account No. :&nbsp;
-          <Box component="span" sx={{ letterSpacing: 2 }}>{data.account.code}</Box>
-        </Typography>
-        <Typography sx={{ color: GL_RED, fontWeight: 700, fontSize: 15, fontFamily: 'inherit', direction: 'ltr' }}>
+          <span style={{ letterSpacing: 2 }}>{data.account.code}</span>
+        </span>
+        <span style={{ color: GL_RED, fontWeight: 700, fontSize: 15, fontFamily: 'inherit', direction: 'ltr' }}>
           Account Name :&nbsp;{data.account.name}
-        </Typography>
-      </Box>
+        </span>
+      </Flex>
 
       {/* Table */}
-      <TableContainer component={Paper} elevation={0} sx={{ border: `2px solid ${GL_BLUE}`, borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
-        <Table size="small" sx={{ tableLayout: 'fixed' }}>
-          <TableHead>
-            <TableRow>
+      <div style={{ border: `2px solid ${GL_BLUE}`, borderTop: 'none', borderRadius: '0 0 6px 6px', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13 }}>
+          <thead>
+            <tr>
               {['Date', 'Trx. No.', 'Description', 'Debit', 'Credit', 'Balance'].map((h, i) => (
-                <TableCell
-                  key={h}
-                  align={i >= 3 ? 'right' : 'center'}
-                  sx={{
-                    bgcolor: GL_HEADER, color: '#fff', fontWeight: 700,
-                    fontFamily: 'inherit', fontSize: 14,
-                    border: `1px solid #2756c5`,
-                    width: i === 2 ? 'auto' : i === 0 ? 95 : i === 1 ? 80 : 110,
-                    py: 1,
-                  }}
-                >
-                  {h}
-                </TableCell>
+                <th key={h} style={th(i, h)}>{h}</th>
               ))}
-            </TableRow>
-          </TableHead>
-
-          <TableBody>
+            </tr>
+          </thead>
+          <tbody>
             {/* Opening Balance */}
-            <TableRow sx={{ bgcolor: '#f0f4ff' }}>
-              <TableCell align="center" sx={{ fontFamily: 'inherit', border: '1px solid #cdd6f0', color: '#555', fontSize: 13 }}>
-                {data.from}
-              </TableCell>
-              <TableCell sx={{ border: '1px solid #cdd6f0' }} />
-              <TableCell align="center" sx={{ fontWeight: 700, fontFamily: 'inherit', fontSize: 14, border: '1px solid #cdd6f0' }}>
-                Opening Balance
-              </TableCell>
-              <TableCell sx={{ border: '1px solid #cdd6f0' }} />
-              <TableCell sx={{ border: '1px solid #cdd6f0' }} />
-              <TableCell align="right" sx={{ fontWeight: 700, fontFamily: 'inherit', direction: 'ltr', fontSize: 14, border: '1px solid #cdd6f0', pr: 1.5 }}>
+            <tr style={{ background: '#f0f4ff' }}>
+              <td style={{ textAlign: 'center', fontFamily: 'inherit', border: '1px solid #cdd6f0', color: '#555', padding: 8 }}>{data.from}</td>
+              <td style={{ border: '1px solid #cdd6f0' }} />
+              <td style={{ textAlign: 'center', fontWeight: 700, fontFamily: 'inherit', fontSize: 14, border: '1px solid #cdd6f0', padding: 8 }}>Opening Balance</td>
+              <td style={{ border: '1px solid #cdd6f0' }} />
+              <td style={{ border: '1px solid #cdd6f0' }} />
+              <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'inherit', direction: 'ltr', fontSize: 14, border: '1px solid #cdd6f0', padding: '8px 12px' }}>
                 {numFmt(data.opening_balance)}
-                <Box component="span" sx={{ ml: 0.5, fontSize: 11, color: '#666' }}>{sideEn(data.opening_side)}</Box>
-              </TableCell>
-            </TableRow>
+                <span style={{ marginLeft: 4, fontSize: 11, color: '#666' }}>{sideEn(data.opening_side)}</span>
+              </td>
+            </tr>
 
-            {/* No movement */}
             {data.rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4, color: '#888', fontFamily: 'inherit', border: '1px solid #cdd6f0' }}>
-                  No transactions in this period
-                </TableCell>
-              </TableRow>
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#888', fontFamily: 'inherit', border: '1px solid #cdd6f0' }}>No transactions in this period</td></tr>
             )}
 
-            {/* Data rows */}
             {data.rows.map((row, i) => (
-              <TableRow
-                key={i}
-                hover
-                onClick={() => onRowClick(row.entry_id)}
-                sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#eef2ff' } }}
-              >
-                <TableCell align="center" sx={{ fontFamily: 'inherit', fontSize: 13, direction: 'ltr', border: '1px solid #cdd6f0', color: '#333' }}>
-                  {row.date}
-                </TableCell>
-                <TableCell align="center" sx={{ fontFamily: 'inherit', fontSize: 13, border: '1px solid #cdd6f0', color: '#555' }}>
-                  {row.reference || '—'}
-                </TableCell>
-                <TableCell sx={{ fontFamily: 'inherit', fontSize: 13, border: '1px solid #cdd6f0', pl: 1.5 }}>
-                  <Box sx={{ fontWeight: 600 }}>{row.entry_description}</Box>
-                  {row.line_description && (
-                    <Box sx={{ fontSize: 11, color: '#888' }}>{row.line_description}</Box>
-                  )}
-                  {row.party_name && (
-                    <Box sx={{ fontSize: 11, color: '#666', fontStyle: 'italic' }}>{row.party_name}</Box>
-                  )}
-                </TableCell>
-                <TableCell align="right" sx={{ fontFamily: 'inherit', fontSize: 13, direction: 'ltr', border: '1px solid #cdd6f0', pr: 1.5, color: Number(row.debit) > 0 ? '#0d2b6e' : '#bbb' }}>
+              <tr key={i} onClick={() => onRowClick(row.entry_id)} style={{ cursor: 'pointer' }}>
+                <td style={{ textAlign: 'center', fontFamily: 'inherit', fontSize: 13, direction: 'ltr', border: '1px solid #cdd6f0', color: '#333', padding: 8 }}>{row.date}</td>
+                <td style={{ textAlign: 'center', fontFamily: 'inherit', fontSize: 13, border: '1px solid #cdd6f0', color: '#555', padding: 8 }}>{row.reference || '—'}</td>
+                <td style={{ fontFamily: 'inherit', fontSize: 13, border: '1px solid #cdd6f0', padding: '8px 12px' }}>
+                  <div style={{ fontWeight: 600 }}>{row.entry_description}</div>
+                  {row.line_description && <div style={{ fontSize: 11, color: '#888' }}>{row.line_description}</div>}
+                  {row.party_name && <div style={{ fontSize: 11, color: '#666', fontStyle: 'italic' }}>{row.party_name}</div>}
+                </td>
+                <td style={{ textAlign: 'right', fontFamily: 'inherit', fontSize: 13, direction: 'ltr', border: '1px solid #cdd6f0', padding: '8px 12px', color: Number(row.debit) > 0 ? '#0d2b6e' : '#bbb' }}>
                   {Number(row.debit) > 0 ? numFmt(row.debit) : '—'}
-                </TableCell>
-                <TableCell align="right" sx={{ fontFamily: 'inherit', fontSize: 13, direction: 'ltr', border: '1px solid #cdd6f0', pr: 1.5, color: Number(row.credit) > 0 ? '#0d2b6e' : '#bbb' }}>
+                </td>
+                <td style={{ textAlign: 'right', fontFamily: 'inherit', fontSize: 13, direction: 'ltr', border: '1px solid #cdd6f0', padding: '8px 12px', color: Number(row.credit) > 0 ? '#0d2b6e' : '#bbb' }}>
                   {Number(row.credit) > 0 ? numFmt(row.credit) : '—'}
-                </TableCell>
-                <TableCell align="right" sx={{ fontFamily: 'inherit', fontSize: 13, fontWeight: 600, direction: 'ltr', border: '1px solid #cdd6f0', pr: 1.5 }}>
+                </td>
+                <td style={{ textAlign: 'right', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, direction: 'ltr', border: '1px solid #cdd6f0', padding: '8px 12px' }}>
                   {numFmt(row.balance)}
-                  <Box component="span" sx={{ ml: 0.5, fontSize: 11, color: '#666' }}>{sideEn(row.balance_side)}</Box>
-                </TableCell>
-              </TableRow>
+                  <span style={{ marginLeft: 4, fontSize: 11, color: '#666' }}>{sideEn(row.balance_side)}</span>
+                </td>
+              </tr>
             ))}
 
-            {/* Totals */}
             {data.rows.length > 0 && (
-              <TableRow sx={{ bgcolor: '#e8eeff' }}>
-                <TableCell colSpan={3} align="center" sx={{ fontWeight: 700, fontFamily: 'inherit', fontSize: 14, border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}` }}>
-                  Total
-                </TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700, fontFamily: 'inherit', direction: 'ltr', border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}`, pr: 1.5 }}>
+              <tr style={{ background: '#e8eeff' }}>
+                <td colSpan={3} style={{ textAlign: 'center', fontWeight: 700, fontFamily: 'inherit', fontSize: 14, border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}`, padding: 8 }}>Total</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'inherit', direction: 'ltr', border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}`, padding: '8px 12px' }}>
                   {numFmt(data.totals.debit)}
-                </TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700, fontFamily: 'inherit', direction: 'ltr', border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}`, pr: 1.5 }}>
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'inherit', direction: 'ltr', border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}`, padding: '8px 12px' }}>
                   {numFmt(data.totals.credit)}
-                </TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700, fontFamily: 'inherit', color: GL_RED, direction: 'ltr', border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}`, pr: 1.5, fontSize: 15 }}>
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'inherit', color: GL_RED, direction: 'ltr', border: `1px solid ${GL_BLUE}`, borderTop: `2px solid ${GL_BLUE}`, padding: '8px 12px', fontSize: 15 }}>
                   {numFmt(data.closing_balance)}
-                  <Box component="span" sx={{ ml: 0.5, fontSize: 11 }}>{sideEn(data.closing_side)}</Box>
-                </TableCell>
-              </TableRow>
+                  <span style={{ marginLeft: 4, fontSize: 11 }}>{sideEn(data.closing_side)}</span>
+                </td>
+              </tr>
             )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Box>
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
@@ -213,6 +175,7 @@ const yearStart = () => `${new Date().getFullYear()}-01-01`
 
 export default function LedgerPage() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [accounts, setAccounts]       = useState<Account[]>([])
   const [parties, setParties]         = useState<Party[]>([])
   const [account, setAccount]         = useState<Account | null>(null)
@@ -223,7 +186,6 @@ export default function LedgerPage() {
   const [loading, setLoading]         = useState(false)
   const [pdfLoading, setPdfLoading]   = useState(false)
   const [loadingAccounts, setLoadingAccounts] = useState(true)
-  const [error, setError]             = useState<string | null>(null)
   const [view, setView]               = useState<'arabic' | 'gl'>('arabic')
 
   const handlePeriodChange = (_fyId: number | null, f: string, t: string) => {
@@ -252,7 +214,6 @@ export default function LedgerPage() {
   const load = () => {
     if (!account) return
     setLoading(true)
-    setError(null)
     api.get<LedgerData>('/api/reports/ledger', {
       params: {
         account_id: account.id,
@@ -262,81 +223,64 @@ export default function LedgerPage() {
       },
     })
       .then(r => setData(r.data))
-      .catch(() => setError('تعذّر تحميل البيانات'))
+      .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
   }
 
   return (
-    <Box>
+    <div>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>كشف حساب</Typography>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>كشف حساب</Title>
         <HelpButton title="دليل استخدام كشف الحساب">
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هو كشف الحساب؟</Typography>
-              <Typography variant="body2">كشف الحساب يُظهر جميع الحركات (مدين/دائن) لحساب محدد خلال فترة زمنية، مع الرصيد التراكمي بعد كل حركة.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>اختيار الحساب</Typography>
-              <Typography variant="body2">اختر الحساب من القائمة المنسدلة (يمكن البحث بالاسم أو الرمز). حدد الفترة الزمنية ثم اضغط "عرض" لتحميل البيانات.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>التصفية بالطرف</Typography>
-              <Typography variant="body2">يمكن تصفية الحركات بطرف محدد (عميل/مورد) لعرض كشف حساب مفصّل للتعاملات مع تلك الجهة فقط.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الرصيد الافتتاحي والختامي</Typography>
-              <Typography variant="body2">يُعرض الرصيد الافتتاحي في بداية الفترة والرصيد الختامي في نهايتها. يمكن تصدير الكشف كـ PDF.</Typography></Box>
-          </Box>
+          <Flex vertical gap={16}>
+            <div><Title level={5}>ما هو كشف الحساب؟</Title>
+              <Text>كشف الحساب يُظهر جميع الحركات (مدين/دائن) لحساب محدد خلال فترة زمنية، مع الرصيد التراكمي بعد كل حركة.</Text></div>
+            <div><Title level={5}>اختيار الحساب</Title>
+              <Text>اختر الحساب من القائمة المنسدلة (يمكن البحث بالاسم أو الرمز). حدد الفترة الزمنية ثم اضغط "عرض" لتحميل البيانات.</Text></div>
+            <div><Title level={5}>التصفية بالطرف</Title>
+              <Text>يمكن تصفية الحركات بطرف محدد (عميل/مورد) لعرض كشف حساب مفصّل للتعاملات مع تلك الجهة فقط.</Text></div>
+            <div><Title level={5}>الرصيد الافتتاحي والختامي</Title>
+              <Text>يُعرض الرصيد الافتتاحي في بداية الفترة والرصيد الختامي في نهايتها. يمكن تصدير الكشف كـ PDF.</Text></div>
+          </Flex>
         </HelpButton>
-      </Box>
+      </Flex>
 
       {/* Filters */}
-      <Paper sx={{ p: 2.5, mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <div style={{ padding: 20, marginBottom: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+        <Flex gap={12} align="flex-end" wrap="wrap">
           <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={yearStart()} defaultTo={today()} />
-          <Autocomplete
-            options={accounts}
-            value={account}
-            onChange={(_, v) => { setAccount(v); setData(null) }}
-            getOptionLabel={a => `${a.code} — ${a.name}`}
-            isOptionEqualToValue={(a, b) => a.id === b.id}
+          <Select
+            showSearch
+            allowClear
             loading={loadingAccounts}
-            noOptionsText="لا توجد نتائج"
-            renderInput={params => (
-              <TextField {...params} label="الحساب" size="small" sx={{ minWidth: 280 }} />
-            )}
-            size="small"
+            style={{ minWidth: 280 }}
+            placeholder="الحساب"
+            value={account?.id}
+            onChange={v => { setAccount(accounts.find(a => a.id === v) ?? null); setData(null) }}
+            notFoundContent="لا توجد نتائج"
+            filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+            options={accounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
           />
-          <Autocomplete
-            options={parties}
-            value={party}
-            onChange={(_, v) => { setParty(v); setData(null) }}
-            getOptionLabel={p => p.name}
-            isOptionEqualToValue={(a, b) => a.id === b.id}
-            noOptionsText="لا توجد نتائج"
-            renderInput={params => (
-              <TextField {...params} label="الطرف (اختياري)" size="small" sx={{ minWidth: 200 }} />
-            )}
-            size="small"
+          <Select
+            showSearch
+            allowClear
+            style={{ minWidth: 200 }}
+            placeholder="الطرف (اختياري)"
+            value={party?.id}
+            onChange={v => { setParty(parties.find(p => p.id === v) ?? null); setData(null) }}
+            notFoundContent="لا توجد نتائج"
+            filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+            options={parties.map(p => ({ value: p.id, label: p.name }))}
           />
-          <TextField
-            label="من تاريخ"
-            type="date"
-            value={from}
-            onChange={e => setFrom(e.target.value)}
-            size="small"
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            label="إلى تاريخ"
-            type="date"
-            value={to}
-            onChange={e => setTo(e.target.value)}
-            size="small"
-            slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <Button variant="contained" onClick={load} disabled={!account || loading}>
-            {loading ? <CircularProgress size={18} /> : 'عرض'}
+          <DateInput value={from} onChange={e => setFrom(e.target.value)} />
+          <DateInput value={to} onChange={e => setTo(e.target.value)} />
+          <Button type="primary" onClick={load} disabled={!account || loading}>
+            {loading ? <Spin size="small" /> : 'عرض'}
           </Button>
           <Button
-            variant="outlined"
-            color="error"
-            startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfOutlinedIcon />}
+            danger
+            icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />}
             onClick={handlePdf}
             disabled={pdfLoading || !data}
           >
@@ -344,29 +288,22 @@ export default function LedgerPage() {
           </Button>
 
           {data && (
-            <ToggleButtonGroup
+            <Segmented
               value={view}
-              exclusive
-              onChange={(_, v) => v && setView(v)}
-              size="small"
-            >
-              <ToggleButton value="arabic">
-                <TableRowsIcon fontSize="small" sx={{ mr: 0.5 }} /> عربي
-              </ToggleButton>
-              <ToggleButton value="gl">
-                <MenuBookIcon fontSize="small" sx={{ mr: 0.5 }} /> General Ledger
-              </ToggleButton>
-            </ToggleButtonGroup>
+              onChange={v => setView(v as 'arabic' | 'gl')}
+              options={[
+                { value: 'arabic', label: <Flex align="center" gap={4}><Rows3 size={14} /> عربي</Flex> },
+                { value: 'gl', label: <Flex align="center" gap={4}><BookOpen size={14} /> General Ledger</Flex> },
+              ]}
+            />
           )}
-        </Box>
-      </Paper>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        </Flex>
+      </div>
 
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <Flex justify="center" style={{ padding: '64px 0' }}>
+          <Spin size="large" />
+        </Flex>
       )}
 
       {!loading && data && view === 'gl' && (
@@ -376,133 +313,91 @@ export default function LedgerPage() {
       {!loading && data && view === 'arabic' && (
         <>
           {/* Account info bar */}
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
-            <Typography sx={{ fontWeight: 700, fontSize: 17 }}>
+          <Flex gap={12} align="center" style={{ marginBottom: 16 }}>
+            <Text style={{ fontWeight: 700, fontSize: 17 }}>
               {data.account.code} — {data.account.name}
-            </Typography>
-            <Chip
-              label={`رصيد افتتاحي: ${numFmt(data.opening_balance)} ${sideLbl(data.opening_side)}`}
-              size="small"
-              color="default"
-              variant="outlined"
-            />
-            <Chip
-              label={`رصيد ختامي: ${numFmt(data.closing_balance)} ${sideLbl(data.closing_side)}`}
-              size="small"
-              color="primary"
-            />
-          </Box>
+            </Text>
+            <Tag>رصيد افتتاحي: {numFmt(data.opening_balance)} {sideLbl(data.opening_side)}</Tag>
+            <Tag color="blue">رصيد ختامي: {numFmt(data.closing_balance)} {sideLbl(data.closing_side)}</Tag>
+          </Flex>
 
-          <TableContainer component={Paper}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ width: 180 ,textAlign:'center' }}>التاريخ</TableCell>
-                  <TableCell sx={{ width: 80 , textAlign:'center' }}>مرجع</TableCell>
-                  <TableCell sx={{ textAlign:'center' }}>البيان</TableCell>
-                  <TableCell sx={{ textAlign:'center' }}>الطرف</TableCell>
-                  <TableCell align="center" sx={{ width: 130 }}>مدين</TableCell>
-                  <TableCell align="center" sx={{ width: 130 }}>دائن</TableCell>
-                  <TableCell align="center" sx={{ width: 140 }}>الرصيد</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {/* Opening balance row */}
-                <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell sx={{ color: 'text.secondary', direction: 'ltr', textAlign: 'center' }}>
-                    {data.from}
-                  </TableCell>
-                  <TableCell />
-                  <TableCell align="center" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
-                    رصيد افتتاحي
-                  </TableCell>
-                  <TableCell />
-                  <TableCell />
-                  <TableCell />
-                  <TableCell align="center" sx={{ direction: 'ltr', fontWeight: 600 }}>
+          <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+                  <th style={{ ...ledgerTh, width: 180 }}>التاريخ</th>
+                  <th style={{ ...ledgerTh, width: 80 }}>مرجع</th>
+                  <th style={ledgerTh}>البيان</th>
+                  <th style={ledgerTh}>الطرف</th>
+                  <th style={{ ...ledgerTh, width: 130 }}>مدين</th>
+                  <th style={{ ...ledgerTh, width: 130 }}>دائن</th>
+                  <th style={{ ...ledgerTh, width: 140 }}>الرصيد</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+                  <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)', direction: 'ltr' }}>{data.from}</td>
+                  <td style={ledgerTd} />
+                  <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)', fontStyle: 'italic' }}>رصيد افتتاحي</td>
+                  <td style={ledgerTd} />
+                  <td style={ledgerTd} />
+                  <td style={ledgerTd} />
+                  <td style={{ ...ledgerTd, direction: 'ltr', fontWeight: 600 }}>
                     {numFmt(data.opening_balance)}
-                    <Typography component="span" variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-                      {sideLbl(data.opening_side)}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
+                    <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.opening_side)}</span>
+                  </td>
+                </tr>
 
-                {/* Data rows */}
                 {data.rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 5, color: 'text.secondary' }}>
-                      لا توجد حركات في هذه الفترة
-                    </TableCell>
-                  </TableRow>
+                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32, color: 'var(--ant-color-text-secondary)' }}>لا توجد حركات في هذه الفترة</td></tr>
                 )}
                 {data.rows.map((row, i) => (
-                  <TableRow
-                    key={i}
-                    hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/transactions/${row.entry_id}/edit`)}
-                  >
-                    <TableCell sx={{ direction: 'ltr', textAlign: 'center', color: 'text.secondary' }}>
-                      {row.date}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'center', color: 'text.secondary' }}>
-                      {row.reference || '—'}
-                    </TableCell>
-                    <TableCell align='center' sx={{ textAlign: 'center' }}>
-                      <Typography variant="body2">{row.entry_description}</Typography>
-                      {row.line_description && (
-                        <Typography variant="caption" color="text.secondary">
-                          {row.line_description}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'center', color: 'text.secondary' }}>
-                      {row.party_name || '—'}
-                    </TableCell>
-                    <TableCell align="center" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: Number(row.debit) > 0 ? 'text.primary' : 'text.disabled' }}>
+                  <tr key={i} onClick={() => navigate(`/transactions/${row.entry_id}/edit`)} style={{ cursor: 'pointer', borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+                    <td style={{ ...ledgerTd, direction: 'ltr', color: 'var(--ant-color-text-secondary)' }}>{row.date}</td>
+                    <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)' }}>{row.reference || '—'}</td>
+                    <td style={ledgerTd}>
+                      <div>{row.entry_description}</div>
+                      {row.line_description && <Text type="secondary" style={{ fontSize: 12 }}>{row.line_description}</Text>}
+                    </td>
+                    <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)' }}>{row.party_name || '—'}</td>
+                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: Number(row.debit) > 0 ? 'var(--ant-color-text)' : 'var(--ant-color-text-disabled)' }}>
                       {Number(row.debit) > 0 ? numFmt(row.debit) : '—'}
-                    </TableCell>
-                    <TableCell align="center" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: Number(row.credit) > 0 ? 'text.primary' : 'text.disabled' }}>
+                    </td>
+                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: Number(row.credit) > 0 ? 'var(--ant-color-text)' : 'var(--ant-color-text-disabled)' }}>
                       {Number(row.credit) > 0 ? numFmt(row.credit) : '—'}
-                    </TableCell>
-                    <TableCell align="center" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                    </td>
+                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                       {numFmt(row.balance)}
-                      <Typography component="span" variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-                        {sideLbl(row.balance_side)}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
+                      <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(row.balance_side)}</span>
+                    </td>
+                  </tr>
                 ))}
 
-                {/* Totals row */}
                 {data.rows.length > 0 && (
-                  <TableRow sx={{ bgcolor: 'grey.50', '& td': { fontWeight: 700, borderTop: '2px solid', borderColor: 'divider' } }}>
-                    <TableCell colSpan={4} align="center">الإجمالي</TableCell>
-                    <TableCell align="center" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
-                      {numFmt(data.totals.debit)}
-                    </TableCell>
-                    <TableCell align="center" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
-                      {numFmt(data.totals.credit)}
-                    </TableCell>
-                    <TableCell align="center" sx={{ direction: 'ltr', fontWeight: 700, color: 'primary.main' }}>
+                  <tr style={{ background: 'var(--ant-color-fill-alter)', borderTop: '2px solid var(--ant-color-border-secondary)', fontWeight: 700 }}>
+                    <td colSpan={4} style={{ ...ledgerTd, textAlign: 'center', fontWeight: 700 }}>الإجمالي</td>
+                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{numFmt(data.totals.debit)}</td>
+                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{numFmt(data.totals.credit)}</td>
+                    <td style={{ ...ledgerTd, direction: 'ltr', fontWeight: 700, color: 'var(--ant-color-primary)' }}>
                       {numFmt(data.closing_balance)}
-                      <Typography component="span" variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-                        {sideLbl(data.closing_side)}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
+                      <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.closing_side)}</span>
+                    </td>
+                  </tr>
                 )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
-      {!loading && !data && !error && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 10, color: 'text.secondary' }}>
-          <Typography>اختر حساباً لعرض الكشف</Typography>
-        </Box>
+      {!loading && !data && (
+        <Flex align="center" justify="center" style={{ padding: '80px 0', color: 'var(--ant-color-text-secondary)' }}>
+          <Text type="secondary">اختر حساباً لعرض الكشف</Text>
+        </Flex>
       )}
-    </Box>
+    </div>
   )
 }
+
+const ledgerTh: React.CSSProperties = { padding: '8px 12px', textAlign: 'center', fontWeight: 600, fontSize: 12 }
+const ledgerTd: React.CSSProperties = { padding: '8px 12px', textAlign: 'center' }

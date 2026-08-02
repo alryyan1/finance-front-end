@@ -4,28 +4,38 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverSheetsCorePresetEnUS from '@univerjs/preset-sheets-core/locales/en-US'
 import '@univerjs/preset-sheets-core/lib/index.css'
 import { Flex, Spin, Typography } from 'antd'
-import { journalApi } from '@/api/journal'
-import type { JournalEntry } from '@/types/journal'
+import { pettyCashApi, type PettyCashTransaction, type TransactionType } from '@/api/pettyCash'
 
-const HEADERS = ['التاريخ', 'المرجع', 'البيان', 'كود الحساب', 'اسم الحساب', 'مدين', 'دائن', 'الحالة']
+const HEADERS = ['التاريخ', 'النوع', 'حالة الاعتماد', 'تاريخ اعتماد المراجع', 'تاريخ اعتماد المدير', 'المستفيد', 'الحساب المقابل', 'المبلغ', 'البيان']
 
-function buildSheetData(entries: JournalEntry[]) {
+const fmtDateTime = (v: string | null | undefined) =>
+  v ? new Date(v).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : ''
+
+const typeLabel = (t: PettyCashTransaction) => (t.type === 'expense' ? 'مصروف' : 'تغذية')
+
+const statusLabel = (t: PettyCashTransaction) => {
+  if (t.type !== 'expense') return ''
+  if (t.status === 'approved') return 'معتمد'
+  if (t.auditor_approved_at && !t.manager_approved_at) return 'بانتظار اعتماد المدير'
+  if (t.manager_approved_at && !t.auditor_approved_at) return 'بانتظار اعتماد المراجع'
+  return 'بانتظار الاعتماد'
+}
+
+function buildSheetData(transactions: PettyCashTransaction[]) {
   const rows: (string | number)[][] = [HEADERS]
 
-  for (const entry of entries) {
-    const lines = entry.lines ?? []
-    for (const line of lines) {
-      rows.push([
-        entry.date,
-        entry.reference ?? '',
-        entry.description,
-        line.account?.code ?? '',
-        line.account?.name ?? '',
-        Number(line.debit) > 0 ? Number(line.debit) : '',
-        Number(line.credit) > 0 ? Number(line.credit) : '',
-        entry.is_posted ? 'مرحَّل' : 'مسودة',
-      ])
-    }
+  for (const t of transactions) {
+    rows.push([
+      t.date,
+      typeLabel(t),
+      statusLabel(t),
+      fmtDateTime(t.auditor_approved_at),
+      fmtDateTime(t.manager_approved_at),
+      t.beneficiary_name ?? '',
+      t.contra_account.name,
+      Number(t.amount),
+      t.description ?? '',
+    ])
   }
 
   return rows
@@ -40,7 +50,7 @@ function rowsToCellData(rows: (string | number)[][]) {
   )
 }
 
-export default function JournalSpreadsheetPage() {
+export default function PettyCashSpreadsheetPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const univerRef = useRef<ReturnType<typeof createUniver> | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,17 +58,16 @@ export default function JournalSpreadsheetPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const from   = params.get('from')   ?? undefined
-    const to     = params.get('to')     ?? undefined
-    const search = params.get('search') ?? undefined
-    const status = params.get('status') ?? undefined
+    const from = params.get('from') ?? ''
+    const to   = params.get('to')   ?? ''
+    const type = (params.get('type') as TransactionType | null) ?? undefined
 
-    journalApi
-      .list({ from, to, search, status })
-      .then(entries => {
+    pettyCashApi
+      .listTransactions({ from, to, type })
+      .then(transactions => {
         if (!containerRef.current) return
 
-        const rows     = buildSheetData(entries)
+        const rows     = buildSheetData(transactions)
         const cellData = rowsToCellData(rows)
 
         const { univerAPI } = createUniver({
@@ -71,13 +80,13 @@ export default function JournalSpreadsheetPage() {
         univerRef.current = { univerAPI } as ReturnType<typeof createUniver>
 
         univerAPI.createUniverSheet({
-          id: 'journal-sheet',
-          name: 'القيود المحاسبية',
+          id: 'petty-cash-sheet',
+          name: 'صندوق النثريات',
           locale: LocaleType.EN_US,
           sheets: {
             sheet1: {
               id: 'sheet1',
-              name: 'القيود',
+              name: 'الحركات',
               cellData: Object.fromEntries(
                 cellData.map((row, ri) => [
                   ri,
@@ -88,7 +97,6 @@ export default function JournalSpreadsheetPage() {
               ),
               columnCount: HEADERS.length,
               rowCount: Math.max(cellData.length, 100),
-              // Style the header row
               rowData: {
                 0: { hd: 0, h: 28 },
               },
@@ -96,59 +104,36 @@ export default function JournalSpreadsheetPage() {
           },
         })
 
-        // Apply header styles via the facade API
         try {
           const workbook = univerAPI.getActiveWorkbook()
           const sheet    = workbook?.getActiveSheet()
           if (sheet) {
-            // Center all cells
             const allRange = sheet.getRange(0, 0, cellData.length, HEADERS.length)
             allRange.setHorizontalAlignment('center')
 
-            // Bold + background for header row
             const headerRange = sheet.getRange(0, 0, 1, HEADERS.length)
             headerRange.setFontWeight('bold')
             headerRange.setBackground('#1565C0')
             headerRange.setFontColor('#FFFFFF')
 
-            // Auto-fit columns
             sheet.setColumnWidth(0, 100) // Date
-            sheet.setColumnWidth(1, 90)  // Reference
-            sheet.setColumnWidth(2, 220) // Description
-            sheet.setColumnWidth(3, 90)  // Account code
-            sheet.setColumnWidth(4, 180) // Account name
-            sheet.setColumnWidth(5, 110) // Debit
-            sheet.setColumnWidth(6, 110) // Credit
-            sheet.setColumnWidth(7, 80)  // Status
+            sheet.setColumnWidth(1, 80)  // Type
+            sheet.setColumnWidth(2, 150) // Approval status
+            sheet.setColumnWidth(3, 140) // Auditor approval date
+            sheet.setColumnWidth(4, 140) // Manager approval date
+            sheet.setColumnWidth(5, 150) // Beneficiary
+            sheet.setColumnWidth(6, 180) // Contra account
+            sheet.setColumnWidth(7, 110) // Amount
+            sheet.setColumnWidth(8, 220) // Description
 
-            // Number format for debit/credit columns
-            const debitRange  = sheet.getRange(1, 5, cellData.length - 1, 1)
-            const creditRange = sheet.getRange(1, 6, cellData.length - 1, 1)
-            debitRange.setNumberFormat('#,##0')
-            creditRange.setNumberFormat('#,##0')
-
-            // Alternating row colors for entry groups
-            let currentEntryId = -1
-            let altRow = false
-            let dataRowIndex = 1
-            for (const entry of entries) {
-              const lines = entry.lines ?? []
-              if (entry.id !== currentEntryId) {
-                currentEntryId = entry.id
-                altRow = !altRow
-              }
-              for (let i = 0; i < lines.length; i++) {
-                const rowRange = sheet.getRange(dataRowIndex, 0, 1, HEADERS.length)
-                if (altRow) rowRange.setBackground('#F5F5F5')
-                dataRowIndex++
-              }
-            }
+            const amountRange = sheet.getRange(1, 7, Math.max(cellData.length - 1, 1), 1)
+            amountRange.setNumberFormat('#,##0')
           }
         } catch {
           // Styling is optional — skip silently
         }
       })
-      .catch(() => setError('فشل في تحميل القيود المحاسبية'))
+      .catch(() => setError('فشل في تحميل حركات صندوق النثريات'))
       .finally(() => setLoading(false))
 
     return () => {
@@ -175,7 +160,7 @@ export default function JournalSpreadsheetPage() {
           style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'var(--ant-color-bg-container)' }}
         >
           <Spin size="large" />
-          <Typography.Text type="secondary">جاري تحميل القيود...</Typography.Text>
+          <Typography.Text type="secondary">جاري تحميل حركات صندوق النثريات...</Typography.Text>
         </Flex>
       )}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />

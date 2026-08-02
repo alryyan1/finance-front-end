@@ -1,21 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Box, Card, CardContent, Chip, CircularProgress,
-  Divider, Paper, Skeleton, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow,
-  Typography,
-} from '@mui/material'
+  Card, Col, Flex, Row, Skeleton, Table, Tag, Typography,
+} from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
-import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
-import SwapHorizOutlinedIcon from '@mui/icons-material/SwapHorizOutlined'
-import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined'
-import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined'
-import type { SvgIconProps } from '@mui/material'
-import type { ComponentType } from 'react'
+import { ArrowLeftRight, TrendingUp, Users, Wallet } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import api from '@/lib/axios'
 import { useAuth } from '@/context/AuthContext'
 import { formatCurrency } from '@/lib/constants'
+
+const { Title, Text } = Typography
 
 interface RecentEntry {
   id: number
@@ -39,39 +35,36 @@ interface StatCardProps {
   label: string
   value: string
   sub?: string
-  icon: ComponentType<SvgIconProps>
+  icon: LucideIcon
   color: string
   loading: boolean
 }
 
 function StatCard({ label, value, sub, icon: Icon, color, loading }: StatCardProps) {
   return (
-    <Card>
-      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} gutterBottom>
-              {label}
-            </Typography>
-            {loading ? (
-              <Skeleton width={100} height={36} />
-            ) : (
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>{value}</Typography>
-            )}
-            {sub && !loading && (
-              <Typography variant="caption" color="text.secondary">{sub}</Typography>
-            )}
-          </Box>
-          <Box sx={{
-            width: 44, height: 44, borderRadius: 2,
-            bgcolor: `${color}18`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color, flexShrink: 0, mt: 0.5,
-          }}>
-            <Icon fontSize="small" />
-          </Box>
-        </Box>
-      </CardContent>
+    <Card styles={{ body: { padding: 20 } }}>
+      <Flex justify="space-between" align="flex-start">
+        <div style={{ flexGrow: 1 }}>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+            {label}
+          </Text>
+          {loading ? (
+            <Skeleton.Input active size="small" style={{ width: 100, height: 36 }} />
+          ) : (
+            <Title level={4} style={{ margin: 0 }}>{value}</Title>
+          )}
+          {sub && !loading && (
+            <Text type="secondary" style={{ fontSize: 12 }}>{sub}</Text>
+          )}
+        </div>
+        <Flex align="center" justify="center" style={{
+          width: 44, height: 44, borderRadius: 8,
+          background: `${color}18`,
+          color, flexShrink: 0, marginTop: 4,
+        }}>
+          <Icon size={18} />
+        </Flex>
+      </Flex>
     </Card>
   )
 }
@@ -91,142 +84,133 @@ export default function DashboardPage() {
   const movement = data ? Number(data.total_movement) : 0
   const profit   = data?.net_profit ?? 0
 
-  const stats = [
+  const stats: StatCardProps[] = [
     {
       label: 'حركة هذا الشهر',
       value: formatCurrency(movement),
       sub: `${data?.entries_this_month ?? 0} قيد مرحَّل`,
-      icon: SwapHorizOutlinedIcon,
+      icon: ArrowLeftRight,
       color: '#2563eb',
+      loading,
     },
     {
       label: 'صافي الربح',
       value: formatCurrency(Math.abs(profit)),
       sub: profit >= 0 ? 'ربح' : 'خسارة',
-      icon: TrendingUpOutlinedIcon,
+      icon: TrendingUp,
       color: profit >= 0 ? '#16a34a' : '#dc2626',
+      loading,
     },
     {
       label: 'الأطراف النشطة',
       value: (data?.parties_count ?? 0).toLocaleString('en-US'),
-      icon: PeopleOutlinedIcon,
+      icon: Users,
       color: '#7c3aed',
+      loading,
     },
     {
       label: 'الحسابات',
       value: (data?.accounts_count ?? 0).toLocaleString('en-US'),
-      icon: AccountBalanceWalletOutlinedIcon,
+      icon: Wallet,
       color: '#d97706',
+      loading,
+    },
+  ]
+
+  const columns: ColumnsType<RecentEntry> = [
+    {
+      title: 'التاريخ',
+      dataIndex: 'date',
+      render: (date: string) => <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)' }}>{date}</span>,
+    },
+    { title: 'الوصف', dataIndex: 'description' },
+    {
+      title: 'المرجع',
+      dataIndex: 'reference',
+      render: (ref: string | null) => <Text type="secondary">{ref || '—'}</Text>,
+    },
+    {
+      title: 'إجمالي المدين',
+      dataIndex: 'lines_sum_debit',
+      align: 'left',
+      render: (v: string | null) => (
+        <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+          {v ? Number(v).toLocaleString('en-US') : '0'}
+        </span>
+      ),
+    },
+    {
+      title: 'الحالة',
+      dataIndex: 'is_posted',
+      align: 'center',
+      render: (posted: boolean) => posted
+        ? <Tag color="success">مرحَّل</Tag>
+        : <Tag>مسودة</Tag>,
     },
   ]
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+    <div>
+      <Flex justify="space-between" align="flex-start" style={{ marginBottom: 4 }}>
+        <Title level={4} style={{ margin: 0 }}>
           مرحباً، {user?.name}
-        </Typography>
+        </Title>
         <HelpButton title="دليل استخدام لوحة التحكم">
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>لوحة التحكم</Typography>
-              <Typography variant="body2">لوحة التحكم تُقدّم ملخصاً سريعاً للوضع المالي الحالي: إجمالي الأصول، الخصوم، الإيرادات والمصروفات لهذا الشهر.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>بطاقات الإحصاء</Typography>
-              <Typography variant="body2">كل بطاقة تُظهر قيمة مالية إجمالية. اضغط على البطاقة للانتقال إلى الصفحة التفصيلية المقابلة.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>آخر القيود</Typography>
-              <Typography variant="body2">يُعرض في أسفل الصفحة جدول بآخر القيود المحاسبية المسجّلة. للمزيد من التفاصيل انتقل لصفحة "القيود".</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>التنقل في النظام</Typography>
-              <Typography variant="body2">استخدم القائمة الجانبية للتنقل بين صفحات النظام. الأقسام: المحاسبة، التقارير، النثريات، الإعدادات.</Typography></Box>
-          </Box>
+          <Flex vertical gap={16}>
+            <div><Title level={5}>لوحة التحكم</Title>
+              <Text>لوحة التحكم تُقدّم ملخصاً سريعاً للوضع المالي الحالي: إجمالي الأصول، الخصوم، الإيرادات والمصروفات لهذا الشهر.</Text></div>
+            <div><Title level={5}>بطاقات الإحصاء</Title>
+              <Text>كل بطاقة تُظهر قيمة مالية إجمالية. اضغط على البطاقة للانتقال إلى الصفحة التفصيلية المقابلة.</Text></div>
+            <div><Title level={5}>آخر القيود</Title>
+              <Text>يُعرض في أسفل الصفحة جدول بآخر القيود المحاسبية المسجّلة. للمزيد من التفاصيل انتقل لصفحة "القيود".</Text></div>
+            <div><Title level={5}>التنقل في النظام</Title>
+              <Text>استخدم القائمة الجانبية للتنقل بين صفحات النظام. الأقسام: المحاسبة، التقارير، النثريات، الإعدادات.</Text></div>
+          </Flex>
         </HelpButton>
-      </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+      </Flex>
+      <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
         ملخص النشاط المالي لشهر {new Date().toLocaleDateString('ar-SA-u-nu-latn', { month: 'long', year: 'numeric' })}
-      </Typography>
+      </Text>
 
       {/* Stat cards */}
-      <Box sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', xl: '1fr 1fr 1fr 1fr' },
-        gap: 3,
-        mb: 4,
-      }}>
+      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
         {stats.map(s => (
-          <StatCard key={s.label} {...s} loading={loading} />
+          <Col key={s.label} xs={24} sm={12} xl={6}>
+            <StatCard {...s} />
+          </Col>
         ))}
-      </Box>
+      </Row>
 
       {/* Recent entries */}
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+      <Title level={5} style={{ marginBottom: 16 }}>
         آخر القيود
-      </Typography>
+      </Title>
 
-      <TableContainer component={Paper}>
-        {loading ? (
-          <Box sx={{ p: 3 }}>
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} height={48} sx={{ mb: 1 }} />
-            ))}
-          </Box>
-        ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>التاريخ</TableCell>
-                <TableCell>الوصف</TableCell>
-                <TableCell>المرجع</TableCell>
-                <TableCell align="left">إجمالي المدين</TableCell>
-                <TableCell align="center">الحالة</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(data?.recent_entries ?? []).length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 5, color: 'text.secondary' }}>
-                    لا توجد قيود بعد
-                  </TableCell>
-                </TableRow>
-              )}
-              {(data?.recent_entries ?? []).map(entry => (
-                <TableRow
-                  key={entry.id}
-                  hover
-                  sx={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/transactions/${entry.id}/edit`)}
-                >
-                  <TableCell sx={{ direction: 'ltr', textAlign: 'right', color: 'text.secondary' }}>
-                    {entry.date}
-                  </TableCell>
-                  <TableCell>{entry.description}</TableCell>
-                  <TableCell sx={{ color: 'text.secondary' }}>{entry.reference || '—'}</TableCell>
-                  <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
-                    {entry.lines_sum_debit
-                      ? Number(entry.lines_sum_debit).toLocaleString('en-US', { minimumFractionDigits: 2 })
-                      : '0.00'}
-                  </TableCell>
-                  <TableCell align="center">
-                    {entry.is_posted
-                      ? <Chip label="مرحَّل" color="success" size="small" />
-                      : <Chip label="مسودة" color="default" size="small" />}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </TableContainer>
+      <Table
+        size="small"
+        columns={columns}
+        dataSource={data?.recent_entries ?? []}
+        rowKey="id"
+        loading={loading}
+        pagination={false}
+        locale={{ emptyText: 'لا توجد قيود بعد' }}
+        onRow={entry => ({
+          style: { cursor: 'pointer' },
+          onClick: () => navigate(`/transactions/${entry.id}/edit`),
+        })}
+      />
 
       {!loading && (data?.recent_entries?.length ?? 0) > 0 && (
-        <Box sx={{ mt: 1, textAlign: 'left' }}>
-          <Typography
-            variant="caption"
-            color="primary"
-            sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+        <div style={{ marginTop: 8, textAlign: 'left' }}>
+          <Text
+            type="secondary"
+            style={{ cursor: 'pointer', fontSize: 12 }}
             onClick={() => navigate('/transactions')}
           >
             عرض كل القيود ←
-          </Typography>
-        </Box>
+          </Text>
+        </div>
       )}
-    </Box>
+    </div>
   )
 }

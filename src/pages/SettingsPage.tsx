@@ -1,25 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle,
-  Divider, IconButton, InputAdornment, Paper, Snackbar, Stack, TextField,
-  ToggleButton, ToggleButtonGroup, Tooltip, Typography,
-} from '@mui/material'
+  Alert, Button, Divider, Flex, Input, Modal, Radio, Select, Spin, Switch, Tabs, Tag, Tooltip, Typography,
+} from 'antd'
 import HelpButton from '@/components/common/HelpButton'
-import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined'
-import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined'
-import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
-import AlignRightIcon from '@mui/icons-material/AlignHorizontalRight'
-import AlignLeftIcon from '@mui/icons-material/AlignHorizontalLeft'
-import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
-import KeyIcon from '@mui/icons-material/Key'
-import ContentCopyIcon from '@mui/icons-material/ContentCopy'
-import AddIcon from '@mui/icons-material/Add'
-import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined'
+import { useToast } from '@/lib/toast'
+import {
+  AlignLeft, AlignRight, Building2, CheckCircle2, Copy, Image as ImageIcon, KeyRound, Link as LinkIcon,
+  LayoutTemplate, MessageCircle, Plus, Save, Settings, Trash2, User, XCircle, PiggyBank, ClipboardCheck,
+} from 'lucide-react'
 import api from '@/lib/axios'
-import { settingsApi, journalSettingsApi, type CompanySettings, type LogoPosition, type GlobalJournalSettings } from '@/api/settings'
+import {
+  settingsApi, pettyCashSettingsApi,
+  type CompanySettings, type LogoPosition, type PettyCashApprovalSettings,
+} from '@/api/settings'
+import { pettyCashApi, type PettyCashFund } from '@/api/pettyCash'
 import { accountsApi } from '@/api/accounts'
 import type { Account } from '@/types/account'
+import { usersApi, type UserRecord } from '@/api/users'
+
+const { Title, Text } = Typography
 
 const EMPTY: CompanySettings = {
   company_name:       '',
@@ -32,52 +32,157 @@ const EMPTY: CompanySettings = {
 }
 
 const POSITION_OPTIONS: { value: LogoPosition; label: string; icon: React.ReactNode; desc: string }[] = [
-  { value: 'right', label: 'يمين',          icon: <AlignRightIcon />,   desc: 'الشعار على اليمين، معلومات الشركة على اليسار' },
-  { value: 'left',  label: 'يسار',          icon: <AlignLeftIcon />,    desc: 'الشعار على اليسار، معلومات الشركة على اليمين' },
-  { value: 'full',  label: 'ترويسة كاملة', icon: <ViewHeadlineIcon />, desc: 'الشعار يمتد بعرض الصفحة بالكامل' },
+  { value: 'right', label: 'يمين',          icon: <AlignRight size={18} />,      desc: 'الشعار على اليمين، معلومات الشركة على اليسار' },
+  { value: 'left',  label: 'يسار',          icon: <AlignLeft size={18} />,       desc: 'الشعار على اليسار، معلومات الشركة على اليمين' },
+  { value: 'full',  label: 'ترويسة كاملة', icon: <LayoutTemplate size={18} />, desc: 'الشعار يمتد بعرض الصفحة بالكامل' },
 ]
 
+const TABS = [
+  { key: 'company',    label: 'معلومات الشركة',   icon: <Building2 size={15} /> },
+  { key: 'logo',       label: 'الشعار والتقارير', icon: <ImageIcon size={15} /> },
+  { key: 'petty-cash', label: 'صندوق النثريات',   icon: <PiggyBank size={15} /> },
+  { key: 'approval',   label: 'اعتماد النثريات',  icon: <ClipboardCheck size={15} /> },
+  { key: 'tokens',     label: 'رموز API',         icon: <KeyRound size={15} /> },
+] as const
+
+/** Accent color per settings section — mirrors the palette used on the dashboard stat cards. */
+const SECTION_COLOR = {
+  company:  '#2563eb',
+  logo:     '#7c3aed',
+  pettyFund: '#16a34a',
+  approval: '#0891b2',
+  tokens:   '#d97706',
+} as const
+
+interface SectionHeaderProps {
+  icon: React.ReactNode
+  title: string
+  subtitle?: string
+  color: string
+  action?: React.ReactNode
+}
+
+function SectionHeader({ icon, title, subtitle, color, action }: SectionHeaderProps) {
+  return (
+    <Flex align="center" gap={14} style={{ marginBottom: 24 }}>
+      <Flex align="center" justify="center" style={{
+        width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+        background: `${color}18`, color,
+      }}>
+        {icon}
+      </Flex>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Title level={5} style={{ margin: 0, lineHeight: 1.3 }}>{title}</Title>
+        {subtitle && <Text type="secondary">{subtitle}</Text>}
+      </div>
+      {action}
+    </Flex>
+  )
+}
+
+const emptyFundForm = () => ({
+  name:                   'صندوق النثريات',
+  custodian_name:         '',
+  account_id:             null as Account | null,
+  max_amount:             '',
+  low_balance_threshold:  '',
+  status:                 'active' as 'active' | 'inactive',
+})
+
 export default function SettingsPage() {
+  const toast = useToast()
+  const [searchParams] = useSearchParams()
+  const initialTab = TABS.find(t => t.key === searchParams.get('tab'))?.key ?? TABS[0].key
+  const [activeTab, setActiveTab] = useState<string>(initialTab)
   const [form, setForm]           = useState<CompanySettings>(EMPTY)
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
-  const [success, setSuccess]     = useState(false)
-  const [error, setError]         = useState<string | null>(null)
   const fileRef                   = useRef<HTMLInputElement>(null)
 
-  // Journal settings state
-  const [accounts,       setAccounts]       = useState<Account[]>([])
-  const [journalGlobal,  setJournalGlobal]  = useState<GlobalJournalSettings>({
-    journal_clinic_revenue_account_id:      null,
-    journal_doctor_receivables_account_id:  null,
-    journal_doctor_fees_expense_account_id: null,
+  // Petty cash approval settings state
+  const [users,             setUsers]             = useState<UserRecord[]>([])
+  const [pettyCashApproval, setPettyCashApproval]  = useState<PettyCashApprovalSettings>({
+    petty_cash_manager_user_id: null,
+    petty_cash_auditor_user_id: null,
+    petty_cash_manager_whatsapp_phone: '',
+    petty_cash_auditor_whatsapp_phone: '',
+    petty_cash_notify_on_create: true,
+    petty_cash_notify_recipients: 'both',
+    firebase_collection_name: '',
   })
-  const [journalLoading, setJournalLoading] = useState(true)
-  const [journalSaving,  setJournalSaving]  = useState(false)
+  const [pettyCashLoading, setPettyCashLoading] = useState(true)
+  const [pettyCashSaving,  setPettyCashSaving]  = useState(false)
+
+  // Petty cash fund settings state
+  const [accounts, setAccounts]     = useState<Account[]>([])
+  const [fund, setFund]             = useState<PettyCashFund | null>(null)
+  const [fundForm, setFundForm]     = useState(emptyFundForm())
+  const [fundLoading, setFundLoading] = useState(true)
+  const [fundSaving, setFundSaving]   = useState(false)
 
   useEffect(() => {
     settingsApi.get()
       .then(setForm)
       .finally(() => setLoading(false))
 
-    Promise.all([accountsApi.list(), journalSettingsApi.getGlobal()])
-      .then(([accs, g]) => { setAccounts(accs); setJournalGlobal(g) })
-      .finally(() => setJournalLoading(false))
+    Promise.all([usersApi.list(), pettyCashSettingsApi.get()])
+      .then(([u, p]) => { setUsers(u); setPettyCashApproval(p) })
+      .finally(() => setPettyCashLoading(false))
+
+    Promise.all([accountsApi.list(), pettyCashApi.getFund()])
+      .then(([a, f]) => {
+        setAccounts(a)
+        setFund(f)
+        if (f) {
+          setFundForm({
+            name:                  f.name,
+            custodian_name:        f.custodian_name,
+            account_id:            a.find(acc => acc.id === f.account_id) ?? null,
+            max_amount:            f.max_amount,
+            low_balance_threshold: f.low_balance_threshold,
+            status:                f.status,
+          })
+        }
+      })
+      .finally(() => setFundLoading(false))
   }, [])
 
-  const handleJournalSave = async () => {
-    setJournalSaving(true)
+  const handlePettyCashApprovalSave = async () => {
+    setPettyCashSaving(true)
     try {
-      const g = await journalSettingsApi.updateGlobal(journalGlobal)
-      setJournalGlobal(g)
-      setSuccess(true)
+      const p = await pettyCashSettingsApi.update(pettyCashApproval)
+      setPettyCashApproval(p)
+      toast.success('تم حفظ إعدادات اعتماد النثريات')
     } catch {
-      setError('تعذّر حفظ إعدادات القيود')
+      toast.error('تعذّر حفظ إعدادات اعتماد النثريات')
     } finally {
-      setJournalSaving(false)
+      setPettyCashSaving(false)
     }
   }
+
+  const handleFundSave = async () => {
+    if (!fundForm.name || !fundForm.custodian_name || !fundForm.account_id || !fundForm.max_amount) return
+    setFundSaving(true)
+    try {
+      const r = await pettyCashApi.setupFund({
+        name:                   fundForm.name,
+        custodian_name:         fundForm.custodian_name,
+        account_id:             fundForm.account_id.id,
+        max_amount:             fundForm.max_amount,
+        low_balance_threshold:  fundForm.low_balance_threshold || 0,
+        status:                 fundForm.status,
+      })
+      setFund(r)
+      toast.success('تم حفظ إعدادات الصندوق')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ إعدادات الصندوق')
+    } finally {
+      setFundSaving(false)
+    }
+  }
+
+  const assetAccounts = accounts.filter(a => a.type === 'asset')
 
   const set = (key: keyof CompanySettings) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -86,14 +191,13 @@ export default function SettingsPage() {
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault()
     setSaving(true)
-    setError(null)
     try {
       const { company_logo: _, ...payload } = form
       const saved = await settingsApi.update(payload)
       setForm(saved)
-      setSuccess(true)
+      toast.success('تم حفظ الإعدادات بنجاح')
     } catch {
-      setError('تعذّر حفظ الإعدادات، يرجى المحاولة مجدداً')
+      toast.error('تعذّر حفظ الإعدادات، يرجى المحاولة مجدداً')
     } finally {
       setSaving(false)
     }
@@ -103,12 +207,12 @@ export default function SettingsPage() {
     const file = e.target.files?.[0]
     if (!file) return
     setLogoUploading(true)
-    setError(null)
     try {
       const res = await settingsApi.uploadLogo(file)
       setForm(prev => ({ ...prev, company_logo: res.company_logo }))
+      toast.success('تم رفع الشعار')
     } catch {
-      setError('تعذّر رفع الشعار، تأكد من صيغة الملف (JPG, PNG, WebP)')
+      toast.error('تعذّر رفع الشعار، تأكد من صيغة الملف (JPG, PNG, WebP)')
     } finally {
       setLogoUploading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -120,8 +224,9 @@ export default function SettingsPage() {
     try {
       await settingsApi.deleteLogo()
       setForm(prev => ({ ...prev, company_logo: null }))
+      toast.success('تم حذف الشعار')
     } catch {
-      setError('تعذّر حذف الشعار')
+      toast.error('تعذّر حذف الشعار')
     } finally {
       setLogoUploading(false)
     }
@@ -129,303 +234,419 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-        <CircularProgress />
-      </Box>
+      <Flex justify="center" style={{ padding: '80px 0' }}>
+        <Spin size="large" />
+      </Flex>
     )
   }
 
-  return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 720 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>الإعدادات</Typography>
-          <HelpButton title="دليل استخدام الإعدادات">
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>معلومات الشركة</Typography>
-                <Typography variant="body2">أدخل اسم الشركة والعنوان والهاتف والبريد والرقم الضريبي. تظهر هذه المعلومات في رأس التقارير والمستندات المُصدَّرة.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>شعار الشركة</Typography>
-                <Typography variant="body2">ارفع شعار الشركة (JPG, PNG, WebP) وحدد موضعه في رأس التقارير: يمين أو يسار أو ترويسة كاملة.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>حفظ التغييرات</Typography>
-                <Typography variant="body2">اضغط "حفظ التغييرات" لتطبيق التعديلات. الشعار يُحفظ فور رفعه بشكل منفصل.</Typography></Box>
-            </Box>
-          </HelpButton>
-        </Box>
-        <Button
-          type="submit"
-          variant="contained"
-          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}
-          disabled={saving}
-        >
-          حفظ التغييرات
-        </Button>
-      </Box>
+  const cardStyle: React.CSSProperties = { padding: 24, borderRadius: 12, border: '1px solid var(--ant-color-border-secondary)' }
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+  return (
+    <div style={{ maxWidth: 900 }}>
+      {/* Header */}
+      <Flex justify="space-between" align="center" wrap="wrap" gap={16} style={{ marginBottom: 24 }}>
+        <Flex align="center" gap={14}>
+          <Flex align="center" justify="center" style={{
+            width: 48, height: 48, borderRadius: 10, flexShrink: 0,
+            background: 'var(--ant-color-primary-bg)', color: 'var(--ant-color-primary)',
+          }}>
+            <Settings size={22} />
+          </Flex>
+          <div>
+            <Flex align="center" gap={4}>
+              <Title level={4} style={{ margin: 0, lineHeight: 1.2 }}>الإعدادات</Title>
+              <HelpButton title="دليل استخدام الإعدادات">
+                <Flex vertical gap={16}>
+                  <div><Title level={5}>معلومات الشركة</Title>
+                    <Text>أدخل اسم الشركة والعنوان والهاتف والبريد والرقم الضريبي. تظهر هذه المعلومات في رأس التقارير والمستندات المُصدَّرة.</Text></div>
+                  <div><Title level={5}>شعار الشركة</Title>
+                    <Text>ارفع شعار الشركة (JPG, PNG, WebP) وحدد موضعه في رأس التقارير: يمين أو يسار أو ترويسة كاملة.</Text></div>
+                  <div><Title level={5}>حفظ التغييرات</Title>
+                    <Text>اضغط "حفظ التغييرات" لتطبيق التعديلات. الشعار يُحفظ فور رفعه بشكل منفصل.</Text></div>
+                </Flex>
+              </HelpButton>
+            </Flex>
+            <Text type="secondary">
+              بيانات الشركة، الشعار، صندوق النثريات، الاعتماد ورموز الربط
+            </Text>
+          </div>
+        </Flex>
+        {(activeTab === 'company' || activeTab === 'logo') && (
+          <Button
+            type="primary"
+            icon={saving ? <Spin size="small" /> : <Save size={16} />}
+            disabled={saving}
+            onClick={handleSubmit}
+          >
+            حفظ التغييرات
+          </Button>
+        )}
+      </Flex>
+
+      {/* Tabs */}
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={TABS.map(tab => ({
+          key: tab.key,
+          label: <Flex align="center" gap={6}>{tab.icon}{tab.label}</Flex>,
+        }))}
+      />
 
       {/* Company info */}
-      <Paper sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-          <BusinessOutlinedIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>معلومات الشركة</Typography>
-        </Box>
-        <Divider sx={{ mb: 3 }} />
-
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          <TextField
-            label="اسم الشركة"
-            value={form.company_name}
-            onChange={set('company_name')}
-            fullWidth
-            placeholder="مثال: شركة المالية للتجارة"
+      {activeTab === 'company' && (
+        <form onSubmit={handleSubmit} style={cardStyle}>
+          <SectionHeader
+            icon={<Building2 size={20} />}
+            color={SECTION_COLOR.company}
+            title="معلومات الشركة"
+            subtitle="تظهر هذه البيانات في رأس التقارير والمستندات المُصدَّرة"
           />
 
-          <TextField
-            label="العنوان"
-            value={form.company_address}
-            onChange={set('company_address')}
-            fullWidth
-            multiline
-            rows={2}
-            placeholder="المدينة، الشارع، الرقم"
-          />
+          <Flex vertical gap={20}>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>اسم الشركة</Text>
+              <Input value={form.company_name} onChange={set('company_name')} placeholder="مثال: شركة المالية للتجارة" />
+            </div>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <TextField
-              label="رقم الهاتف"
-              value={form.company_phone}
-              onChange={set('company_phone')}
-              slotProps={{ htmlInput: { dir: 'ltr' } }}
-              placeholder="+249 9X XXX XXXX"
-            />
-            <TextField
-              label="البريد الإلكتروني"
-              type="email"
-              value={form.company_email}
-              onChange={set('company_email')}
-              slotProps={{ htmlInput: { dir: 'ltr' } }}
-              placeholder="info@company.com"
-            />
-          </Box>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>العنوان</Text>
+              <Input.TextArea rows={2} value={form.company_address} onChange={set('company_address')} placeholder="المدينة، الشارع، الرقم" />
+            </div>
 
-          <TextField
-            label="الرقم الضريبي"
-            value={form.company_tax_number}
-            onChange={set('company_tax_number')}
-            sx={{ maxWidth: 300 }}
-            placeholder="اختياري"
-          />
-        </Box>
-      </Paper>
+            <Flex gap={16}>
+              <div style={{ flex: 1 }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>رقم الهاتف</Text>
+                <Input dir="ltr" value={form.company_phone} onChange={set('company_phone')} placeholder="+249 9X XXX XXXX" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>البريد الإلكتروني</Text>
+                <Input type="email" dir="ltr" value={form.company_email} onChange={set('company_email')} placeholder="info@company.com" />
+              </div>
+            </Flex>
+
+            <div style={{ maxWidth: 300 }}>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الرقم الضريبي</Text>
+              <Input value={form.company_tax_number} onChange={set('company_tax_number')} placeholder="اختياري" />
+            </div>
+          </Flex>
+        </form>
+      )}
 
       {/* Logo & report header section */}
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-          <ImageOutlinedIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>شعار الشركة في التقارير</Typography>
-        </Box>
-        <Divider sx={{ mb: 3 }} />
+      {activeTab === 'logo' && (
+        <div style={cardStyle}>
+          <SectionHeader
+            icon={<ImageIcon size={20} />}
+            color={SECTION_COLOR.logo}
+            title="شعار الشركة في التقارير"
+            subtitle="ارفع الشعار وحدد موضعه في رأس التقارير المُصدَّرة"
+          />
 
-        <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          {/* Logo upload box */}
-          <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              الشعار الحالي
-            </Typography>
-            <Box
-              sx={{
+          <Flex gap={24} align="flex-start" wrap="wrap">
+            {/* Logo upload box */}
+            <div>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>الشعار الحالي</Text>
+              <div style={{
                 width: 160, height: 100,
-                border: '2px dashed',
-                borderColor: 'divider',
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: 'grey.50',
-                overflow: 'hidden',
-                position: 'relative',
-              }}
-            >
-              {form.company_logo ? (
-                <>
-                  <Box
-                    component="img"
-                    src={form.company_logo!}
-                    alt="شعار الشركة"
-                    sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                  />
-                  <Tooltip title="حذف الشعار">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={handleLogoDelete}
-                      disabled={logoUploading}
-                      sx={{
-                        position: 'absolute', top: 4, left: 4,
-                        bgcolor: 'background.paper',
-                        '&:hover': { bgcolor: 'error.50' },
-                        boxShadow: 1,
+                border: '2px dashed var(--ant-color-border)',
+                borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--ant-color-fill-alter)',
+                overflow: 'hidden', position: 'relative',
+              }}>
+                {form.company_logo ? (
+                  <>
+                    <img src={form.company_logo} alt="شعار الشركة" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    <Tooltip title="حذف الشعار">
+                      <Button
+                        type="text" shape="circle" size="small" danger
+                        onClick={handleLogoDelete} disabled={logoUploading}
+                        style={{ position: 'absolute', top: 4, left: 4, background: 'var(--ant-color-bg-container)', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}
+                        icon={logoUploading ? <Spin size="small" /> : <Trash2 size={14} />}
+                      />
+                    </Tooltip>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', color: 'var(--ant-color-text-disabled)' }}>
+                    <ImageIcon size={30} style={{ marginBottom: 4 }} />
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>لا يوجد شعار</Text>
+                  </div>
+                )}
+              </div>
+
+              <input ref={fileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" hidden onChange={handleLogoChange} />
+              <Button
+                size="small"
+                icon={logoUploading ? <Spin size="small" /> : <ImageIcon size={14} />}
+                onClick={() => fileRef.current?.click()}
+                disabled={logoUploading}
+                style={{ marginTop: 12, width: 160 }}
+              >
+                {form.company_logo ? 'تغيير الشعار' : 'رفع شعار'}
+              </Button>
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4, maxWidth: 160 }}>
+                JPG · PNG · WebP · حتى 3 ميغابايت
+              </Text>
+            </div>
+
+            {/* Position selector */}
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>موضع الشعار في رأس التقارير</Text>
+              <Flex vertical gap={8}>
+                {POSITION_OPTIONS.map(opt => {
+                  const selected = form.logo_position === opt.value
+                  return (
+                    <div
+                      key={opt.value}
+                      onClick={() => setForm(prev => ({ ...prev, logo_position: opt.value }))}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '12px 16px', borderRadius: 8, cursor: 'pointer',
+                        border: `1px solid ${selected ? 'var(--ant-color-primary)' : 'var(--ant-color-border-secondary)'}`,
+                        background: selected ? 'var(--ant-color-primary-bg)' : 'transparent',
+                        color: selected ? 'var(--ant-color-primary)' : 'inherit',
                       }}
                     >
-                      {logoUploading ? <CircularProgress size={14} /> : <DeleteOutlineIcon fontSize="small" />}
-                    </IconButton>
-                  </Tooltip>
-                </>
-              ) : (
-                <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>
-                  <ImageOutlinedIcon sx={{ fontSize: 36, mb: 0.5 }} />
-                  <Typography variant="caption" display="block">لا يوجد شعار</Typography>
-                </Box>
-              )}
-            </Box>
+                      {opt.icon}
+                      <div>
+                        <Text style={{ fontWeight: 600, lineHeight: 1.2, display: 'block', color: 'inherit' }}>{opt.label}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{opt.desc}</Text>
+                      </div>
+                    </div>
+                  )
+                })}
+              </Flex>
+            </div>
+          </Flex>
 
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-              hidden
-              onChange={handleLogoChange}
+          {/* Live PDF header preview */}
+          <div style={{ marginTop: 24 }}>
+            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>معاينة رأس صفحة التقارير</Text>
+            <PdfHeaderPreview
+              name={form.company_name}
+              address={form.company_address}
+              phone={form.company_phone}
+              logoUrl={form.company_logo}
+              position={form.logo_position}
             />
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={logoUploading ? <CircularProgress size={14} /> : <ImageOutlinedIcon />}
-              onClick={() => fileRef.current?.click()}
-              disabled={logoUploading}
-              sx={{ mt: 1.5, width: 160 }}
-            >
-              {form.company_logo ? 'تغيير الشعار' : 'رفع شعار'}
-            </Button>
-            <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5, maxWidth: 160 }}>
-              JPG · PNG · WebP · حتى 3 ميغابايت
-            </Typography>
-          </Box>
+          </div>
+        </div>
+      )}
 
-          {/* Position selector */}
-          <Box sx={{ flex: 1, minWidth: 260 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              موضع الشعار في رأس التقارير
-            </Typography>
-            <ToggleButtonGroup
-              value={form.logo_position}
-              exclusive
-              onChange={(_, v) => v && setForm(prev => ({ ...prev, logo_position: v }))}
-              sx={{ flexDirection: 'column', width: '100%', gap: 1 }}
-            >
-              {POSITION_OPTIONS.map(opt => (
-                <ToggleButton
-                  key={opt.value}
-                  value={opt.value}
-                  sx={{
-                    justifyContent: 'flex-start',
-                    gap: 1.5,
-                    px: 2,
-                    py: 1.5,
-                    borderRadius: '8px !important',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    textAlign: 'right',
-                    '&.Mui-selected': {
-                      bgcolor: 'primary.50',
-                      borderColor: 'primary.main',
-                      color: 'primary.main',
-                    },
-                  }}
-                >
-                  {opt.icon}
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
-                      {opt.label}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {opt.desc}
-                    </Typography>
-                  </Box>
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-          </Box>
-        </Box>
-
-        {/* Live PDF header preview */}
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-            معاينة رأس صفحة التقارير
-          </Typography>
-          <PdfHeaderPreview
-            name={form.company_name}
-            address={form.company_address}
-            phone={form.company_phone}
-            logoUrl={form.company_logo}
-            position={form.logo_position}
-          />
-        </Box>
-      </Paper>
-
-      {/* Journal account settings */}
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-          <AccountBalanceOutlinedIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>إعدادات القيود المحاسبية</Typography>
-        </Box>
-        <Divider sx={{ mb: 3 }} />
-
-        {journalLoading ? <CircularProgress size={22} /> : (
-          <Stack gap={3}>
-            {/* Phase 1 — global */}
-            <Box>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5, fontWeight: 600 }}>
-                حسابات مشتركة لجميع المستخدمين
-              </Typography>
-              <Stack gap={1.5}>
-                {([
-                  ['journal_clinic_revenue_account_id',      'إيرادات العيادة *'],
-                  ['journal_doctor_receivables_account_id',  'ذمم الأطباء (مستحقات الطبيب) *'],
-                  ['journal_doctor_fees_expense_account_id', 'مصروف أتعاب الأطباء *'],
-                ] as [keyof GlobalJournalSettings, string][]).map(([key, label]) => (
-                  <Autocomplete
-                    key={key}
-                    size="small"
-                    options={accounts}
-                    value={accounts.find(a => a.id === journalGlobal[key]) ?? null}
-                    onChange={(_, v) => setJournalGlobal(g => ({ ...g, [key]: v?.id ?? null }))}
-                    getOptionLabel={a => `${a.code} — ${a.name}`}
-                    isOptionEqualToValue={(a, b) => a.id === b.id}
-                    renderInput={p => <TextField {...p} label={label} />}
-                  />
-                ))}
-              </Stack>
-            </Box>
-
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                variant="contained"
-                startIcon={journalSaving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}
-                onClick={handleJournalSave}
-                disabled={journalSaving}
+      {/* Petty cash fund settings */}
+      {activeTab === 'petty-cash' && (
+        <div style={cardStyle}>
+          <SectionHeader
+            icon={<PiggyBank size={20} />}
+            color={SECTION_COLOR.pettyFund}
+            title={fund ? 'إعدادات الصندوق' : 'إعداد صندوق النثريات'}
+            subtitle="الحساب المحاسبي، الحدود، وأمين صندوق النثريات"
+            action={fund && (
+              <Tag
+                icon={fundForm.status === 'active' ? <CheckCircle2 size={12} style={{ marginLeft: 4 }} /> : <XCircle size={12} style={{ marginLeft: 4 }} />}
+                color={fundForm.status === 'active' ? 'success' : 'default'}
               >
-                حفظ إعدادات القيود
-              </Button>
-            </Box>
-          </Stack>
-        )}
-      </Paper>
+                {fundForm.status === 'active' ? 'مُفعّل' : 'غير مُفعّل'}
+              </Tag>
+            )}
+          />
+
+          {fundLoading ? <Spin /> : (
+            <Flex vertical gap={20} style={{ maxWidth: 520 }}>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>اسم الصندوق</Text>
+                <Input value={fundForm.name} onChange={e => setFundForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>أمين الصندوق</Text>
+                <Input value={fundForm.custodian_name} onChange={e => setFundForm(f => ({ ...f, custodian_name: e.target.value }))} />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حساب الصندوق (أصل)</Text>
+                <Select
+                  showSearch
+                  style={{ width: '100%' }}
+                  value={fundForm.account_id?.id}
+                  onChange={v => setFundForm(f => ({ ...f, account_id: assetAccounts.find(a => a.id === v) ?? null }))}
+                  notFoundContent="لا توجد حسابات"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={assetAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+              </div>
+              <Flex gap={16}>
+                <div style={{ flex: 1 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الحد الأقصى</Text>
+                  <Input type="number" value={fundForm.max_amount} onChange={e => setFundForm(f => ({ ...f, max_amount: e.target.value }))} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حد التنبيه المنخفض</Text>
+                  <Input type="number" value={fundForm.low_balance_threshold} onChange={e => setFundForm(f => ({ ...f, low_balance_threshold: e.target.value }))} />
+                </div>
+              </Flex>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الحالة</Text>
+                <Select
+                  style={{ width: '100%' }}
+                  value={fundForm.status}
+                  onChange={v => setFundForm(f => ({ ...f, status: v }))}
+                  options={[{ value: 'active', label: 'مُفعّل' }, { value: 'inactive', label: 'غير مُفعّل' }]}
+                />
+              </div>
+
+              <Divider style={{ margin: 0 }} />
+
+              <Flex justify="flex-end">
+                <Button
+                  type="primary"
+                  icon={fundSaving ? <Spin size="small" /> : <Save size={16} />}
+                  onClick={handleFundSave}
+                  disabled={fundSaving || !fundForm.name || !fundForm.custodian_name || !fundForm.account_id || !fundForm.max_amount}
+                >
+                  حفظ إعدادات الصندوق
+                </Button>
+              </Flex>
+            </Flex>
+          )}
+        </div>
+      )}
+
+      {/* Petty cash approval settings */}
+      {activeTab === 'approval' && (
+        <div style={cardStyle}>
+          <SectionHeader
+            icon={<ClipboardCheck size={20} />}
+            color={SECTION_COLOR.approval}
+            title="اعتماد صندوق النثريات"
+            subtitle="المسؤولون عن اعتماد طلبات الصرف وقنوات إشعارهم عبر واتساب"
+          />
+
+          {pettyCashLoading ? <Spin /> : (
+            <Flex vertical gap={24}>
+              <Flex gap={16} wrap="wrap">
+                {/* Manager */}
+                <div style={{ flex: 1, minWidth: 260, padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
+                  <Flex align="center" gap={8} style={{ marginBottom: 16 }}>
+                    <User size={15} color={SECTION_COLOR.approval} />
+                    <Text style={{ fontWeight: 700 }}>المدير المعتمِد</Text>
+                  </Flex>
+                  <Flex vertical gap={14}>
+                    <Select
+                      showSearch
+                      placeholder="المستخدم"
+                      style={{ width: '100%' }}
+                      value={pettyCashApproval.petty_cash_manager_user_id ?? undefined}
+                      onChange={v => setPettyCashApproval(p => ({ ...p, petty_cash_manager_user_id: v ?? null }))}
+                      allowClear
+                      filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                      options={users.map(u => ({ value: u.id, label: u.name }))}
+                    />
+                    <Input
+                      placeholder="رقم واتساب" dir="ltr"
+                      value={pettyCashApproval.petty_cash_manager_whatsapp_phone}
+                      onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_manager_whatsapp_phone: e.target.value }))}
+                    />
+                  </Flex>
+                </div>
+
+                {/* Auditor */}
+                <div style={{ flex: 1, minWidth: 260, padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
+                  <Flex align="center" gap={8} style={{ marginBottom: 16 }}>
+                    <User size={15} color={SECTION_COLOR.approval} />
+                    <Text style={{ fontWeight: 700 }}>المراجع المعتمِد</Text>
+                  </Flex>
+                  <Flex vertical gap={14}>
+                    <Select
+                      showSearch
+                      placeholder="المستخدم"
+                      style={{ width: '100%' }}
+                      value={pettyCashApproval.petty_cash_auditor_user_id ?? undefined}
+                      onChange={v => setPettyCashApproval(p => ({ ...p, petty_cash_auditor_user_id: v ?? null }))}
+                      allowClear
+                      filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                      options={users.map(u => ({ value: u.id, label: u.name }))}
+                    />
+                    <Input
+                      placeholder="رقم واتساب" dir="ltr"
+                      value={pettyCashApproval.petty_cash_auditor_whatsapp_phone}
+                      onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_auditor_whatsapp_phone: e.target.value }))}
+                    />
+                  </Flex>
+                </div>
+              </Flex>
+
+              {/* WhatsApp auto-notify on creation */}
+              <div style={{ padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
+                <Flex align="center" justify="space-between" gap={16} wrap="wrap">
+                  <Flex align="center" gap={8}>
+                    <MessageCircle size={15} color={SECTION_COLOR.approval} />
+                    <div>
+                      <Text style={{ fontWeight: 700, display: 'block' }}>إشعار واتساب عند إنشاء مصروف</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>إرسال تلقائي لطلب الاعتماد فور حفظ المصروف</Text>
+                    </div>
+                  </Flex>
+                  <Switch
+                    checked={pettyCashApproval.petty_cash_notify_on_create}
+                    onChange={checked => setPettyCashApproval(p => ({ ...p, petty_cash_notify_on_create: checked }))}
+                  />
+                </Flex>
+
+                {pettyCashApproval.petty_cash_notify_on_create && (
+                  <>
+                    <Divider style={{ margin: '16px 0' }} />
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>إرسال الإشعار إلى</Text>
+                    <Radio.Group
+                      value={pettyCashApproval.petty_cash_notify_recipients}
+                      onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_notify_recipients: e.target.value }))}
+                      options={[
+                        { value: 'both', label: 'المدير والمراجع' },
+                        { value: 'manager', label: 'المدير فقط' },
+                        { value: 'auditor', label: 'المراجع فقط' },
+                      ]}
+                    />
+                  </>
+                )}
+              </div>
+
+              {/* Firebase integration */}
+              <div>
+                <Flex align="center" gap={8} style={{ marginBottom: 10 }}>
+                  <LinkIcon size={15} color="var(--ant-color-text-secondary)" />
+                  <Text style={{ fontWeight: 700 }}>إعدادات الربط مع Firestore</Text>
+                </Flex>
+                <Input
+                  dir="ltr"
+                  style={{ maxWidth: 420 }}
+                  placeholder="مثال: jawda"
+                  value={pettyCashApproval.firebase_collection_name}
+                  onChange={e => setPettyCashApproval(p => ({ ...p, firebase_collection_name: e.target.value }))}
+                />
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4, maxWidth: 420 }}>
+                  جذر مسار مستندات الاعتماد في Firestore: finance/{'{الاسم}'}/petty_cash_approvals/... — يُستخدم jawda افتراضياً إن تُرك فارغاً
+                </Text>
+              </div>
+
+              <Divider style={{ margin: 0 }} />
+
+              <Flex justify="flex-end">
+                <Button
+                  type="primary"
+                  icon={pettyCashSaving ? <Spin size="small" /> : <Save size={16} />}
+                  onClick={handlePettyCashApprovalSave}
+                  disabled={pettyCashSaving}
+                >
+                  حفظ إعدادات الاعتماد
+                </Button>
+              </Flex>
+            </Flex>
+          )}
+        </div>
+      )}
 
       {/* API Tokens */}
-      <ApiTokensSection />
-
-      <Snackbar
-        open={success}
-        autoHideDuration={3000}
-        onClose={() => setSuccess(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity="success" onClose={() => setSuccess(false)}>
-          تم حفظ الإعدادات بنجاح
-        </Alert>
-      </Snackbar>
-    </Box>
+      {activeTab === 'tokens' && <ApiTokensSection />}
+    </div>
   )
 }
 
@@ -479,104 +700,86 @@ function ApiTokensSection() {
 
   return (
     <>
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-          <KeyIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>رموز API</Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-            (تُستخدم لربط الأنظمة الخارجية كنظام العيادة)
-          </Typography>
-        </Box>
-        <Divider sx={{ mb: 2.5 }} />
+      <div style={{ padding: 24, borderRadius: 12, border: '1px solid var(--ant-color-border-secondary)' }}>
+        <SectionHeader
+          icon={<KeyRound size={20} />}
+          color={SECTION_COLOR.tokens}
+          title="رموز API"
+          subtitle="تُستخدم لربط الأنظمة الخارجية، مثل نظام العيادة، بهذا النظام"
+        />
 
         {/* Create new token */}
-        <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
-          <TextField
-            size="small"
-            label="اسم الرمز"
-            placeholder="مثال: نظام العيادة"
+        <Flex gap={8} style={{ marginBottom: 20 }}>
+          <Input
+            placeholder="اسم الرمز — مثال: نظام العيادة"
             value={tokenName}
             onChange={e => setTokenName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCreate()}
-            sx={{ minWidth: 220 }}
+            onPressEnter={handleCreate}
+            style={{ minWidth: 220 }}
           />
           <Button
-            variant="contained"
-            size="small"
-            startIcon={creating ? <CircularProgress size={14} color="inherit" /> : <AddIcon />}
+            type="primary"
+            icon={creating ? <Spin size="small" /> : <Plus size={16} />}
             onClick={handleCreate}
             disabled={!tokenName.trim() || creating}
           >
             إنشاء رمز
           </Button>
-        </Box>
+        </Flex>
 
         {/* Token list */}
         {loading ? (
-          <CircularProgress size={22} />
+          <Spin />
         ) : tokens.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">لا توجد رموز API بعد.</Typography>
+          <Text type="secondary">لا توجد رموز API بعد.</Text>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Flex vertical gap={8}>
             {tokens.map(t => (
-              <Box
-                key={t.id}
-                sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}
-              >
-                <KeyIcon fontSize="small" color="action" />
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{t.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">
+              <Flex key={t.id} align="center" gap={12} style={{ padding: 12, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+                <KeyRound size={15} color="var(--ant-color-text-secondary)" />
+                <div style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: 600, display: 'block' }}>{t.name}</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
                     أُنشئ {new Date(t.created_at).toLocaleDateString('ar')}
                     {t.last_used_at ? ` · آخر استخدام ${new Date(t.last_used_at).toLocaleDateString('ar')}` : ' · لم يُستخدم بعد'}
-                  </Typography>
-                </Box>
-                <Chip label="نشط" color="success" size="small" variant="outlined" />
+                  </Text>
+                </div>
+                <Tag color="success">نشط</Tag>
                 <Tooltip title="حذف الرمز">
-                  <IconButton size="small" color="error" onClick={() => handleDelete(t.id)}>
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
+                  <Button type="text" shape="circle" size="small" danger onClick={() => handleDelete(t.id)} icon={<Trash2 size={15} />} />
                 </Tooltip>
-              </Box>
+              </Flex>
             ))}
-          </Box>
+          </Flex>
         )}
-      </Paper>
+      </div>
 
       {/* Plain token dialog — shown ONCE after creation */}
-      <Dialog open={!!plainToken} onClose={() => setPlainToken(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <KeyIcon color="warning" />
-          احفظ الرمز الآن — لن يظهر مجدداً
-        </DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            انسخ هذا الرمز والصقه في إعدادات نظام العيادة. بعد إغلاق هذه النافذة لن تتمكن من رؤيته مرة أخرى.
-          </Alert>
-          <TextField
-            fullWidth
-            value={plainToken ?? ''}
-            slotProps={{
-              input: {
-                readOnly: true,
-                sx: { fontFamily: 'monospace', fontSize: 13, direction: 'ltr' },
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip title={copied ? 'تم النسخ!' : 'نسخ'}>
-                      <IconButton onClick={handleCopy} edge="end" color={copied ? 'success' : 'default'}>
-                        <ContentCopyIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-            <Button variant="contained" onClick={() => setPlainToken(null)}>تم، أغلق</Button>
-          </Box>
-        </DialogContent>
-      </Dialog>
+      <Modal
+        open={!!plainToken}
+        onCancel={() => setPlainToken(null)}
+        width={520}
+        title={<Flex align="center" gap={8}><KeyRound size={18} color="var(--ant-color-warning)" /> احفظ الرمز الآن — لن يظهر مجدداً</Flex>}
+        footer={
+          <Flex justify="flex-end">
+            <Button type="primary" onClick={() => setPlainToken(null)}>تم، أغلق</Button>
+          </Flex>
+        }
+      >
+        <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+          message="انسخ هذا الرمز والصقه في إعدادات نظام العيادة. بعد إغلاق هذه النافذة لن تتمكن من رؤيته مرة أخرى."
+        />
+        <Input
+          readOnly
+          value={plainToken ?? ''}
+          style={{ fontFamily: 'monospace', fontSize: 13, direction: 'ltr' }}
+          suffix={
+            <Tooltip title={copied ? 'تم النسخ!' : 'نسخ'}>
+              <Button type="text" size="small" onClick={handleCopy} icon={<Copy size={15} color={copied ? 'var(--ant-color-success)' : undefined} />} />
+            </Tooltip>
+          }
+        />
+      </Modal>
     </>
   )
 }
@@ -595,70 +798,55 @@ function PdfHeaderPreview({ name, address, phone, logoUrl, position }: PreviewPr
   const hasContent = name || logoUrl
 
   return (
-    <Box
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 2,
-        p: 2,
-        bgcolor: '#fff',
-        fontFamily: 'serif',
-        direction: 'rtl',
-        minHeight: 80,
-      }}
-    >
+    <div style={{
+      border: '1px solid var(--ant-color-border-secondary)',
+      borderRadius: 8,
+      padding: 16,
+      background: '#fff',
+      fontFamily: 'serif',
+      direction: 'rtl',
+      minHeight: 80,
+    }}>
       {!hasContent && (
-        <Typography variant="caption" color="text.disabled" sx={{ display: 'block', textAlign: 'center', py: 2 }}>
+        <Text type="secondary" style={{ display: 'block', textAlign: 'center', padding: '16px 0', fontSize: 12 }}>
           أدخل اسم الشركة أو ارفع شعاراً لعرض المعاينة
-        </Typography>
+        </Text>
       )}
 
       {hasContent && position === 'full' && (
-        <Box>
+        <div>
           {logoUrl && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
-              <Box
-                component="img"
-                src={logoUrl}
-                alt=""
-                sx={{ maxHeight: 48, maxWidth: '100%', objectFit: 'contain' }}
-              />
-            </Box>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+              <img src={logoUrl} alt="" style={{ maxHeight: 48, maxWidth: '100%', objectFit: 'contain' }} />
+            </div>
           )}
-          <Box sx={{ textAlign: 'center' }}>
-            {name && <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{name}</Typography>}
-            {address && <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>{address}</Typography>}
-            {phone && <Typography sx={{ fontSize: 9, color: 'text.secondary', direction: 'ltr' }}>{phone}</Typography>}
-          </Box>
-        </Box>
+          <div style={{ textAlign: 'center', color: '#000' }}>
+            {name && <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>}
+            {address && <div style={{ fontSize: 10, color: '#666' }}>{address}</div>}
+            {phone && <div style={{ fontSize: 9, color: '#666', direction: 'ltr' }}>{phone}</div>}
+          </div>
+        </div>
       )}
 
       {hasContent && (position === 'right' || position === 'left') && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexDirection: position === 'right' ? 'row' : 'row-reverse' }}>
-          {logoUrl && (
-            <Box
-              component="img"
-              src={logoUrl}
-              alt=""
-              sx={{ height: 52, maxWidth: 80, objectFit: 'contain', flexShrink: 0 }}
-            />
-          )}
-          <Box sx={{ flex: 1, textAlign: 'center' }}>
-            {name && <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{name}</Typography>}
-            {address && <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>{address}</Typography>}
-            {phone && <Typography sx={{ fontSize: 9, color: 'text.secondary', direction: 'ltr' }}>{phone}</Typography>}
-          </Box>
-        </Box>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexDirection: position === 'right' ? 'row' : 'row-reverse' }}>
+          {logoUrl && <img src={logoUrl} alt="" style={{ height: 52, maxWidth: 80, objectFit: 'contain', flexShrink: 0 }} />}
+          <div style={{ flex: 1, textAlign: 'center', color: '#000' }}>
+            {name && <div style={{ fontWeight: 700, fontSize: 13 }}>{name}</div>}
+            {address && <div style={{ fontSize: 10, color: '#666' }}>{address}</div>}
+            {phone && <div style={{ fontSize: 9, color: '#666', direction: 'ltr' }}>{phone}</div>}
+          </div>
+        </div>
       )}
 
       {hasContent && (
         <>
-          <Divider sx={{ my: 1, borderColor: 'grey.300' }} />
-          <Typography sx={{ fontSize: 10, textAlign: 'center', color: 'text.secondary', fontStyle: 'italic' }}>
+          <div style={{ margin: '8px 0', borderTop: '1px solid #d1d5db' }} />
+          <div style={{ fontSize: 10, textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
             اسم التقرير · الفترة
-          </Typography>
+          </div>
         </>
       )}
-    </Box>
+    </div>
   )
 }

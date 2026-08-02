@@ -1,19 +1,16 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Box, Button, CircularProgress,
-  Divider, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField,
-  ToggleButton, ToggleButtonGroup, Tooltip, Typography,
-} from '@mui/material'
+  Button, Divider, Flex, Row, Col, Segmented, Spin, Tooltip, Typography,
+} from 'antd'
 import HelpButton from '@/components/common/HelpButton'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import TrendingDownIcon from '@mui/icons-material/TrendingDown'
-import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined'
-import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
-import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
+import DateInput from '@/components/common/DateInput'
+import { useToast } from '@/lib/toast'
+import { FileDown, FileText, Rows3, TrendingDown, TrendingUp } from 'lucide-react'
 import api from '@/lib/axios'
 import { openPdf } from '@/api/pdf'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
+
+const { Title, Text } = Typography
 
 interface ISRow {
   account_id: number
@@ -38,8 +35,7 @@ interface IncomeStatementData {
 
 interface Settings { company_name: string; address?: string; phone?: string }
 
-const numFmt = (v: string | number) =>
-  Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const numFmt = (v: string | number) => Math.round(Number(v)).toLocaleString('en-US')
 
 const today = () => {
   const d = new Date()
@@ -47,170 +43,113 @@ const today = () => {
 }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
-// ── Shared section header ──────────────────────────────────────────────────
-function SectionHeader({ label, sub }: { label: string; sub?: string }) {
-  return (
-    <TableRow>
-      <TableCell
-        colSpan={3}
-        sx={{
-          bgcolor: '#5b21b6',
-          color: 'white',
-          fontWeight: 700,
-          fontSize: 14,
-          py: 1,
-          borderBottom: 'none',
-        }}
-      >
-        {sub && (
-          <Typography component="span" sx={{ fontWeight: 400, fontSize: 12, opacity: 0.8, ml: 1 }}>
-            {sub}
-          </Typography>
-        )}
-        {label}
-      </TableCell>
-    </TableRow>
-  )
-}
-
 // ── Formal statement view ──────────────────────────────────────────────────
 function StatementView({ data, settings }: { data: IncomeStatementData; settings: Settings | null }) {
   const netProfit  = Number(data.net_profit)
   const isProfit   = data.is_profit
 
-  const cellStyle = {
-    fontSize: 13,
-    borderColor: 'divider',
-  }
-
-  const amountCell = {
-    ...cellStyle,
-    direction: 'ltr' as const,
-    fontVariantNumeric: 'tabular-nums',
-    width: '21%',
-    textAlign: 'left' as const,
-  }
-
   return (
-    <TableContainer component={Paper} elevation={1}>
+    <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
       {/* Report header */}
-      <Box sx={{ textAlign: 'center', py: 3, px: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <div style={{ textAlign: 'center', padding: '24px 16px', borderBottom: '1px solid var(--ant-color-border-secondary)' }}>
         {settings?.company_name && (
-          <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.25 }}>
-            {settings.company_name}
-          </Typography>
+          <Title level={5} style={{ marginBottom: 2 }}>{settings.company_name}</Title>
         )}
-        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-          قائمة الدخل
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          عن الفترة من {data.from} إلى {data.to}
-        </Typography>
-      </Box>
+        <Text strong>قائمة الدخل</Text>
+        <br />
+        <Text type="secondary">عن الفترة من {data.from} إلى {data.to}</Text>
+      </div>
 
-      <Table size="small">
-        {/* Column headers */}
-        <TableHead>
-          <TableRow sx={{ bgcolor: 'grey.100' }}>
-            <TableCell sx={{ fontWeight: 700, fontSize: 13 }}>البيان</TableCell>
-            <TableCell align="left" sx={{ fontWeight: 700, fontSize: 13, width: '21%' }}>فرعي</TableCell>
-            <TableCell align="left" sx={{ fontWeight: 700, fontSize: 13, width: '21%' }}>إجمالي</TableCell>
-          </TableRow>
-        </TableHead>
-
-        <TableBody>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+            <th style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>البيان</th>
+            <th style={{ padding: 8, textAlign: 'left', fontWeight: 700, width: '21%' }}>فرعي</th>
+            <th style={{ padding: 8, textAlign: 'left', fontWeight: 700, width: '21%' }}>إجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
           {/* ── Revenue section ── */}
-          <SectionHeader label="الإيرادات" />
+          <tr>
+            <td colSpan={3} style={{ background: '#5b21b6', color: 'white', fontWeight: 700, fontSize: 14, padding: '8px 12px' }}>
+              الإيرادات
+            </td>
+          </tr>
 
           {data.revenue.map(row => (
-            <TableRow key={row.account_id} hover>
-              <TableCell sx={cellStyle}>{row.name}</TableCell>
-              <TableCell sx={{ ...amountCell, color: 'success.main' }}>{numFmt(row.net)}</TableCell>
-              <TableCell sx={amountCell} />
-            </TableRow>
+            <tr key={row.account_id} style={{ borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+              <td style={{ padding: 8 }}>{row.name}</td>
+              <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', color: 'var(--ant-color-success)' }}>{numFmt(row.net)}</td>
+              <td style={{ padding: 8 }} />
+            </tr>
           ))}
 
           {data.revenue.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={3} align="center" sx={{ py: 3, color: 'text.secondary', fontSize: 12 }}>
-                لا توجد إيرادات
-              </TableCell>
-            </TableRow>
+            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '12px', color: 'var(--ant-color-text-secondary)', fontSize: 12 }}>لا توجد إيرادات</td></tr>
           )}
 
-          {/* Revenue total */}
-          <TableRow sx={{ bgcolor: 'grey.50' }}>
-            <TableCell sx={{ ...cellStyle, fontWeight: 700 }}>إجمالي الإيرادات</TableCell>
-            <TableCell sx={amountCell} />
-            <TableCell sx={{ ...amountCell, fontWeight: 700, color: 'success.main', borderTop: '2px solid', borderColor: 'success.light' }}>
+          <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+            <td style={{ padding: 8, fontWeight: 700 }}>إجمالي الإيرادات</td>
+            <td style={{ padding: 8 }} />
+            <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', fontWeight: 700, color: 'var(--ant-color-success)', borderTop: '2px solid var(--ant-color-success-border)' }}>
               {numFmt(data.total_revenue)}
-            </TableCell>
-          </TableRow>
+            </td>
+          </tr>
 
-          {/* Spacer */}
-          <TableRow><TableCell colSpan={3} sx={{ py: 0.75, borderBottom: 'none' }} /></TableRow>
+          <tr><td colSpan={3} style={{ padding: '6px 0' }} /></tr>
 
           {/* ── Expenses section ── */}
-          <SectionHeader label="المصروفات" sub="يطرح:" />
+          <tr>
+            <td colSpan={3} style={{ background: '#5b21b6', color: 'white', fontWeight: 700, fontSize: 14, padding: '8px 12px' }}>
+              <span style={{ fontWeight: 400, fontSize: 12, opacity: 0.8, marginLeft: 8 }}>يطرح:</span>
+              المصروفات
+            </td>
+          </tr>
 
           {data.expenses.map(row => (
-            <TableRow key={row.account_id} hover>
-              <TableCell sx={cellStyle}>{row.name}</TableCell>
-              <TableCell sx={{ ...amountCell, color: 'error.main' }}>{numFmt(row.net)}</TableCell>
-              <TableCell sx={amountCell} />
-            </TableRow>
+            <tr key={row.account_id} style={{ borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+              <td style={{ padding: 8 }}>{row.name}</td>
+              <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', color: 'var(--ant-color-error)' }}>{numFmt(row.net)}</td>
+              <td style={{ padding: 8 }} />
+            </tr>
           ))}
 
           {data.expenses.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={3} align="center" sx={{ py: 3, color: 'text.secondary', fontSize: 12 }}>
-                لا توجد مصروفات
-              </TableCell>
-            </TableRow>
+            <tr><td colSpan={3} style={{ textAlign: 'center', padding: '12px', color: 'var(--ant-color-text-secondary)', fontSize: 12 }}>لا توجد مصروفات</td></tr>
           )}
 
-          {/* Expenses total */}
-          <TableRow sx={{ bgcolor: 'grey.50' }}>
-            <TableCell sx={{ ...cellStyle, fontWeight: 700 }}>إجمالي المصروفات</TableCell>
-            <TableCell sx={amountCell} />
-            <TableCell sx={{ ...amountCell, fontWeight: 700, color: 'error.main', borderTop: '2px solid', borderColor: 'error.light' }}>
+          <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+            <td style={{ padding: 8, fontWeight: 700 }}>إجمالي المصروفات</td>
+            <td style={{ padding: 8 }} />
+            <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', fontWeight: 700, color: 'var(--ant-color-error)', borderTop: '2px solid var(--ant-color-error-border)' }}>
               ({numFmt(data.total_expense)})
-            </TableCell>
-          </TableRow>
+            </td>
+          </tr>
 
-          {/* Spacer */}
-          <TableRow><TableCell colSpan={3} sx={{ py: 0.5, borderBottom: 'none' }} /></TableRow>
+          <tr><td colSpan={3} style={{ padding: '4px 0' }} /></tr>
 
           {/* ── Net Profit / Loss ── */}
-          <TableRow
-            sx={{
-              bgcolor: isProfit ? 'success.50' : 'error.50',
-              '& td': { borderTop: '2px solid', borderColor: isProfit ? 'success.main' : 'error.main' },
-            }}
-          >
-            <TableCell sx={{ fontWeight: 800, fontSize: 14, color: isProfit ? 'success.dark' : 'error.dark' }}>
+          <tr style={{
+            background: isProfit ? 'var(--ant-color-success-bg)' : 'var(--ant-color-error-bg)',
+            borderTop: `2px solid ${isProfit ? 'var(--ant-color-success)' : 'var(--ant-color-error)'}`,
+          }}>
+            <td style={{ padding: 8, fontWeight: 800, fontSize: 14, color: isProfit ? 'var(--ant-color-success)' : 'var(--ant-color-error)' }}>
               {isProfit ? 'صافي الربح' : 'صافي الخسارة'}
-            </TableCell>
-            <TableCell sx={amountCell} />
-            <TableCell
-              sx={{
-                ...amountCell,
-                fontWeight: 800,
-                fontSize: 15,
-                color: isProfit ? 'success.dark' : 'error.dark',
-              }}
-            >
+            </td>
+            <td style={{ padding: 8 }} />
+            <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', fontWeight: 800, fontSize: 15, color: isProfit ? 'var(--ant-color-success)' : 'var(--ant-color-error)' }}>
               {numFmt(Math.abs(netProfit))}
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </TableContainer>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   )
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function IncomeStatementPage() {
+  const toast = useToast()
   const [from, setFrom]             = useState(yearStart())
   const [to, setTo]                 = useState(today())
   const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
@@ -219,7 +158,6 @@ export default function IncomeStatementPage() {
   const [viewMode, setViewMode]     = useState<'columns' | 'statement'>('columns')
   const [loading, setLoading]       = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
-  const [error, setError]           = useState<string | null>(null)
 
   const handlePdf = async () => {
     setPdfLoading(true)
@@ -229,11 +167,10 @@ export default function IncomeStatementPage() {
 
   const load = (f = from, t = to, fyId = fiscalYearId) => {
     setLoading(true)
-    setError(null)
     const params = fyId ? { fiscal_year_id: fyId } : { from: f, to: t }
     api.get<IncomeStatementData>('/api/reports/income-statement', { params })
       .then(r => setData(r.data))
-      .catch(() => setError('تعذّر تحميل البيانات'))
+      .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
   }
 
@@ -250,44 +187,42 @@ export default function IncomeStatementPage() {
   }, [])
 
   return (
-    <Box>
+    <div>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>قائمة الدخل</Typography>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>قائمة الدخل</Title>
         <HelpButton title="دليل استخدام قائمة الدخل">
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي قائمة الدخل؟</Typography>
-              <Typography variant="body2">قائمة الدخل (حساب الأرباح والخسائر) تُظهر نتيجة النشاط خلال فترة محددة: الإيرادات ناقص المصروفات = صافي الربح أو الخسارة.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الإيرادات والمصروفات</Typography>
-              <Typography variant="body2">الإيرادات: المبالغ المحصّلة من النشاط الرئيسي. المصروفات: التكاليف المتكبّدة لتحقيق تلك الإيرادات. الفرق بينهما هو صافي النتيجة.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>اختيار الفترة</Typography>
-              <Typography variant="body2">حدد "من تاريخ" و"إلى تاريخ" لعرض نتائج فترة محددة. يمكن استخدام منتقي السنة المالية للاختيار السريع.</Typography></Box>
-            <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>طريقة العرض</Typography>
-              <Typography variant="body2">يمكن التبديل بين العرض الجدولي والعرض التفصيلي. تصدير PDF يُنتج تقريراً رسمياً يحمل اسم الشركة.</Typography></Box>
-          </Box>
+          <Flex vertical gap={16}>
+            <div><Title level={5}>ما هي قائمة الدخل؟</Title>
+              <Text>قائمة الدخل (حساب الأرباح والخسائر) تُظهر نتيجة النشاط خلال فترة محددة: الإيرادات ناقص المصروفات = صافي الربح أو الخسارة.</Text></div>
+            <div><Title level={5}>الإيرادات والمصروفات</Title>
+              <Text>الإيرادات: المبالغ المحصّلة من النشاط الرئيسي. المصروفات: التكاليف المتكبّدة لتحقيق تلك الإيرادات. الفرق بينهما هو صافي النتيجة.</Text></div>
+            <div><Title level={5}>اختيار الفترة</Title>
+              <Text>حدد "من تاريخ" و"إلى تاريخ" لعرض نتائج فترة محددة. يمكن استخدام منتقي السنة المالية للاختيار السريع.</Text></div>
+            <div><Title level={5}>طريقة العرض</Title>
+              <Text>يمكن التبديل بين العرض الجدولي والعرض التفصيلي. تصدير PDF يُنتج تقريراً رسمياً يحمل اسم الشركة.</Text></div>
+          </Flex>
         </HelpButton>
-      </Box>
+      </Flex>
 
       {/* Filters */}
-      <Paper sx={{ p: 2.5, mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <div style={{ padding: 20, marginBottom: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+        <Flex gap={12} align="flex-end" wrap="wrap">
           <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={yearStart()} defaultTo={today()} />
-          <TextField
-            label="من تاريخ" type="date" value={from}
-            onChange={e => handleFromChange(e.target.value)}
-            size="small" slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            label="إلى تاريخ" type="date" value={to}
-            onChange={e => handleToChange(e.target.value)}
-            size="small" slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <Button variant="contained" onClick={() => load()} disabled={loading}>
-            {loading ? <CircularProgress size={18} /> : 'عرض'}
+          <Flex vertical gap={4}>
+            <Text type="secondary" style={{ fontSize: 12 }}>من تاريخ</Text>
+            <DateInput value={from} onChange={e => handleFromChange(e.target.value)} />
+          </Flex>
+          <Flex vertical gap={4}>
+            <Text type="secondary" style={{ fontSize: 12 }}>إلى تاريخ</Text>
+            <DateInput value={to} onChange={e => handleToChange(e.target.value)} />
+          </Flex>
+          <Button type="primary" onClick={() => load()} disabled={loading}>
+            {loading ? <Spin size="small" /> : 'عرض'}
           </Button>
           <Button
-            variant="outlined" color="error"
-            startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfOutlinedIcon />}
+            danger
+            icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />}
             onClick={handlePdf}
             disabled={pdfLoading || !data}
           >
@@ -295,160 +230,139 @@ export default function IncomeStatementPage() {
           </Button>
 
           {/* View toggle */}
-          <Box sx={{ mr: 'auto' }}>
-            <ToggleButtonGroup value={viewMode} exclusive size="small"
-              onChange={(_, v) => v && setViewMode(v)}>
-              <ToggleButton value="columns">
-                <Tooltip title="عرض عمودين">
-                  <TableRowsOutlinedIcon fontSize="small" />
-                </Tooltip>
-              </ToggleButton>
-              <ToggleButton value="statement">
-                <Tooltip title="قائمة رسمية (بيان / فرعي / إجمالي)">
-                  <ArticleOutlinedIcon fontSize="small" />
-                </Tooltip>
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
-        </Box>
-      </Paper>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          <div style={{ marginRight: 'auto' }}>
+            <Segmented
+              value={viewMode}
+              onChange={v => setViewMode(v as 'columns' | 'statement')}
+              options={[
+                { value: 'columns', icon: <Tooltip title="عرض عمودين"><Rows3 size={15} /></Tooltip> },
+                { value: 'statement', icon: <Tooltip title="قائمة رسمية (بيان / فرعي / إجمالي)"><FileText size={15} /></Tooltip> },
+              ]}
+            />
+          </div>
+        </Flex>
+      </div>
 
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <Flex justify="center" style={{ padding: '64px 0' }}>
+          <Spin size="large" />
+        </Flex>
       )}
 
       {/* ── Statement view ── */}
       {!loading && data && viewMode === 'statement' && (
-        <Box sx={{ maxWidth: 720 }}>
+        <div style={{ maxWidth: 720 }}>
           <StatementView data={data} settings={settings} />
-        </Box>
+        </div>
       )}
 
       {/* ── Columns view (original) ── */}
       {!loading && data && viewMode === 'columns' && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, alignItems: 'start' }}>
+        <Row gutter={[24, 24]}>
           {/* Revenue */}
-          <TableContainer component={Paper}>
-            <Box sx={{ px: 2.5, pt: 2, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TrendingUpIcon color="success" />
-              <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.main' }}>الإيرادات</Typography>
-            </Box>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ width: 80 }}>الرمز</TableCell>
-                  <TableCell>الحساب</TableCell>
-                  <TableCell align="left">صافي الإيراد</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {data.revenue.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={3} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                      لا توجد إيرادات
-                    </TableCell>
-                  </TableRow>
-                )}
-                {data.revenue.map(row => (
-                  <TableRow key={row.account_id} hover>
-                    <TableCell sx={{ color: 'text.secondary', direction: 'ltr', textAlign: 'right' }}>{row.code}</TableCell>
-                    <TableCell>{row.name}</TableCell>
-                    <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums',
-                      color: Number(row.net) >= 0 ? 'success.main' : 'error.main', fontWeight: 500 }}>
-                      {numFmt(row.net)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow sx={{ bgcolor: 'success.50', '& td': { borderTop: '2px solid', borderColor: 'divider', fontWeight: 700 } }}>
-                  <TableCell colSpan={2} align="center">إجمالي الإيرادات</TableCell>
-                  <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'success.main' }}>
-                    {numFmt(data.total_revenue)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Col xs={24} md={12}>
+            <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
+              <Flex align="center" gap={8} style={{ padding: '16px 20px 8px' }}>
+                <TrendingUp size={20} color="var(--ant-color-success)" />
+                <Title level={5} style={{ margin: 0, color: 'var(--ant-color-success)' }}>الإيرادات</Title>
+              </Flex>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: 8, textAlign: 'right', width: 80 }}>الرمز</th>
+                    <th style={{ padding: 8, textAlign: 'right' }}>الحساب</th>
+                    <th style={{ padding: 8, textAlign: 'left' }}>صافي الإيراد</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.revenue.length === 0 && (
+                    <tr><td colSpan={3} style={{ textAlign: 'center', padding: 24, color: 'var(--ant-color-text-secondary)' }}>لا توجد إيرادات</td></tr>
+                  )}
+                  {data.revenue.map(row => (
+                    <tr key={row.account_id} style={{ borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+                      <td style={{ padding: 8, color: 'var(--ant-color-text-secondary)', direction: 'ltr', textAlign: 'right' }}>{row.code}</td>
+                      <td style={{ padding: 8 }}>{row.name}</td>
+                      <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', color: Number(row.net) >= 0 ? 'var(--ant-color-success)' : 'var(--ant-color-error)', fontWeight: 500 }}>
+                        {numFmt(row.net)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: 'var(--ant-color-success-bg)', borderTop: '2px solid var(--ant-color-border-secondary)', fontWeight: 700 }}>
+                    <td colSpan={2} style={{ padding: 8, textAlign: 'center' }}>إجمالي الإيرادات</td>
+                    <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', color: 'var(--ant-color-success)' }}>{numFmt(data.total_revenue)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Col>
 
           {/* Expenses */}
-          <TableContainer component={Paper}>
-            <Box sx={{ px: 2.5, pt: 2, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TrendingDownIcon color="error" />
-              <Typography variant="h6" sx={{ fontWeight: 700, color: 'error.main' }}>المصروفات</Typography>
-            </Box>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ width: 80 }}>الرمز</TableCell>
-                  <TableCell>الحساب</TableCell>
-                  <TableCell align="left">صافي المصروف</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {data.expenses.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={3} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                      لا توجد مصروفات
-                    </TableCell>
-                  </TableRow>
-                )}
-                {data.expenses.map(row => (
-                  <TableRow key={row.account_id} hover>
-                    <TableCell sx={{ color: 'text.secondary', direction: 'ltr', textAlign: 'right' }}>{row.code}</TableCell>
-                    <TableCell>{row.name}</TableCell>
-                    <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums',
-                      color: 'error.main', fontWeight: 500 }}>
-                      {numFmt(row.net)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow sx={{ bgcolor: 'error.50', '& td': { borderTop: '2px solid', borderColor: 'divider', fontWeight: 700 } }}>
-                  <TableCell colSpan={2} align="center">إجمالي المصروفات</TableCell>
-                  <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'error.main' }}>
-                    {numFmt(data.total_expense)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Col xs={24} md={12}>
+            <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
+              <Flex align="center" gap={8} style={{ padding: '16px 20px 8px' }}>
+                <TrendingDown size={20} color="var(--ant-color-error)" />
+                <Title level={5} style={{ margin: 0, color: 'var(--ant-color-error)' }}>المصروفات</Title>
+              </Flex>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: 8, textAlign: 'right', width: 80 }}>الرمز</th>
+                    <th style={{ padding: 8, textAlign: 'right' }}>الحساب</th>
+                    <th style={{ padding: 8, textAlign: 'left' }}>صافي المصروف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.expenses.length === 0 && (
+                    <tr><td colSpan={3} style={{ textAlign: 'center', padding: 24, color: 'var(--ant-color-text-secondary)' }}>لا توجد مصروفات</td></tr>
+                  )}
+                  {data.expenses.map(row => (
+                    <tr key={row.account_id} style={{ borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+                      <td style={{ padding: 8, color: 'var(--ant-color-text-secondary)', direction: 'ltr', textAlign: 'right' }}>{row.code}</td>
+                      <td style={{ padding: 8 }}>{row.name}</td>
+                      <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', color: 'var(--ant-color-error)', fontWeight: 500 }}>{numFmt(row.net)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: 'var(--ant-color-error-bg)', borderTop: '2px solid var(--ant-color-border-secondary)', fontWeight: 700 }}>
+                    <td colSpan={2} style={{ padding: 8, textAlign: 'center' }}>إجمالي المصروفات</td>
+                    <td style={{ padding: 8, direction: 'ltr', textAlign: 'left', color: 'var(--ant-color-error)' }}>{numFmt(data.total_expense)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Col>
 
           {/* Net Profit summary */}
-          <Paper sx={{ gridColumn: '1 / -1', p: 3 }}>
-            <Divider sx={{ mb: 2 }} />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-              <Box sx={{ display: 'flex', gap: 4 }}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">إجمالي الإيرادات</Typography>
-                  <Typography sx={{ fontWeight: 700, direction: 'ltr', color: 'success.main' }}>
-                    {numFmt(data.total_revenue)}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">إجمالي المصروفات</Typography>
-                  <Typography sx={{ fontWeight: 700, direction: 'ltr', color: 'error.main' }}>
-                    {numFmt(data.total_expense)}
-                  </Typography>
-                </Box>
-              </Box>
-              <Box sx={{
-                px: 3, py: 1.5, borderRadius: 2,
-                bgcolor: data.is_profit ? 'success.main' : 'error.main',
-                color: 'white', textAlign: 'center', minWidth: 180,
-              }}>
-                <Typography variant="caption" sx={{ opacity: 0.85 }}>
-                  {data.is_profit ? 'صافي الربح' : 'صافي الخسارة'}
-                </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 800, direction: 'ltr' }}>
-                  {numFmt(Math.abs(Number(data.net_profit)))}
-                </Typography>
-              </Box>
-            </Box>
-          </Paper>
-        </Box>
+          <Col span={24}>
+            <div style={{ padding: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+              <Divider style={{ margin: '0 0 16px' }} />
+              <Flex justify="space-between" align="center" wrap="wrap" gap={16}>
+                <Flex gap={32}>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي الإيرادات</Text>
+                    <Text style={{ fontWeight: 700, direction: 'ltr', color: 'var(--ant-color-success)' }}>{numFmt(data.total_revenue)}</Text>
+                  </div>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي المصروفات</Text>
+                    <Text style={{ fontWeight: 700, direction: 'ltr', color: 'var(--ant-color-error)' }}>{numFmt(data.total_expense)}</Text>
+                  </div>
+                </Flex>
+                <div style={{
+                  padding: '12px 24px', borderRadius: 12,
+                  background: data.is_profit ? 'var(--ant-color-success)' : 'var(--ant-color-error)',
+                  color: 'white', textAlign: 'center', minWidth: 180,
+                }}>
+                  <Text style={{ color: 'white', opacity: 0.85, fontSize: 12 }}>
+                    {data.is_profit ? 'صافي الربح' : 'صافي الخسارة'}
+                  </Text>
+                  <Title level={5} style={{ margin: 0, color: 'white', direction: 'ltr' }}>
+                    {numFmt(Math.abs(Number(data.net_profit)))}
+                  </Title>
+                </div>
+              </Flex>
+            </div>
+          </Col>
+        </Row>
       )}
-    </Box>
+    </div>
   )
 }

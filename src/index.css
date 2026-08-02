@@ -1,1 +1,125 @@
 @import "@fontsource-variable/cairo";
+
+/* LoginPage: branding panel hidden below MUI's old "md" breakpoint (900px), mobile logo shown only below it.
+   !important is needed here because antd's Flex sets its own inline display:flex via CSS-in-JS. */
+.login-branding-panel {
+  display: none !important;
+}
+.login-mobile-logo {
+  display: flex !important;
+}
+@media (min-width: 900px) {
+  .login-branding-panel {
+    display: flex !important;
+  }
+  .login-mobile-logo {
+    display: none !important;
+  }
+}
+
+/* Topbar: responsive show/hide, matching the old MUI xs(0)/sm(600)/md(900) breakpoints */
+.topbar-username,
+.topbar-fiscal-period,
+.topbar-today-date,
+.topbar-whatsapp,
+.topbar-new-entry {
+  display: none !important;
+}
+.topbar-new-entry-mobile {
+  display: inline-flex !important;
+}
+@media (min-width: 600px) {
+  .topbar-username,
+  .topbar-fiscal-period {
+    display: flex !important;
+  }
+  .topbar-new-entry {
+    display: inline-flex !important;
+  }
+  .topbar-new-entry-mobile {
+    display: none !important;
+  }
+}
+@media (min-width: 900px) {
+  .topbar-today-date,
+  .topbar-whatsapp {
+    display: flex !important;
+  }
+}
+
+/* AccountsPage: fade highlight for a newly-created account row/node */
+@keyframes highlight-fade {
+  0%   { background-color: rgba(59, 130, 246, 0.22); }
+  60%  { background-color: rgba(59, 130, 246, 0.09); }
+  100% { background-color: rgba(59, 130, 246, 0); }
+}
+.highlight-fade {
+  animation: highlight-fade 2s ease-out forwards;
+}
+
+/* Shared native <input type="date"> styling — matches antd Input's look since
+   antd has no plain string-based date text field (DatePicker uses dayjs objects). */
+.date-input {
+  border: 1px solid var(--ant-color-border);
+  border-radius: 6px;
+  padding: 4px 11px;
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-container);
+  font-size: 14px;
+  height: 32px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  color-scheme: light dark; /* keeps the native calendar icon/popup legible in dark mode */
+}
+.date-input:hover {
+  border-color: var(--ant-color-primary);
+}
+.date-input:focus {
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 2px var(--ant-color-primary-bg);
+}
+.date-input-sm {
+  height: 24px;
+  padding: 0 7px;
+  font-size: 13px;
+}
+.date-input-borderless {
+  border-color: transparent;
+  background: transparent;
+}
+.date-input-borderless:hover,
+.date-input-borderless:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Petty cash dialogs — pill-shaped live amount input inside the hero card */
+.petty-amount-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+  padding: 2px 8px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.petty-amount-pill:focus-within {
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 3px var(--ant-color-primary-bg);
+}
+
+/* Petty cash dialogs — dashed attachment drop zone */
+.petty-upload-zone {
+  border: 1.5px dashed var(--ant-color-border);
+  border-radius: 12px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.petty-upload-zone:hover {
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-fill-alter);
+}
+.petty-rounded-select .ant-select-selector {
+  border-radius: 10px !important;
+}
+

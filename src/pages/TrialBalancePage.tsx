@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
-  Alert, Box, Button, Chip, CircularProgress,
-  Paper, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Typography,
-} from '@mui/material'
+  Button, Flex, Segmented, Spin, Tag, Typography,
+} from 'antd'
 import HelpButton from '@/components/common/HelpButton'
-import BalanceIcon from '@mui/icons-material/Balance'
-import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
+import DateInput from '@/components/common/DateInput'
+import { FileDown, Scale } from 'lucide-react'
 import api from '@/lib/axios'
 import { openPdf } from '@/api/pdf'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
+import { useToast } from '@/lib/toast'
+
+const { Title, Text } = Typography
 
 type ViewType = 'totals' | 'balances' | 'both'
 
@@ -47,21 +48,21 @@ const TYPE_LABELS: Record<string, string> = {
   expense:   'مصروفات',
 }
 
-const TYPE_COLORS: Record<string, 'primary' | 'error' | 'secondary' | 'success' | 'warning'> = {
-  asset:     'primary',
+const TYPE_COLORS: Record<string, string> = {
+  asset:     'blue',
   liability: 'error',
-  equity:    'secondary',
+  equity:    'purple',
   revenue:   'success',
   expense:   'warning',
 }
 
-const numFmt = (v: string) =>
-  Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const numFmt = (v: string) => Math.round(Number(v)).toLocaleString('en-US')
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
 export default function TrialBalancePage() {
+  const toast = useToast()
   const [from, setFrom]             = useState(yearStart())
   const [to, setTo]                 = useState(today())
   const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
@@ -69,7 +70,6 @@ export default function TrialBalancePage() {
   const [data, setData]             = useState<TrialBalanceData | null>(null)
   const [loading, setLoading]       = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
-  const [error, setError]           = useState<string | null>(null)
 
   const handlePdf = async () => {
     setPdfLoading(true)
@@ -79,11 +79,10 @@ export default function TrialBalancePage() {
 
   const load = (f = from, t = to, fyId = fiscalYearId) => {
     setLoading(true)
-    setError(null)
     const params = fyId ? { fiscal_year_id: fyId } : { from: f, to: t }
     api.get<TrialBalanceData>('/api/reports/trial-balance', { params })
       .then(r => setData(r.data))
-      .catch(() => setError('تعذّر تحميل البيانات'))
+      .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
   }
 
@@ -104,253 +103,224 @@ export default function TrialBalancePage() {
   // Column config per view type
   const showTotals   = viewType === 'totals'   || viewType === 'both'
   const showBalances = viewType === 'balances' || viewType === 'both'
-  const colSpanLabel = 2 // code + name
 
   return (
-    <Box>
+    <div>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>ميزان المراجعة</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 24 }}>
+        <div>
+          <Title level={4} style={{ margin: 0 }}>ميزان المراجعة</Title>
+          <Text type="secondary">
             {{
               totals:   'بالمجاميع',
               balances: 'بالأرصدة',
               both:     'بالمجاميع والأرصدة',
             }[viewType]}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          </Text>
+        </div>
+        <Flex gap={8} align="center">
           {data && (
-            <Chip
-              icon={<BalanceIcon />}
-              label={data.totals.balanced ? 'متوازن' : 'غير متوازن'}
-              color={data.totals.balanced ? 'success' : 'error'}
-            />
+            <Tag icon={<Scale size={13} style={{ marginLeft: 4 }} />} color={data.totals.balanced ? 'success' : 'error'}>
+              {data.totals.balanced ? 'متوازن' : 'غير متوازن'}
+            </Tag>
           )}
           <HelpButton title="دليل استخدام ميزان المراجعة">
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هو ميزان المراجعة؟</Typography>
-                <Typography variant="body2">ميزان المراجعة يُظهر مجموع المدين والدائن لكل حساب في فترة محددة. يُستخدم للتحقق من توازن القيود المحاسبية وصحة البيانات.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>أنواع العرض</Typography>
-                <Typography variant="body2">بالمجاميع: يُظهر إجمالي المدين والدائن. بالأرصدة: يُظهر الرصيد الصافي فقط. بالمجاميع والأرصدة: يجمع الاثنين معاً.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>التوازن</Typography>
-                <Typography variant="body2">إجمالي المدين يجب أن يساوي إجمالي الدائن دائماً. إذا ظهرت "غير متوازن" فهناك قيد غير مكتمل يحتاج مراجعة.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>تصدير PDF</Typography>
-                <Typography variant="body2">اضغط زر PDF لتصدير الميزان بصيغة قابلة للطباعة. يمكن اختيار الفترة الزمنية قبل التصدير.</Typography></Box>
-            </Box>
+            <Flex vertical gap={16}>
+              <div><Title level={5}>ما هو ميزان المراجعة؟</Title>
+                <Text>ميزان المراجعة يُظهر مجموع المدين والدائن لكل حساب في فترة محددة. يُستخدم للتحقق من توازن القيود المحاسبية وصحة البيانات.</Text></div>
+              <div><Title level={5}>أنواع العرض</Title>
+                <Text>بالمجاميع: يُظهر إجمالي المدين والدائن. بالأرصدة: يُظهر الرصيد الصافي فقط. بالمجاميع والأرصدة: يجمع الاثنين معاً.</Text></div>
+              <div><Title level={5}>التوازن</Title>
+                <Text>إجمالي المدين يجب أن يساوي إجمالي الدائن دائماً. إذا ظهرت "غير متوازن" فهناك قيد غير مكتمل يحتاج مراجعة.</Text></div>
+              <div><Title level={5}>تصدير PDF</Title>
+                <Text>اضغط زر PDF لتصدير الميزان بصيغة قابلة للطباعة. يمكن اختيار الفترة الزمنية قبل التصدير.</Text></div>
+            </Flex>
           </HelpButton>
-        </Box>
-      </Box>
+        </Flex>
+      </Flex>
 
       {/* Filters */}
-      <Paper sx={{ p: 2.5, mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <div style={{ padding: 20, marginBottom: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+        <Flex gap={16} align="flex-end" wrap="wrap">
           <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={yearStart()} defaultTo={today()} />
-          <TextField
-            label="من تاريخ" type="date" value={from}
-            onChange={e => setFrom(e.target.value)}
-            size="small" slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <TextField
-            label="إلى تاريخ" type="date" value={to}
-            onChange={e => setTo(e.target.value)}
-            size="small" slotProps={{ inputLabel: { shrink: true } }}
-          />
-          <Button variant="contained" onClick={() => load()} disabled={loading}>
-            {loading ? <CircularProgress size={18} /> : 'عرض'}
+          <Flex vertical gap={4}>
+            <Text type="secondary" style={{ fontSize: 12 }}>من تاريخ</Text>
+            <DateInput value={from} onChange={e => setFrom(e.target.value)} />
+          </Flex>
+          <Flex vertical gap={4}>
+            <Text type="secondary" style={{ fontSize: 12 }}>إلى تاريخ</Text>
+            <DateInput value={to} onChange={e => setTo(e.target.value)} />
+          </Flex>
+          <Button type="primary" onClick={() => load()} disabled={loading}>
+            {loading ? <Spin size="small" /> : 'عرض'}
           </Button>
           <Button
-            variant="outlined" color="error"
-            startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfOutlinedIcon />}
+            danger
+            icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />}
             onClick={handlePdf}
             disabled={pdfLoading || !data}
           >
             طباعة PDF
           </Button>
-        </Box>
+        </Flex>
 
         {/* View type toggle */}
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+        <div style={{ marginTop: 16 }}>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
             نوع الميزان
-          </Typography>
-          <ToggleButtonGroup
+          </Text>
+          <Segmented
             value={viewType}
-            exclusive
-            onChange={(_, v) => v && setViewType(v)}
-            size="small"
-          >
-            <ToggleButton value="totals">بالمجاميع</ToggleButton>
-            <ToggleButton value="balances">بالأرصدة</ToggleButton>
-            <ToggleButton value="both">بالمجاميع والأرصدة</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-      </Paper>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            onChange={v => setViewType(v as ViewType)}
+            options={[
+              { label: 'بالمجاميع', value: 'totals' },
+              { label: 'بالأرصدة', value: 'balances' },
+              { label: 'بالمجاميع والأرصدة', value: 'both' },
+            ]}
+          />
+        </div>
+      </div>
 
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <Flex justify="center" style={{ padding: '64px 0' }}>
+          <Spin size="large" />
+        </Flex>
       )}
 
       {!loading && data && (
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell sx={{ width: 80 }}>الرمز</TableCell>
-                <TableCell>اسم الحساب</TableCell>
-                <TableCell sx={{ width: 80 }}>النوع</TableCell>
+        <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+                <th style={headCell('right', 80)}>الرمز</th>
+                <th style={headCell('right')}>اسم الحساب</th>
+                <th style={headCell('right', 80)}>النوع</th>
+                {showTotals && (
+                  <th colSpan={2} style={{ ...headCell('center'), borderBottom: '2px solid var(--ant-color-primary)', color: 'var(--ant-color-primary)' }}>
+                    المجاميع
+                  </th>
+                )}
+                {showBalances && (
+                  <th colSpan={2} style={{ ...headCell('center'), borderBottom: '2px solid var(--ant-color-success)', color: 'var(--ant-color-success)' }}>
+                    الأرصدة
+                  </th>
+                )}
+              </tr>
+              <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
+                <th /><th /><th />
                 {showTotals && (
                   <>
-                    <TableCell align="center" colSpan={2} sx={{ borderBottom: '2px solid', borderColor: 'primary.main' }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                        المجاميع
-                      </Typography>
-                    </TableCell>
+                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-primary)' }}>مجموع مدين</th>
+                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-primary)' }}>مجموع دائن</th>
                   </>
                 )}
                 {showBalances && (
                   <>
-                    <TableCell align="center" colSpan={2} sx={{ borderBottom: '2px solid', borderColor: 'success.main' }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'success.main' }}>
-                        الأرصدة
-                      </Typography>
-                    </TableCell>
+                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-success)' }}>رصيد مدين</th>
+                    <th style={{ ...headCell('left', 120), color: 'var(--ant-color-success)' }}>رصيد دائن</th>
                   </>
                 )}
-              </TableRow>
-              <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell />
-                <TableCell />
-                <TableCell />
-                {showTotals && (
-                  <>
-                    <TableCell align="left" sx={{ width: 120, color: 'primary.main', fontWeight: 600 }}>مجموع مدين</TableCell>
-                    <TableCell align="left" sx={{ width: 120, color: 'primary.main', fontWeight: 600 }}>مجموع دائن</TableCell>
-                  </>
-                )}
-                {showBalances && (
-                  <>
-                    <TableCell align="left" sx={{ width: 120, color: 'success.dark', fontWeight: 600 }}>رصيد مدين</TableCell>
-                    <TableCell align="left" sx={{ width: 120, color: 'success.dark', fontWeight: 600 }}>رصيد دائن</TableCell>
-                  </>
-                )}
-              </TableRow>
-            </TableHead>
+              </tr>
+            </thead>
 
-            <TableBody>
+            <tbody>
               {grouped.map(({ type, rows }) => (
                 <>
-                  <TableRow key={`hdr-${type}`} sx={{ bgcolor: 'grey.100' }}>
-                    <TableCell colSpan={3 + (showTotals ? 2 : 0) + (showBalances ? 2 : 0)} sx={{ py: 0.75 }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                        {TYPE_LABELS[type]}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
+                  <tr key={`hdr-${type}`} style={{ background: 'var(--ant-color-fill-secondary)' }}>
+                    <td colSpan={3 + (showTotals ? 2 : 0) + (showBalances ? 2 : 0)} style={{ padding: '6px 12px' }}>
+                      <Text style={{ fontWeight: 700, fontSize: 12 }} type="secondary">{TYPE_LABELS[type]}</Text>
+                    </td>
+                  </tr>
 
                   {rows.map(row => (
-                    <TableRow key={row.account_id} hover>
-                      <TableCell sx={{ color: 'text.secondary', direction: 'ltr', textAlign: 'right' }}>
+                    <tr key={row.account_id} style={{ borderTop: '1px solid var(--ant-color-border-secondary)' }}>
+                      <td style={{ ...bodyCell('right'), color: 'var(--ant-color-text-secondary)', direction: 'ltr', textAlign: 'right' }}>
                         {row.code}
-                      </TableCell>
-                      <TableCell>{row.name}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={TYPE_LABELS[row.type]}
-                          color={TYPE_COLORS[row.type]}
-                          size="small" variant="outlined"
-                        />
-                      </TableCell>
+                      </td>
+                      <td style={bodyCell('right')}>{row.name}</td>
+                      <td style={bodyCell('right')}>
+                        <Tag color={TYPE_COLORS[row.type]}>{TYPE_LABELS[row.type]}</Tag>
+                      </td>
                       {showTotals && (
                         <>
-                          <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
                             {Number(row.total_debit) > 0 ? numFmt(row.total_debit) : '—'}
-                          </TableCell>
-                          <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+                          </td>
+                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
                             {Number(row.total_credit) > 0 ? numFmt(row.total_credit) : '—'}
-                          </TableCell>
+                          </td>
                         </>
                       )}
                       {showBalances && (
                         <>
-                          <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                             {Number(row.balance_debit) > 0 ? numFmt(row.balance_debit) : '—'}
-                          </TableCell>
-                          <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                          </td>
+                          <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                             {Number(row.balance_credit) > 0 ? numFmt(row.balance_credit) : '—'}
-                          </TableCell>
+                          </td>
                         </>
                       )}
-                    </TableRow>
+                    </tr>
                   ))}
                 </>
               ))}
 
               {/* Totals row */}
               {data.rows.length > 0 && (
-                <TableRow sx={{ bgcolor: 'grey.50', '& td': { fontWeight: 700, borderTop: '2px solid', borderColor: 'divider' } }}>
-                  <TableCell colSpan={3} align="center">الإجمالي</TableCell>
+                <tr style={{ background: 'var(--ant-color-fill-alter)', borderTop: '2px solid var(--ant-color-border-secondary)', fontWeight: 700 }}>
+                  <td colSpan={3} style={{ ...bodyCell('center'), fontWeight: 700 }}>الإجمالي</td>
                   {showTotals && (
                     <>
-                      <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'primary.main' }}>
+                      <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'var(--ant-color-primary)', fontWeight: 700 }}>
                         {numFmt(data.totals.debit)}
-                      </TableCell>
-                      <TableCell
-                        align="left"
-                        sx={{
-                          direction: 'ltr', fontVariantNumeric: 'tabular-nums',
-                          color: viewType === 'totals'
-                            ? (data.totals.balanced ? 'success.main' : 'error.main')
-                            : 'primary.main',
-                        }}
-                      >
+                      </td>
+                      <td style={{
+                        ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700,
+                        color: viewType === 'totals'
+                          ? (data.totals.balanced ? 'var(--ant-color-success)' : 'var(--ant-color-error)')
+                          : 'var(--ant-color-primary)',
+                      }}>
                         {numFmt(data.totals.credit)}
-                        {viewType === 'totals' && (
-                          <Typography component="span" variant="caption" sx={{ mr: 0.5 }}>
-                            {data.totals.balanced ? ' ✓' : ' ✗'}
-                          </Typography>
-                        )}
-                      </TableCell>
+                        {viewType === 'totals' && (data.totals.balanced ? ' ✓' : ' ✗')}
+                      </td>
                     </>
                   )}
                   {showBalances && (
                     <>
-                      <TableCell align="left" sx={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'success.dark' }}>
+                      <td style={{ ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: 'var(--ant-color-success)', fontWeight: 700 }}>
                         {numFmt(data.totals.balance_debit)}
-                      </TableCell>
-                      <TableCell
-                        align="left"
-                        sx={{
-                          direction: 'ltr', fontVariantNumeric: 'tabular-nums',
-                          color: data.totals.balanced ? 'success.dark' : 'error.main',
-                        }}
-                      >
+                      </td>
+                      <td style={{
+                        ...bodyCell('left'), direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700,
+                        color: data.totals.balanced ? 'var(--ant-color-success)' : 'var(--ant-color-error)',
+                      }}>
                         {numFmt(data.totals.balance_credit)}
-                        <Typography component="span" variant="caption" sx={{ mr: 0.5 }}>
-                          {data.totals.balanced ? ' ✓' : ' ✗'}
-                        </Typography>
-                      </TableCell>
+                        {data.totals.balanced ? ' ✓' : ' ✗'}
+                      </td>
                     </>
                   )}
-                </TableRow>
+                </tr>
               )}
 
               {data.rows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                <tr>
+                  <td colSpan={7} style={{ ...bodyCell('center'), padding: '48px 12px', color: 'var(--ant-color-text-secondary)' }}>
                     لا توجد بيانات في هذه الفترة
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+            </tbody>
+          </table>
+        </div>
       )}
-    </Box>
+    </div>
   )
+}
+
+function headCell(align: 'right' | 'center' | 'left', width?: number): React.CSSProperties {
+  return { padding: '8px 12px', textAlign: align, fontWeight: 600, fontSize: 12, color: 'var(--ant-color-text-secondary)', width }
+}
+function bodyCell(align: 'right' | 'center' | 'left'): React.CSSProperties {
+  return { padding: '8px 12px', textAlign: align }
 }

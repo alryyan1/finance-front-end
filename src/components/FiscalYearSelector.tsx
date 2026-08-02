@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Box, FormControl, InputLabel, MenuItem, Select } from '@mui/material'
-import type { SelectChangeEvent } from '@mui/material/Select'
+import { Flex, Select, Typography } from 'antd'
 import type { FiscalYear } from '@/api/fiscalYears'
 import { useFiscalYears } from '@/context/FiscalYearsContext'
+
+const { Text } = Typography
 
 interface Props {
   /** Called when selection changes. fiscalYearId=null means "custom / no period" */
   onChange: (fiscalYearId: number | null, from: string, to: string) => void
   defaultFrom: string
   defaultTo: string
-  size?: 'small' | 'medium'
+  size?: 'small' | 'middle'
 }
 
 const today = () => {
@@ -37,8 +38,7 @@ export default function FiscalYearSelector({ onChange, defaultFrom, defaultTo, s
     }
   }, [years])
 
-  const handleChange = (e: SelectChangeEvent) => {
-    const val = e.target.value
+  const handleChange = (val: string) => {
     setSelected(val)
     if (val === 'custom') {
       onChange(null, defaultFrom, defaultTo)
@@ -52,25 +52,30 @@ export default function FiscalYearSelector({ onChange, defaultFrom, defaultTo, s
   const statusColor = (fy: FiscalYear) => fy.status === 'open' ? '#16a34a' : '#6b7280'
 
   return (
-    <FormControl size={size} sx={{ minWidth: 220 }}>
-      <InputLabel>الفترة المحاسبية</InputLabel>
-      <Select value={selected} label="الفترة المحاسبية" onChange={handleChange}>
-        <MenuItem value="custom">
-          <Box component="span" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
-            نطاق مخصص
-          </Box>
-        </MenuItem>
-        {years.map(fy => (
-          <MenuItem key={fy.id} value={String(fy.id)}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-              <Box component="span" sx={{ flex: 1 }}>{fy.name}</Box>
-              <Box component="span" sx={{ fontSize: 11, color: statusColor(fy), fontWeight: 600 }}>
-                {statusLabel(fy)}
-              </Box>
-            </Box>
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
+    <Flex vertical gap={4} style={{ minWidth: 220 }}>
+      <Text type="secondary" style={{ fontSize: 12 }}>الفترة المحاسبية</Text>
+      <Select
+        size={size}
+        value={selected}
+        onChange={handleChange}
+        options={[
+          {
+            value: 'custom',
+            label: <span style={{ color: 'var(--ant-color-text-secondary)', fontStyle: 'italic' }}>نطاق مخصص</span>,
+          },
+          ...years.map(fy => ({
+            value: String(fy.id),
+            label: (
+              <Flex align="center" gap={8} style={{ width: '100%' }}>
+                <span style={{ flex: 1 }}>{fy.name}</span>
+                <span style={{ fontSize: 11, color: statusColor(fy), fontWeight: 600 }}>
+                  {statusLabel(fy)}
+                </span>
+              </Flex>
+            ),
+          })),
+        ]}
+      />
+    </Flex>
   )
 }

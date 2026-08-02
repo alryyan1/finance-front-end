@@ -1,7 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
-import Box from '@mui/material/Box'
-import CircularProgress from '@mui/material/CircularProgress'
+import { Flex, Spin } from 'antd'
 
 export function ProtectedRoute() {
   const { user, loading } = useAuth()
@@ -19,8 +18,8 @@ export function GuestRoute() {
 
 function FullPageSpinner() {
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
-      <CircularProgress />
-    </Box>
+    <Flex align="center" justify="center" style={{ minHeight: '100vh', background: 'var(--ant-color-bg-layout)' }}>
+      <Spin size="large" />
+    </Flex>
   )
 }

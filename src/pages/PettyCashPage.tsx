@@ -1,745 +1,997 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions,
-  DialogContent, DialogTitle, Divider, IconButton, LinearProgress, MenuItem,
-  Paper, Tab, Tabs, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Tooltip,
-  Typography,
-} from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
-import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined'
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
-import RefreshIcon from '@mui/icons-material/Refresh'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import HelpIcon from '@mui/icons-material/Help'
-import AttachFileOutlinedIcon from '@mui/icons-material/AttachFileOutlined'
-import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined'
-
-import { pettyCashApi } from '@/api/pettyCash'
-import { accountsApi } from '@/api/accounts'
+  Button, Col, Flex, Input, InputNumber, Modal, Progress, Row, Segmented, Select, Spin, Table, Tag, Tooltip, Typography,
+  type GetRef,
+} from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { collection, onSnapshot } from 'firebase/firestore'
+import HelpButton from '@/components/common/HelpButton'
+import DateInput from '@/components/common/DateInput'
+import { useToast } from '@/lib/toast'
+import { getFirestoreDb } from '@/lib/firestore'
+import {
+  Banknote, CheckCircle2, CircleAlert, CircleMinus, ClipboardCheck, Eye, FileDown, FileText, FileX,
+  Gavel, Landmark, MessageCircle, Paperclip, Plus, Search, Settings, Sheet, Trash2, TriangleAlert, UserRound,
+  type LucideIcon,
+} from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { accountsApi } from '@/api/accounts'
+import { pettyCashSettingsApi } from '@/api/settings'
+import { pettyCashApi, type PettyCashFund, type PettyCashTransaction, type NotificationResult } from '@/api/pettyCash'
+import { openPdf } from '@/api/pdf'
 import type { Account } from '@/types/account'
-import type {
-  PettyCashFund, PettyCashRequest, PettyCashReplenishment, RequestCategory,
-} from '@/types/pettyCash'
-import {
-  CATEGORY_LABELS, STATUS_COLORS, STATUS_LABELS,
-} from '@/types/pettyCash'
+
+const { Title, Text } = Typography
+
+type TransactionType = 'expense' | 'replenishment'
+type FilterType = 'all' | TransactionType
 
 const numFmt = (v: string | number | null | undefined) =>
-  (parseFloat(String(v ?? 0)) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  Math.round(parseFloat(String(v ?? 0)) || 0).toLocaleString('en-US')
 
-const CATEGORIES = Object.entries(CATEGORY_LABELS) as [RequestCategory, string][]
+const fmtDateTime = (v: string | null | undefined) =>
+  v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : null
 
-// ─── Fund status card ───────────────────────────────────────────────────────
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
+const yearStart = () => `${new Date().getFullYear()}-01-01`
 
-function FundCard({ fund, onRefresh }: { fund: PettyCashFund; onRefresh: () => void }) {
-  const balance   = parseFloat(String(fund.current_balance  ?? 0)) || 0
-  const max       = parseFloat(String(fund.max_amount       ?? 0)) || 0
-  const threshold = parseFloat(String(fund.low_balance_threshold ?? 0)) || 0
-  const pct       = max > 0 ? Math.min((balance / max) * 100, 100) : 0
-  const isLow     = balance <= threshold
+const emptyExpenseForm = () => ({
+  date:               today(),
+  amount:             '',
+  beneficiary_name:   '',
+  contra_account_id:  null as Account | null,
+  description:        '',
+  document:           null as File | null,
+})
 
-  return (
-    <Paper sx={{ p: 3, mb: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>{fund.name}</Typography>
-          <Typography variant="body2" color="text.secondary">أمين الصندوق: {fund.custodian_name}</Typography>
-        </Box>
-        <Tooltip title="تحديث">
-          <Button size="small" onClick={onRefresh} startIcon={<RefreshIcon />}>تحديث</Button>
-        </Tooltip>
-      </Box>
+const ROLE_LABEL: Record<NotificationResult['role'], string> = { manager: 'المدير', auditor: 'المراجع' }
+const STATUS_LABEL: Record<NotificationResult['status'], string> = { sent: 'تم الإرسال', failed: 'فشل الإرسال', skipped: 'تم التخطي' }
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 2, mb: 3 }}>
-        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-          <Typography variant="caption" color="text.secondary">الرصيد الحالي</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: isLow ? 'error.main' : 'success.main' }}>
-            {numFmt(fund.current_balance)}
-          </Typography>
-        </Box>
-        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-          <Typography variant="caption" color="text.secondary">الحد الأقصى</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 800 }}>{numFmt(fund.max_amount)}</Typography>
-        </Box>
-        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-          <Typography variant="caption" color="text.secondary">حد التنبيه</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: 'warning.main' }}>{numFmt(fund.low_balance_threshold)}</Typography>
-        </Box>
-      </Box>
+const emptyReplenishForm = () => ({
+  date:               today(),
+  amount:             '',
+  beneficiary_name:   '',
+  contra_account_id:  null as Account | null,
+  description:        '',
+})
 
-      <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-          <Typography variant="caption" color="text.secondary">نسبة الرصيد</Typography>
-          <Typography variant="caption" sx={{ fontWeight: 600 }}>{pct.toFixed(0)}%</Typography>
-        </Box>
-        <LinearProgress
-          variant="determinate"
-          value={pct}
-          color={isLow ? 'error' : pct < 50 ? 'warning' : 'success'}
-          sx={{ height: 8, borderRadius: 4 }}
-        />
-      </Box>
+const FieldLabel = ({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) => (
+  <Flex align="center" gap={5} style={{ marginBottom: 4 }}>
+    <Icon size={12} color="var(--ant-color-text-tertiary)" />
+    <Text type="secondary" style={{ fontSize: 11.5 }}>{children}</Text>
+  </Flex>
+)
 
-      {isLow && (
-        <Alert severity="warning" icon={<WarningAmberIcon />} sx={{ mt: 2 }}>
-          الرصيد منخفض — يُنصح بطلب تعبئة الصندوق
-        </Alert>
-      )}
-    </Paper>
-  )
+/** Pressing Enter in a dialog field advances focus to the next field instead of doing
+ *  nothing — mirrors Tab, since these dialogs have no submit-on-Enter form semantics.
+ *  Skips textareas (Enter inserts a newline) and antd Select's search input (Enter picks
+ *  the highlighted option there; the Select's onChange handler advances focus instead). */
+const focusNextField = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+  if (e.key !== 'Enter') return
+  const target = e.target as HTMLElement
+  if (target.tagName === 'TEXTAREA' || target.closest('.ant-select')) return
+  e.preventDefault()
+  const focusables = Array.from(
+    e.currentTarget.querySelectorAll<HTMLElement>('input:not(:disabled), textarea:not(:disabled)')
+  ).filter(el => el.offsetParent !== null)
+  const idx = focusables.indexOf(target)
+  if (idx > -1 && idx < focusables.length - 1) focusables[idx + 1].focus()
 }
 
-// ─── Request row actions ────────────────────────────────────────────────────
-
-function RequestActions({
-  req, onApprove, onReject, onPay,
-}: {
-  req: PettyCashRequest
-  onApprove: (id: number) => void
-  onReject: (id: number) => void
-  onPay: (id: number) => void
-}) {
-  if (req.status === 'pending') return (
-    <Box sx={{ display: 'flex', gap: 0.5 }}>
-      <Tooltip title="موافقة">
-        <Button size="small" color="success" variant="outlined" onClick={() => onApprove(req.id)}
-          startIcon={<CheckCircleIcon />}>موافقة</Button>
-      </Tooltip>
-      <Tooltip title="رفض">
-        <Button size="small" color="error" variant="outlined" onClick={() => onReject(req.id)}
-          startIcon={<CancelOutlinedIcon />}>رفض</Button>
-      </Tooltip>
-    </Box>
-  )
-
-  if (req.status === 'approved') return (
-    <Tooltip title="صرف المبلغ">
-      <Button size="small" color="primary" variant="contained" onClick={() => onPay(req.id)}
-        startIcon={<PaymentsOutlinedIcon />}>صرف</Button>
-    </Tooltip>
-  )
-
-  return null
+/** Short two-tone chime for a remote approval landing via the Firestore listener.
+ *  Synthesized with the Web Audio API so no sound asset is needed — silently
+ *  no-ops if the browser blocks audio (e.g. no user interaction yet). */
+function playApprovalChime() {
+  try {
+    const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const ctx = new AudioContextCtor()
+    const now = ctx.currentTime
+    const frequencies = [880, 1320]
+    frequencies.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      const start = now + i * 0.12
+      gain.gain.setValueAtTime(0, start)
+      gain.gain.linearRampToValueAtTime(0.2, start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.25)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(start)
+      osc.stop(start + 0.3)
+    })
+    setTimeout(() => ctx.close(), 600)
+  } catch {
+    // Web Audio unsupported or blocked — skip the chime, the row animation still shows.
+  }
 }
-
-// ─── Main page ──────────────────────────────────────────────────────────────
 
 export default function PettyCashPage() {
+  const toast = useToast()
+  const navigate = useNavigate()
   const { user } = useAuth()
-  const [tab, setTab]                   = useState(0)
-  const [helpOpen, setHelpOpen]         = useState(false)
-  const [fund, setFund]                 = useState<PettyCashFund | null>(null)
-  const [requests, setRequests]         = useState<PettyCashRequest[]>([])
-  const [replenishments, setReplenishments] = useState<PettyCashReplenishment[]>([])
-  const [accounts, setAccounts]         = useState<Account[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [error, setError]               = useState<string | null>(null)
+  const [fund, setFund]               = useState<PettyCashFund | null>(null)
+  const [accounts, setAccounts]       = useState<Account[]>([])
+  const [transactions, setTransactions] = useState<PettyCashTransaction[]>([])
+  const [loading, setLoading]         = useState(true)
 
-  // Dialogs
-  const [reqDialog, setReqDialog]       = useState(false)
-  const [replDialog, setReplDialog]     = useState(false)
-  const [actionDialog, setActionDialog] = useState<{
-    type: 'approve' | 'reject' | 'pay' | 'approveRepl' | 'rejectRepl'
-    id: number
-    label?: string
-  } | null>(null)
-  const [actionNote, setActionNote]     = useState('')
+  // Approval designation (who is allowed to approve)
+  const [approvalSettings, setApprovalSettings] = useState<{ managerUserId: number | null; auditorUserId: number | null }>({
+    managerUserId: null,
+    auditorUserId: null,
+  })
+  // Firestore tenant collection petty cash approvals are mirrored under — falls back to
+  // the same default ("jawda") the backend uses when the setting hasn't been configured.
+  const [firestoreCollectionName, setFirestoreCollectionName] = useState<string | null>(null)
+  const isManager = !!user && user.id === approvalSettings.managerUserId
+  const isAuditor = !!user && user.id === approvalSettings.auditorUserId
 
-  const defaultRequesterName = () => user?.name ?? ''
+  // Approve / upload-document in-flight state
+  const [approving, setApproving]           = useState<number | null>(null)
+  const [uploadingDocFor, setUploadingDocFor] = useState<number | null>(null)
+  const [deletingDocFor, setDeletingDocFor]   = useState<number | null>(null)
+  const [uploadTarget, setUploadTarget]       = useState<PettyCashTransaction | null>(null)
+  const rowDocInputRef = useRef<HTMLInputElement>(null)
 
-  // Request form
-  const [reqForm, setReqForm] = useState({
-    requester_name: user?.name ?? '', date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })(),
-    amount: '', category: 'other' as RequestCategory,
-    description: '', reference: '', expense_account_id: '',
-    document: null as File | null,
+  // WhatsApp notification status popup
+  const [notifying, setNotifying]                 = useState<number | null>(null)
+  const [notificationResults, setNotificationResults] = useState<NotificationResult[] | null>(null)
+
+  // Filters
+  const [filterType, setFilterType]     = useState<FilterType>('all')
+  const [from, setFrom]                 = useState(yearStart())
+  const [to, setTo]                     = useState(today())
+  const [search, setSearch]             = useState('')
+
+  // Expense dialog
+  const [expenseOpen, setExpenseOpen]     = useState(false)
+  const [expenseForm, setExpenseForm]     = useState(emptyExpenseForm())
+  const [creatingExpense, setCreatingExpense] = useState(false)
+  const expenseDocInputRef = useRef<HTMLInputElement>(null)
+  const expenseAmountRef = useRef<GetRef<typeof InputNumber>>(null)
+  const expenseDescriptionRef = useRef<GetRef<typeof Input.TextArea>>(null)
+
+  // Replenishment dialog
+  const [replenishOpen, setReplenishOpen]     = useState(false)
+  const [replenishForm, setReplenishForm]     = useState(emptyReplenishForm())
+  const [creatingReplenish, setCreatingReplenish] = useState(false)
+  const replenishAmountRef = useRef<GetRef<typeof InputNumber>>(null)
+  const replenishDescriptionRef = useRef<GetRef<typeof Input.TextArea>>(null)
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<PettyCashTransaction | null>(null)
+  const [deleting, setDeleting]         = useState(false)
+
+  // Document download
+  const [docLoading, setDocLoading] = useState<number | null>(null)
+
+  // PDF export
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Rows just reconciled from a remote (WhatsApp-tap) approval — briefly highlighted + chimed
+  const [updatedIds, setUpdatedIds] = useState<Set<number>>(new Set())
+  const updatedHighlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Rows currently being checked against their Firestore mirror doc — shows a small
+  // spinner in the status column for as long as that check is in flight.
+  const [syncingIds, setSyncingIds] = useState<Set<number>>(new Set())
+
+  const loadFund = () => pettyCashApi.getFund().then(setFund)
+
+  const markSyncing = (ids: number[]) => setSyncingIds(prev => new Set([...prev, ...ids]))
+  const clearSyncing = (ids: number[]) => setSyncingIds(prev => {
+    const next = new Set(prev)
+    ids.forEach(id => next.delete(id))
+    return next
   })
 
-  // Replenishment form
-  const [replForm, setReplForm] = useState({
-    amount: '', description: '', requested_by: '',
-  })
+  const flashUpdated = (ids: number[]) => {
+    if (ids.length === 0) return
+    if (updatedHighlightTimer.current) clearTimeout(updatedHighlightTimer.current)
+    setUpdatedIds(new Set(ids))
+    updatedHighlightTimer.current = setTimeout(() => setUpdatedIds(new Set()), 2500)
+    playApprovalChime()
+  }
 
-  // Fund setup form
-  const [fundForm, setFundForm] = useState({
-    name: 'صندوق النثريات', custodian_name: '',
-    account_id: '', bank_account_id: '',
-    max_amount: '1000', low_balance_threshold: '200',
-  })
+  // Re-reconciles every currently-visible pending expense against its Firestore mirror
+  // doc, and flags (with the same highlight + chime as the live listener) any that
+  // actually flipped — catching an approval that happened while the tab was closed, or
+  // one the live listener missed. Safe to call even though the list endpoint already
+  // reconciles server-side: this only re-confirms already-pending rows, so it's a no-op
+  // the moment nothing changed. Runs on every list load, not just the first.
+  const syncPendingApprovals = (list: PettyCashTransaction[]) => {
+    const pending = list.filter(t => t.type === 'expense' && t.status === 'pending')
+    if (pending.length === 0) return
 
-  const loadAll = async () => {
+    const ids = pending.map(t => t.id)
+    markSyncing(ids)
+
+    Promise.all(pending.map(t => pettyCashApi.reconcileTransaction(t.id).catch(() => null)))
+      .then(results => {
+        const updated = results.filter((t): t is PettyCashTransaction => t !== null)
+        if (updated.length === 0) return
+
+        const byId = new Map(updated.map(t => [t.id, t]))
+        setTransactions(prev => prev.map(t => byId.get(t.id) ?? t))
+
+        const changedIds = pending
+          .filter(before => {
+            const after = byId.get(before.id)
+            return !!after && (
+              after.status !== before.status ||
+              after.auditor_approved_at !== before.auditor_approved_at ||
+              after.manager_approved_at !== before.manager_approved_at
+            )
+          })
+          .map(t => t.id)
+
+        if (changedIds.length > 0) {
+          loadFund()
+          flashUpdated(changedIds)
+        }
+      })
+      .catch(err => console.error('Petty cash sync check failed', err))
+      .finally(() => clearSyncing(ids))
+  }
+
+  const loadTransactions = () => {
     setLoading(true)
-    // Load accounts independently so they always show even if no fund yet
-    accountsApi.list().then(setAccounts).catch(() => {})
-    try {
-      const [f, reqs, repls] = await Promise.all([
-        pettyCashApi.getFund(),
-        pettyCashApi.listRequests(),
-        pettyCashApi.listReplenishments(),
-      ])
-      setFund(f)
-      setRequests(reqs)
-      setReplenishments(repls)
-      if (f) {
-        setFundForm({
-          name: f.name, custodian_name: f.custodian_name,
-          account_id: String(f.account_id), bank_account_id: String(f.bank_account_id),
-          max_amount: f.max_amount, low_balance_threshold: f.low_balance_threshold,
-        })
+    pettyCashApi.listTransactions({ from, to, type: filterType !== 'all' ? filterType : undefined })
+      .then(list => {
+        setTransactions(list)
+        syncPendingApprovals(list)
+      })
+      .catch(() => toast.error('تعذّر تحميل البيانات'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadFund()
+    accountsApi.list().then(setAccounts)
+    pettyCashSettingsApi.get().then(s => {
+      setApprovalSettings({
+        managerUserId: s.petty_cash_manager_user_id,
+        auditorUserId: s.petty_cash_auditor_user_id,
+      })
+      setFirestoreCollectionName(s.firebase_collection_name || 'jawda')
+    })
+  }, [])
+
+  useEffect(() => { loadTransactions() }, [filterType, from, to])
+
+  // Live updates: the WhatsApp approve-button tap writes straight to Firestore (via the
+  // pettyCashWebhook Cloud Function), bypassing this app entirely. Listen for changes on
+  // that mirror collection so an approval made from someone's phone shows up here without
+  // a manual reload. Firestore is a mirror, not the source of truth, so for every changed
+  // doc we call the backend's reconcile endpoint — it re-reads that same Firestore doc and
+  // updates MySQL (auditor_approved_at / manager_approved_at, and posts the journal entry
+  // + deducts the fund once both sides are in) — then merge the authoritative row back in.
+  useEffect(() => {
+    if (!firestoreCollectionName) return
+
+    const db = getFirestoreDb()
+    const ref = collection(db, 'finance', firestoreCollectionName, 'petty_cash_approvals')
+
+    let isFirstSnapshot = true
+    const unsubscribe = onSnapshot(ref, snapshot => {
+      // The first callback fires immediately with every existing doc as an "added"
+      // change — that's not a live update, just Firestore reporting current state.
+      if (isFirstSnapshot) {
+        isFirstSnapshot = false
+        return
       }
-    } catch {
-      setError('تعذّر تحميل البيانات')
+
+      const changedIds = snapshot.docChanges()
+        .filter(change => change.type !== 'removed')
+        .map(change => Number(change.doc.id))
+        .filter(id => Number.isFinite(id))
+      if (changedIds.length === 0) return
+
+      markSyncing(changedIds)
+
+      Promise.all(changedIds.map(id => pettyCashApi.reconcileTransaction(id)))
+        .then(updated => {
+          const byId = new Map(updated.map(t => [t.id, t]))
+          setTransactions(prev => prev.map(t => byId.get(t.id) ?? t))
+          loadFund()
+          flashUpdated(updated.map(t => t.id))
+        })
+        .catch(err => console.error('Petty cash reconcile error', err))
+        .finally(() => clearSyncing(changedIds))
+    }, err => {
+      console.error('Petty cash Firestore listener error', err)
+    })
+
+    return () => {
+      unsubscribe()
+      if (updatedHighlightTimer.current) clearTimeout(updatedHighlightTimer.current)
+    }
+  }, [firestoreCollectionName])
+
+  // "+" opens the new-expense dialog, unless the user is already typing somewhere
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== '+' || expenseOpen) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable) return
+      if (!fund || fund.status !== 'active') return
+      e.preventDefault()
+      setExpenseOpen(true)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [fund, expenseOpen])
+
+  const assetAccounts   = accounts.filter(a => a.type === 'asset')
+  const expenseAccounts = accounts.filter(a => a.type === 'expense')
+
+  const handleCreateExpense = async () => {
+    if (!expenseForm.amount || !expenseForm.contra_account_id) return
+    setCreatingExpense(true)
+    try {
+      const created = await pettyCashApi.createExpense({
+        date: expenseForm.date,
+        amount: expenseForm.amount,
+        beneficiary_name: expenseForm.beneficiary_name || undefined,
+        contra_account_id: expenseForm.contra_account_id.id,
+        description: expenseForm.description || undefined,
+        document: expenseForm.document,
+      })
+      setExpenseOpen(false)
+      setExpenseForm(emptyExpenseForm())
+      loadFund()
+      loadTransactions()
+      toast.success('تم حفظ المصروف بانتظار اعتماد المراجع والمدير')
+      if (created.notifications) setNotificationResults(created.notifications)
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ المصروف')
     } finally {
-      setLoading(false)
+      setCreatingExpense(false)
     }
   }
 
-  useEffect(() => { loadAll() }, [])
-
-  const pendingCount = requests.filter(r => r.status === 'pending').length
-  const pendingRepl  = replenishments.filter(r => r.status === 'pending').length
-
-  // ── Actions ──────────────────────────────────────────────────────────────
-
-  const openDocument = async (req: PettyCashRequest) => {
+  const handleSendNotification = async (t: PettyCashTransaction) => {
+    setNotifying(t.id)
     try {
-      const blob = await pettyCashApi.fetchDocument(req.id)
-      const url  = URL.createObjectURL(blob)
-      const win  = window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 30_000)
-      if (!win) setError('يرجى السماح بالنوافذ المنبثقة في المتصفح')
-    } catch {
-      setError('تعذّر فتح المستند')
+      const { notifications } = await pettyCashApi.sendNotification(t.id)
+      setNotificationResults(notifications)
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر إرسال إشعار واتساب')
+    } finally {
+      setNotifying(null)
     }
-  }
-
-  const handleCreateRequest = async () => {
-    try {
-      const fd = new FormData()
-      fd.append('requester_name', reqForm.requester_name)
-      fd.append('date', reqForm.date)
-      fd.append('amount', reqForm.amount)
-      fd.append('category', reqForm.category)
-      fd.append('description', reqForm.description)
-      if (reqForm.reference) fd.append('reference', reqForm.reference)
-      if (reqForm.expense_account_id) fd.append('expense_account_id', reqForm.expense_account_id)
-      if (reqForm.document) fd.append('document', reqForm.document)
-
-      await pettyCashApi.createRequest(fd)
-      setReqDialog(false)
-      setReqForm({ requester_name: defaultRequesterName(), date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` })(), amount: '', category: 'other', description: '', reference: '', expense_account_id: '', document: null })
-      loadAll()
-    } catch { setError('فشل إنشاء الطلب') }
   }
 
   const handleCreateReplenishment = async () => {
+    if (!replenishForm.amount || !replenishForm.contra_account_id) return
+    setCreatingReplenish(true)
     try {
       await pettyCashApi.createReplenishment({
-        amount: Number(replForm.amount),
-        description: replForm.description || undefined,
-        requested_by: replForm.requested_by,
+        date:               replenishForm.date,
+        amount:             replenishForm.amount,
+        beneficiary_name:   replenishForm.beneficiary_name || undefined,
+        contra_account_id:  replenishForm.contra_account_id.id,
+        description:        replenishForm.description || undefined,
       })
-      setReplDialog(false)
-      setReplForm({ amount: '', description: '', requested_by: '' })
-      loadAll()
-    } catch { setError('فشل إنشاء طلب التعبئة') }
-  }
-
-  const handleAction = async () => {
-    if (!actionDialog) return
-    try {
-      const { type, id } = actionDialog
-      if (type === 'approve')      await pettyCashApi.approveRequest(id, actionNote || 'المدير')
-      if (type === 'reject')       await pettyCashApi.rejectRequest(id, actionNote)
-      if (type === 'pay')          await pettyCashApi.payRequest(id, actionNote || 'أمين الصندوق')
-      if (type === 'approveRepl')  await pettyCashApi.approveReplenishment(id, actionNote || 'المدير')
-      if (type === 'rejectRepl')   await pettyCashApi.rejectReplenishment(id, actionNote)
-      setActionDialog(null)
-      setActionNote('')
-      loadAll()
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setError(msg ?? 'فشل تنفيذ الإجراء')
+      setReplenishOpen(false)
+      setReplenishForm(emptyReplenishForm())
+      loadFund()
+      loadTransactions()
+      toast.success('تم حفظ التغذية')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ التغذية')
+    } finally {
+      setCreatingReplenish(false)
     }
   }
 
-  const handleSaveFund = async () => {
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await pettyCashApi.setupFund({
-        ...fundForm,
-        account_id: Number(fundForm.account_id) as unknown as number,
-        bank_account_id: Number(fundForm.bank_account_id) as unknown as number,
-        max_amount: fundForm.max_amount as unknown as string,
-        low_balance_threshold: fundForm.low_balance_threshold as unknown as string,
-      })
-      loadAll()
-    } catch { setError('فشل حفظ إعدادات الصندوق') }
+      await pettyCashApi.deleteTransaction(deleteTarget.id)
+      setDeleteTarget(null)
+      loadFund()
+      loadTransactions()
+      toast.success('تم حذف الحركة')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر الحذف')
+    } finally {
+      setDeleting(false)
+    }
   }
 
-  if (loading) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-      <CircularProgress />
-    </Box>
-  )
+  const handleViewDocument = async (t: PettyCashTransaction) => {
+    setDocLoading(t.id)
+    try {
+      const res = await pettyCashApi.downloadDocument(t.id)
+      const url = URL.createObjectURL(res.data as Blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      toast.error('تعذّر عرض المستند')
+    } finally {
+      setDocLoading(null)
+    }
+  }
+
+  const handleUploadDocument = async (t: PettyCashTransaction, file: File) => {
+    setUploadingDocFor(t.id)
+    try {
+      await pettyCashApi.uploadDocument(t.id, file)
+      loadTransactions()
+      toast.success('تم إرفاق المستند')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر رفع المستند')
+    } finally {
+      setUploadingDocFor(null)
+    }
+  }
+
+  const handleDeleteDocument = (t: PettyCashTransaction) => {
+    Modal.confirm({
+      title: 'إزالة المستند',
+      content: `سيتم حذف "${t.document_original_name ?? 'المستند المرفق'}" نهائياً من هذه الحركة.`,
+      okText: 'إزالة', okType: 'danger', cancelText: 'إلغاء',
+      onOk: async () => {
+        setDeletingDocFor(t.id)
+        try {
+          await pettyCashApi.deleteDocument(t.id)
+          loadTransactions()
+          toast.success('تم إزالة المستند')
+        } catch (e: any) {
+          toast.error(e?.response?.data?.message ?? 'تعذّر إزالة المستند')
+        } finally {
+          setDeletingDocFor(null)
+        }
+      },
+    })
+  }
+
+  const handlePdf = async () => {
+    setPdfLoading(true)
+    try {
+      await openPdf('/api/petty-cash/transactions/pdf', {
+        from, to, type: filterType !== 'all' ? filterType : undefined,
+      })
+    } catch {
+      toast.error('تعذّر إنشاء ملف PDF')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const handleApprove = async (t: PettyCashTransaction, role: 'auditor' | 'manager') => {
+    setApproving(t.id)
+    try {
+      await (role === 'auditor' ? pettyCashApi.approveByAuditor(t.id) : pettyCashApi.approveByManager(t.id))
+      loadFund()
+      loadTransactions()
+      toast.success(role === 'auditor' ? 'تم اعتماد المصروف من قبل المراجع' : 'تم اعتماد المصروف من قبل المدير')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر اعتماد المصروف')
+    } finally {
+      setApproving(null)
+    }
+  }
+
+  const balance   = parseFloat(String(fund?.current_balance ?? 0)) || 0
+  const max       = parseFloat(String(fund?.max_amount ?? 0)) || 0
+  const threshold = parseFloat(String(fund?.low_balance_threshold ?? 0)) || 0
+  const pct       = max > 0 ? Math.min((balance / max) * 100, 100) : 0
+  const isLow     = !!fund && balance <= threshold
+
+  const visibleTransactions = (() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return transactions
+    return transactions.filter(t =>
+      (t.beneficiary_name ?? '').toLowerCase().includes(q) ||
+      (t.description ?? '').toLowerCase().includes(q) ||
+      t.contra_account.name.toLowerCase().includes(q) ||
+      String(t.amount).includes(q)
+    )
+  })()
+
+  const columns: ColumnsType<PettyCashTransaction> = [
+    {
+      title: '#', width: 60, align: 'center',
+      render: (_: unknown, t) => <Text style={{ fontWeight: 700, direction: 'ltr', fontSize: 12 }}>#{t.id}</Text>,
+    },
+    {
+      title: 'التاريخ', width: 95, align: 'center',
+      render: (_: unknown, t) => <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)', fontSize: 12.5 }}>{t.date}</span>,
+    },
+    {
+      title: 'البيان',
+      render: (_: unknown, t) => (
+        <div style={{ maxWidth: 320 }}>
+          <div style={{ fontWeight: 500, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5 }}>
+            {t.description || (t.type === 'expense' ? 'مصروف نثرية' : 'تغذية الصندوق')}
+          </div>
+          {t.beneficiary_name && <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>{t.beneficiary_name}</Text>}
+        </div>
+      ),
+    },
+    {
+      title: 'الحساب المقابل', width: 170,
+      render: (_: unknown, t) => <Text type="secondary" style={{ fontSize: 12.5 }}>{t.contra_account.name}</Text>,
+    },
+    {
+      title: 'المبلغ', width: 110, align: 'left',
+      render: (_: unknown, t) => (
+        <span style={{
+          direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 12.5,
+          color: t.type === 'expense' ? 'var(--ant-color-error)' : 'var(--ant-color-success)',
+        }}>
+          {t.type === 'expense' ? '-' : '+'}{numFmt(t.amount)}
+        </span>
+      ),
+    },
+    {
+      title: 'الحالة', width: 70, align: 'center',
+      render: (_: unknown, t) => t.type === 'expense' && (
+        <Flex align="center" justify="center" gap={4}>
+          {syncingIds.has(t.id) && (
+            <Tooltip title="جارٍ التحقق من آخر تحديث عبر واتساب...">
+              <Spin size="small" />
+            </Tooltip>
+          )}
+          <Tooltip title={t.status === 'approved' ? 'مكتمل — اعتمده المدير' : 'بانتظار اعتماد المدير'}>
+            <span style={{
+              width: 9, height: 9, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
+              background: t.status === 'approved' ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
+            }} />
+          </Tooltip>
+          <Tooltip title={t.auditor_approved_at ? `راجعه المراجع بتاريخ ${fmtDateTime(t.auditor_approved_at)}` : 'لم تتم مراجعته بعد'}>
+            <ClipboardCheck size={15} color={t.auditor_approved_at ? 'var(--ant-color-info)' : 'var(--ant-color-text-disabled)'} />
+          </Tooltip>
+        </Flex>
+      ),
+    },
+    {
+      title: 'إجراءات', width: 200, align: 'center',
+      render: (_: unknown, t) => (
+        <Flex align="center" justify="center" wrap="nowrap">
+          {t.type === 'expense' && isManager && !t.manager_approved_at && (
+            <Tooltip title="اعتماد نهائي (مدير) — يُنشئ القيد ويخصم الرصيد">
+              <Button type="text" shape="circle" size="small" onClick={() => handleApprove(t, 'manager')} disabled={approving === t.id}
+                icon={approving === t.id ? <Spin size="small" /> : <Gavel size={15} color="var(--ant-color-success)" />} />
+            </Tooltip>
+          )}
+          {t.type === 'expense' && isAuditor && !t.auditor_approved_at && (
+            <Tooltip title="تأكيد المراجعة">
+              <Button type="text" shape="circle" size="small" onClick={() => handleApprove(t, 'auditor')} disabled={approving === t.id}
+                icon={approving === t.id ? <Spin size="small" /> : <ClipboardCheck size={15} color="var(--ant-color-info)" />} />
+            </Tooltip>
+          )}
+          {t.type === 'expense' && t.status === 'pending' && (
+            <Tooltip title="إرسال إشعار واتساب للمراجع والمدير">
+              <Button type="text" shape="circle" size="small" onClick={() => handleSendNotification(t)} disabled={notifying === t.id}
+                icon={notifying === t.id ? <Spin size="small" /> : <MessageCircle size={15} color="var(--ant-color-success)" />} />
+            </Tooltip>
+          )}
+          {t.document_path ? (
+            <>
+              <Tooltip title={t.document_original_name ?? 'عرض المستند'}>
+                <Button type="text" shape="circle" size="small" onClick={() => handleViewDocument(t)} disabled={docLoading === t.id}
+                  icon={docLoading === t.id ? <Spin size="small" /> : <Eye size={15} color="var(--ant-color-primary)" />} />
+              </Tooltip>
+              <Tooltip title="استبدال المستند">
+                <Button type="text" shape="circle" size="small" disabled={uploadingDocFor === t.id}
+                  onClick={() => { setUploadTarget(t); rowDocInputRef.current?.click() }}
+                  icon={uploadingDocFor === t.id ? <Spin size="small" /> : <Paperclip size={15} color="var(--ant-color-text-secondary)" />} />
+              </Tooltip>
+              <Tooltip title="إزالة المستند">
+                <Button type="text" shape="circle" size="small" danger disabled={deletingDocFor === t.id}
+                  onClick={() => handleDeleteDocument(t)}
+                  icon={deletingDocFor === t.id ? <Spin size="small" /> : <FileX size={15} />} />
+              </Tooltip>
+            </>
+          ) : t.type === 'expense' && (
+            <Tooltip title="إرفاق مستند">
+              <Button type="text" shape="circle" size="small" disabled={uploadingDocFor === t.id}
+                onClick={() => { setUploadTarget(t); rowDocInputRef.current?.click() }}
+                icon={uploadingDocFor === t.id ? <Spin size="small" /> : <Paperclip size={15} color="var(--ant-color-primary)" />} />
+            </Tooltip>
+          )}
+          <Tooltip title="حذف">
+            <Button type="text" shape="circle" size="small" danger onClick={() => setDeleteTarget(t)} icon={<Trash2 size={15} />} />
+          </Tooltip>
+        </Flex>
+      ),
+    },
+  ]
 
   return (
-    <Box>
+    <div>
+      <input ref={rowDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
+        onChange={e => {
+          const file = e.target.files?.[0]
+          if (file && uploadTarget) handleUploadDocument(uploadTarget, file)
+          e.target.value = ''
+        }} />
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>صندوق النثريات</Typography>
-          <Tooltip title="دليل الاستخدام">
-            <Button size="small" onClick={() => setHelpOpen(true)} sx={{ minWidth: 0, p: 0.5, color: 'text.secondary' }}>
-              <HelpIcon fontSize="small" />
-            </Button>
-          </Tooltip>
-        </Box>
-        {fund && (
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => setReplDialog(true)}>
-              طلب تعبئة
-            </Button>
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setReqDialog(true)}>
-              طلب صرف جديد
-            </Button>
-          </Box>
-        )}
-      </Box>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 12 }}>
+        <Text strong style={{ fontSize: 16 }}>صندوق النثريات</Text>
+        <Flex gap={8} align="center">
+          <HelpButton title="دليل استخدام صندوق النثريات">
+            <Flex vertical gap={16}>
+              <div><Title level={5}>ما هو صندوق النثريات؟</Title>
+                <Text>مبلغ نقدي محدود يُستخدم لتغطية مصروفات صغيرة ومتكررة. كل مصروف يُنقص الرصيد ويُنشئ قيداً محاسبياً (مدين المصروف، دائن حساب الصندوق).</Text></div>
+              <div><Title level={5}>الاعتماد</Title>
+                <Text>اعتماد المدير هو ما يُنشئ القيد المحاسبي ويخصم الرصيد فعلياً. اعتماد المراجع تسجيل مراجعة فقط ولا يؤثر على الحركة المحاسبية.</Text></div>
+              <div><Title level={5}>التغذية</Title>
+                <Text>عند انخفاض الرصيد، يمكن تغذية الصندوق من حساب آخر (بنك أو خزينة)، مما يزيد الرصيد وينشئ قيداً محاسبياً (مدين حساب الصندوق، دائن الحساب المصدر).</Text></div>
+              <div><Title level={5}>المرفقات</Title>
+                <Text>يمكن إرفاق صورة أو ملف PDF لإيصال كل مصروف لتوثيقه.</Text></div>
+            </Flex>
+          </HelpButton>
+          <Button size="small" icon={<Settings size={15} />} onClick={() => navigate('/settings?tab=petty-cash')}>
+            {fund ? 'الإعدادات' : 'إعداد الصندوق'}
+          </Button>
+        </Flex>
+      </Flex>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+      {!fund ? (
+        <div style={{ padding: 48, textAlign: 'center', border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+            لم يتم إعداد صندوق النثريات بعد
+          </Text>
+          <Button type="primary" icon={<Plus size={16} />} onClick={() => navigate('/settings?tab=petty-cash')}>
+            إعداد الصندوق
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Fund status + toolbar, combined into one compact panel */}
+          <div style={{ padding: 10, marginBottom: 12, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+            <Flex align="center" gap={12} wrap="wrap">
+              <div style={{ minWidth: 110 }}>
+                <Text style={{ fontWeight: 700, lineHeight: 1.2, display: 'block' }}>{fund.name}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{fund.custodian_name}</Text>
+              </div>
 
-      {/* Fund card */}
-      {fund && <FundCard fund={fund} onRefresh={loadAll} />}
-      {!fund && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          لم يتم إعداد الصندوق بعد — اذهب إلى تبويب الإعدادات
-        </Alert>
-      )}
+              <Flex align="baseline" gap={4}>
+                <Text style={{ fontWeight: 800, fontSize: 16, lineHeight: 1 }} type={isLow ? 'danger' : 'success'}>
+                  {numFmt(balance)}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>/ {numFmt(max)}</Text>
+              </Flex>
 
-      {/* Tabs */}
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab label={<Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-          الطلبات {pendingCount > 0 && <Chip label={pendingCount} size="small" color="warning" />}
-        </Box>} />
-        <Tab label={<Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-          التعبئة {pendingRepl > 0 && <Chip label={pendingRepl} size="small" color="warning" />}
-        </Box>} />
-        <Tab label={<Box sx={{ display: 'flex', gap: 0.5 }}><SettingsOutlinedIcon fontSize="small" />إعدادات الصندوق</Box>} />
-      </Tabs>
+              <div style={{ flex: 1, minWidth: 80 }}>
+                <Progress percent={pct} showInfo={false} strokeColor={isLow ? 'var(--ant-color-error)' : 'var(--ant-color-success)'} size="small" />
+              </div>
 
-      {/* ── Tab 0: Requests ── */}
-      {tab === 0 && (
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell>التاريخ</TableCell>
-                <TableCell>مقدم الطلب</TableCell>
-                <TableCell>الفئة</TableCell>
-                <TableCell>البيان</TableCell>
-                <TableCell align="center">المبلغ</TableCell>
-                <TableCell align="center">الحالة</TableCell>
-                <TableCell align="center">مستند</TableCell>
-                <TableCell align="center">إجراء</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {requests.length === 0 && (
-                <TableRow><TableCell colSpan={8} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد طلبات</TableCell></TableRow>
-              )}
-              {requests.map(req => (
-                <TableRow key={req.id} hover
-                  sx={{ bgcolor: req.status === 'pending' ? 'rgba(237,108,2,0.04)' : undefined }}>
-                  <TableCell sx={{ color: 'text.secondary', direction: 'ltr' }}>{req.date}</TableCell>
-                  <TableCell>{req.requester_name}</TableCell>
-                  <TableCell><Chip label={CATEGORY_LABELS[req.category]} size="small" variant="outlined" /></TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{req.description}</Typography>
-                    {req.rejection_reason && (
-                      <Typography variant="caption" color="error">سبب الرفض: {req.rejection_reason}</Typography>
-                    )}
-                    {req.approved_by && req.status !== 'rejected' && (
-                      <Typography variant="caption" color="text.secondary"> وافق: {req.approved_by}</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, direction: 'ltr' }}>
-                    {numFmt(req.amount)}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip label={STATUS_LABELS[req.status]} color={STATUS_COLORS[req.status]} size="small" />
-                  </TableCell>
-                  <TableCell align="center">
-                    {req.document_path ? (
-                      <Tooltip title={req.document_original_name ?? 'عرض المستند'}>
-                        <IconButton size="small" color="error" onClick={() => openDocument(req)}>
-                          <PictureAsPdfOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    ) : (
-                      <Typography variant="caption" color="text.disabled">—</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    <RequestActions
-                      req={req}
-                      onApprove={id => setActionDialog({ type: 'approve', id, label: 'اسم المعتمد' })}
-                      onReject={id  => setActionDialog({ type: 'reject',  id, label: 'سبب الرفض' })}
-                      onPay={id     => setActionDialog({ type: 'pay',     id, label: 'اسم أمين الصندوق' })}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+              {isLow && <Tag color="warning" icon={<TriangleAlert size={12} style={{ marginLeft: 4 }} />}>منخفض</Tag>}
 
-      {/* ── Tab 1: Replenishments ── */}
-      {tab === 1 && (
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell>التاريخ</TableCell>
-                <TableCell>مقدم الطلب</TableCell>
-                <TableCell>البيان</TableCell>
-                <TableCell align="center">المبلغ</TableCell>
-                <TableCell align="center">الحالة</TableCell>
-                <TableCell align="center">إجراء</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {replenishments.length === 0 && (
-                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 5, color: 'text.secondary' }}>لا توجد طلبات تعبئة</TableCell></TableRow>
-              )}
-              {replenishments.map(r => (
-                <TableRow key={r.id} hover
-                  sx={{ bgcolor: r.status === 'pending' ? 'rgba(237,108,2,0.04)' : undefined }}>
-                  <TableCell sx={{ color: 'text.secondary', direction: 'ltr' }}>
-                    {new Date(r.created_at).toLocaleDateString('en-CA')}
-                  </TableCell>
-                  <TableCell>{r.requested_by}</TableCell>
-                  <TableCell>
-                    {r.description || '—'}
-                    {r.rejection_reason && (
-                      <Typography variant="caption" color="error" display="block">سبب الرفض: {r.rejection_reason}</Typography>
-                    )}
-                    {r.approved_by && r.status === 'approved' && (
-                      <Typography variant="caption" color="success.main" display="block">اعتمد: {r.approved_by}</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(r.amount)}</TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={{ pending: 'معلق', approved: 'موافق', rejected: 'مرفوض' }[r.status]}
-                      color={{ pending: 'warning', approved: 'success', rejected: 'error' }[r.status] as 'warning' | 'success' | 'error'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    {r.status === 'pending' && (
-                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                        <Button size="small" color="success" variant="outlined"
-                          onClick={() => setActionDialog({ type: 'approveRepl', id: r.id, label: 'اسم المعتمد' })}>
-                          موافقة
-                        </Button>
-                        <Button size="small" color="error" variant="outlined"
-                          onClick={() => setActionDialog({ type: 'rejectRepl', id: r.id, label: 'سبب الرفض' })}>
-                          رفض
-                        </Button>
-                      </Box>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
-
-      {/* ── Tab 2: Fund Setup ── */}
-      {tab === 2 && (
-        <Paper sx={{ p: 3, maxWidth: 600 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>إعدادات الصندوق</Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField label="اسم الصندوق" value={fundForm.name} onChange={e => setFundForm(p => ({ ...p, name: e.target.value }))} size="small" />
-            <TextField label="أمين الصندوق" value={fundForm.custodian_name} onChange={e => setFundForm(p => ({ ...p, custodian_name: e.target.value }))} size="small" />
-            <Divider />
-            <Autocomplete
-              options={accounts}
-              getOptionLabel={a => `${a.code} — ${a.name}`}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              value={accounts.find(a => String(a.id) === fundForm.account_id) ?? null}
-              onChange={(_, v) => setFundForm(p => ({ ...p, account_id: v ? String(v.id) : '' }))}
-              renderInput={params => <TextField {...params} label="حساب الصندوق الصغير" size="small" />}
-            />
-            <Autocomplete
-              options={accounts}
-              getOptionLabel={a => `${a.code} — ${a.name}`}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              value={accounts.find(a => String(a.id) === fundForm.bank_account_id) ?? null}
-              onChange={(_, v) => setFundForm(p => ({ ...p, bank_account_id: v ? String(v.id) : '' }))}
-              renderInput={params => <TextField {...params} label="حساب البنك / الصندوق الرئيسي" size="small" />}
-            />
-            <Divider />
-            <TextField label="الحد الأقصى للصندوق" type="number" size="small"
-              value={fundForm.max_amount} onChange={e => setFundForm(p => ({ ...p, max_amount: e.target.value }))} />
-            <TextField label="حد التنبيه (تعبئة تلقائية)" type="number" size="small"
-              value={fundForm.low_balance_threshold} onChange={e => setFundForm(p => ({ ...p, low_balance_threshold: e.target.value }))} />
-            <Button variant="contained" onClick={handleSaveFund} sx={{ alignSelf: 'flex-start' }}>حفظ الإعدادات</Button>
-          </Box>
-        </Paper>
-      )}
-
-      {/* ── Dialog: New Request ── */}
-      <Dialog open={reqDialog} onClose={() => setReqDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>طلب صرف نثري جديد</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-            <TextField label="اسم مقدم الطلب" size="small" value={reqForm.requester_name}
-              onChange={e => setReqForm(p => ({ ...p, requester_name: e.target.value }))} />
-            <TextField label="التاريخ" type="date" size="small" value={reqForm.date}
-              onChange={e => setReqForm(p => ({ ...p, date: e.target.value }))}
-              slotProps={{ inputLabel: { shrink: true } }} />
-            <TextField label="المبلغ" type="number" size="small" value={reqForm.amount}
-              onChange={e => setReqForm(p => ({ ...p, amount: e.target.value }))} />
-            <TextField select label="الفئة" size="small" value={reqForm.category}
-              onChange={e => setReqForm(p => ({ ...p, category: e.target.value as RequestCategory }))}>
-              {CATEGORIES.map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}
-            </TextField>
-            <TextField label="البيان / الوصف" size="small" multiline rows={2} value={reqForm.description}
-              onChange={e => setReqForm(p => ({ ...p, description: e.target.value }))} />
-            <TextField label="المرجع (اختياري)" size="small" value={reqForm.reference}
-              onChange={e => setReqForm(p => ({ ...p, reference: e.target.value }))} />
-            <Autocomplete
-              options={accounts.filter(a => a.type === 'expense')}
-              getOptionLabel={a => `${a.code} — ${a.name}`}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              value={accounts.find(a => String(a.id) === reqForm.expense_account_id) ?? null}
-              onChange={(_, v) => setReqForm(p => ({ ...p, expense_account_id: v ? String(v.id) : '' }))}
-              renderInput={params => <TextField {...params} label="حساب المصروف (اختياري)" size="small" />}
-            />
-            {/* PDF upload */}
-            <Box>
-              <Button
-                component="label"
-                variant="outlined"
-                size="small"
-                startIcon={<AttachFileOutlinedIcon />}
-                color={reqForm.document ? 'success' : 'inherit'}
-                fullWidth
-                sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
-              >
-                {reqForm.document
-                  ? reqForm.document.name
-                  : 'إرفاق مستند PDF (اختياري)'}
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  hidden
-                  onChange={e => setReqForm(p => ({ ...p, document: e.target.files?.[0] ?? null }))}
-                />
+              <Button type="primary" danger size="small" icon={<Banknote size={15} />}
+                onClick={() => setExpenseOpen(true)} disabled={fund.status !== 'active'}>
+                مصروف جديد
               </Button>
-              {reqForm.document && (
-                <Button size="small" color="error" onClick={() => setReqForm(p => ({ ...p, document: null }))}>
-                  إزالة الملف
-                </Button>
-              )}
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setReqDialog(false)}>إلغاء</Button>
-          <Button variant="contained" onClick={handleCreateRequest}
-            disabled={!reqForm.requester_name || !reqForm.amount || !reqForm.description}>
-            إرسال الطلب
-          </Button>
-        </DialogActions>
-      </Dialog>
+              <Button size="small" style={{ color: 'var(--ant-color-success)', borderColor: 'var(--ant-color-success-border)' }} onClick={() => setReplenishOpen(true)}>
+                تغذية
+              </Button>
+            </Flex>
 
-      {/* ── Dialog: New Replenishment ── */}
-      <Dialog open={replDialog} onClose={() => setReplDialog(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>طلب تعبئة صندوق النثريات</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-            <TextField label="مقدم الطلب" size="small" value={replForm.requested_by}
-              onChange={e => setReplForm(p => ({ ...p, requested_by: e.target.value }))} />
-            <TextField label="المبلغ المطلوب" type="number" size="small" value={replForm.amount}
-              onChange={e => setReplForm(p => ({ ...p, amount: e.target.value }))} />
-            <TextField label="ملاحظات (اختياري)" size="small" value={replForm.description}
-              onChange={e => setReplForm(p => ({ ...p, description: e.target.value }))} />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setReplDialog(false)}>إلغاء</Button>
-          <Button variant="contained" onClick={handleCreateReplenishment}
-            disabled={!replForm.requested_by || !replForm.amount}>
-            إرسال طلب التعبئة
-          </Button>
-        </DialogActions>
-      </Dialog>
+            <div style={{ margin: '8px 0', borderTop: '1px solid var(--ant-color-border-secondary)' }} />
 
-      {/* ── Dialog: Help Guide ── */}
-      <Dialog open={helpOpen} onClose={() => setHelpOpen(false)} maxWidth="md" fullWidth scroll="paper">
-        <DialogTitle sx={{ fontWeight: 700, fontSize: 20, borderBottom: 1, borderColor: 'divider', pb: 2 }}>
-          دليل استخدام نظام صندوق النثريات
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Flex gap={8} align="center" wrap="wrap">
+              <Input
+                size="small"
+                placeholder="بحث بالبيان أو المستفيد أو الحساب..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ flex: 1, minWidth: 200 }}
+                prefix={<Search size={14} color="var(--ant-color-text-disabled)" />}
+              />
+              <DateInput size="small" value={from} onChange={e => setFrom(e.target.value)} style={{ width: 135 }} />
+              <DateInput size="small" value={to} onChange={e => setTo(e.target.value)} style={{ width: 135 }} />
+              <Segmented
+                size="small"
+                value={filterType}
+                onChange={v => setFilterType(v as FilterType)}
+                options={[
+                  { value: 'all', label: 'الكل' },
+                  { value: 'expense', label: 'مصروفات' },
+                  { value: 'replenishment', label: 'تغذية' },
+                ]}
+              />
+              <Tooltip title="تصدير PDF">
+                <Button type="text" shape="circle" size="small" onClick={handlePdf} disabled={pdfLoading}
+                  icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
+              </Tooltip>
+              <Tooltip title="تصدير Excel">
+                <Button type="text" shape="circle" size="small" onClick={() => {
+                  const p = new URLSearchParams()
+                  if (from) p.set('from', from)
+                  if (to)   p.set('to', to)
+                  if (filterType !== 'all') p.set('type', filterType)
+                  const qs = p.toString()
+                  navigate(`/petty-cash-spreadsheet${qs ? `?${qs}` : ''}`)
+                }} icon={<Sheet size={16} />} />
+              </Tooltip>
+            </Flex>
+          </div>
 
-            {/* What is petty cash */}
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main', mb: 1 }}>
-                ما هو صندوق النثريات؟
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 2 }}>
-                صندوق النثريات (Petty Cash) هو مبلغ نقدي صغير يُحتفظ به لتغطية المصاريف اليومية الصغيرة التي لا تستحق إصدار شيك أو حوالة بنكية، مثل شراء القرطاسية أو مصاريف النقل أو الضيافة. يُدار الصندوق وفق نظام السُّلفة الثابتة (Imprest System)، حيث يُعبَّأ الصندوق دائماً بنفس المبلغ الأصلي عند اقتراب نفاده.
-              </Typography>
-            </Box>
+          {loading ? (
+            <Flex justify="center" style={{ padding: '64px 0' }}><Spin size="large" /></Flex>
+          ) : (
+            <Table
+              size="small"
+              columns={columns}
+              dataSource={visibleTransactions}
+              rowKey="id"
+              pagination={false}
+              locale={{ emptyText: 'لا توجد حركات مطابقة' }}
+              rowClassName={t => updatedIds.has(t.id) ? 'highlight-fade' : ''}
+              onRow={t => ({
+                style: { borderInlineEnd: `3px solid ${t.type === 'expense' ? 'var(--ant-color-error)' : 'var(--ant-color-success)'}` },
+              })}
+            />
+          )}
+        </>
+      )}
 
-            <Divider />
+      {/* ── Expense Dialog ── */}
+      <Modal
+        open={expenseOpen}
+        onCancel={() => setExpenseOpen(false)}
+        width={440}
+        centered
+        styles={{ content: { borderRadius: 16, padding: 0, overflow: 'hidden' }, header: { padding: '14px 18px 0', margin: 0 }, body: { padding: '10px 18px 0' }, footer: { padding: '10px 18px 14px', margin: 0 } }}
+        title={
+          <Flex align="center" justify="space-between" gap={10} style={{ paddingInlineEnd: 28 }}>
+            <Flex align="center" gap={8}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                background: 'var(--ant-color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Banknote size={16} color="var(--ant-color-error)" />
+              </div>
+              <Text strong style={{ fontSize: 14 }}>مصروف نثرية جديد</Text>
+            </Flex>
+            <DateInput
+              value={expenseForm.date}
+              onChange={e => setExpenseForm(f => ({ ...f, date: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); expenseAmountRef.current?.focus() } }}
+              style={{ width: 130 }}
+            />
+          </Flex>
+        }
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setExpenseOpen(false)}>إلغاء</Button>
+            <Button type="primary" danger onClick={handleCreateExpense}
+              disabled={creatingExpense || !expenseForm.amount || !expenseForm.contra_account_id}
+              icon={creatingExpense ? <Spin size="small" /> : <Plus size={16} />}>
+              حفظ المصروف
+            </Button>
+          </Flex>
+        }
+      >
+        <div onKeyDown={focusNextField}>
+          {/* Amount hero */}
+          <div style={{
+            background: 'linear-gradient(180deg, var(--ant-color-error-bg) 0%, var(--ant-color-bg-container) 100%)',
+            borderRadius: 12,
+            padding: '12px 16px',
+            marginBottom: 12,
+            textAlign: 'center',
+          }}>
+            <Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.3 }}>المبلغ</Text>
+            <div style={{
+              margin: '2px 0 8px', direction: 'ltr', lineHeight: 1,
+              fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+              color: expenseForm.amount ? 'var(--ant-color-error)' : 'var(--ant-color-text-quaternary)',
+            }}>
+              {numFmt(expenseForm.amount || 0)}
+            </div>
+            <div className="petty-amount-pill">
+              <InputNumber
+                ref={expenseAmountRef}
+                autoFocus min={0.01} step={1} controls={false} variant="borderless"
+                placeholder="0.00"
+                style={{ width: 130, direction: 'ltr', textAlign: 'center', fontSize: 13 }}
+                value={expenseForm.amount === '' ? null : Number(expenseForm.amount)}
+                onChange={val => setExpenseForm(f => ({ ...f, amount: val == null ? '' : String(val) }))}
+              />
+            </div>
+          </div>
 
-            {/* Step 1 */}
-            <Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Chip label="1" color="primary" size="small" sx={{ fontWeight: 700, width: 28, height: 28 }} />
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>إعداد الصندوق (مرة واحدة فقط)</Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 2, pr: 5 }}>
-                اذهب إلى تبويب <strong>إعدادات الصندوق</strong> وحدد:
-              </Typography>
-              <Box component="ul" sx={{ pr: 6, mt: 1, color: 'text.secondary' }}>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>اسم الصندوق وأمين الصندوق:</strong> بيانات تعريفية تظهر في التقارير.</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>حساب الصندوق الصغير:</strong> حساب أصول نقدية مخصص للنثريات (أنشئه في الحسابات إن لم يوجد).</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>حساب البنك / الصندوق الرئيسي:</strong> المصدر الذي تُسحب منه الأموال لتعبئة الصندوق.</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>الحد الأقصى:</strong> إجمالي المبلغ المخصص للصندوق (مثلاً 1,000 ريال).</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>حد التنبيه:</strong> عند وصول الرصيد لهذا الحد يظهر تنبيه لطلب التعبئة (مثلاً 200 ريال).</Typography>
-              </Box>
-            </Box>
+          <Row gutter={[12, 10]}>
+            <Col span={24}>
+              <FieldLabel icon={UserRound}>اسم المستفيد</FieldLabel>
+              <Input value={expenseForm.beneficiary_name} onChange={e => setExpenseForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={Landmark}>حساب المصروف</FieldLabel>
+              <Select
+                showSearch
+                style={{ width: '100%' }}
+                value={expenseForm.contra_account_id?.id}
+                onChange={v => {
+                  setExpenseForm(f => ({ ...f, contra_account_id: expenseAccounts.find(a => a.id === v) ?? null }))
+                  setTimeout(() => expenseDescriptionRef.current?.focus(), 0)
+                }}
+                notFoundContent="لا توجد حسابات"
+                filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+              />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={FileText}>البيان</FieldLabel>
+              <Input.TextArea ref={expenseDescriptionRef} rows={2} placeholder="مثال: مواصلات توصيل طرد" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} />
+            </Col>
+            <Col span={24}>
+              <div
+                className="petty-upload-zone"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', marginBottom: 10 }}
+                onClick={() => expenseDocInputRef.current?.click()}
+              >
+                <Paperclip size={14} color="var(--ant-color-text-tertiary)" />
+                <Text type="secondary" style={{ fontSize: 12.5 }}>
+                  {expenseForm.document ? expenseForm.document.name : 'إرفاق إيصال (اختياري)'}
+                </Text>
+                <input ref={expenseDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
+                  onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
+              </div>
+            </Col>
+          </Row>
+        </div>
+      </Modal>
 
-            <Divider />
+      {/* ── Replenishment Dialog ── */}
+      <Modal
+        open={replenishOpen}
+        onCancel={() => setReplenishOpen(false)}
+        width={440}
+        centered
+        styles={{ content: { borderRadius: 16, padding: 0, overflow: 'hidden' }, header: { padding: '14px 18px 0', margin: 0 }, body: { padding: '10px 18px 0' }, footer: { padding: '10px 18px 14px', margin: 0 } }}
+        title={
+          <Flex align="center" justify="space-between" gap={10} style={{ paddingInlineEnd: 28 }}>
+            <Flex align="center" gap={8}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                background: 'var(--ant-color-success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Banknote size={16} color="var(--ant-color-success)" />
+              </div>
+              <Text strong style={{ fontSize: 14 }}>تغذية الصندوق</Text>
+            </Flex>
+            <DateInput
+              value={replenishForm.date}
+              onChange={e => setReplenishForm(f => ({ ...f, date: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); replenishAmountRef.current?.focus() } }}
+              style={{ width: 130 }}
+            />
+          </Flex>
+        }
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setReplenishOpen(false)}>إلغاء</Button>
+            <Button type="primary" style={{ background: 'var(--ant-color-success)' }} onClick={handleCreateReplenishment}
+              disabled={creatingReplenish || !replenishForm.amount || !replenishForm.contra_account_id}
+              icon={creatingReplenish ? <Spin size="small" /> : <Plus size={16} />}>
+              حفظ التغذية
+            </Button>
+          </Flex>
+        }
+      >
+        <div onKeyDown={focusNextField}>
+          {/* Amount hero */}
+          <div style={{
+            background: 'linear-gradient(180deg, var(--ant-color-success-bg) 0%, var(--ant-color-bg-container) 100%)',
+            borderRadius: 12,
+            padding: '12px 16px',
+            marginBottom: 12,
+            textAlign: 'center',
+          }}>
+            <Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.3 }}>المبلغ</Text>
+            <div style={{
+              margin: '2px 0 8px', direction: 'ltr', lineHeight: 1,
+              fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+              color: replenishForm.amount ? 'var(--ant-color-success)' : 'var(--ant-color-text-quaternary)',
+            }}>
+              {numFmt(replenishForm.amount || 0)}
+            </div>
+            <div className="petty-amount-pill">
+              <InputNumber
+                ref={replenishAmountRef}
+                autoFocus min={0.01} step={1} controls={false} variant="borderless"
+                placeholder="0.00"
+                style={{ width: 130, direction: 'ltr', textAlign: 'center', fontSize: 13 }}
+                value={replenishForm.amount === '' ? null : Number(replenishForm.amount)}
+                onChange={val => setReplenishForm(f => ({ ...f, amount: val == null ? '' : String(val) }))}
+              />
+            </div>
+          </div>
 
-            {/* Step 2 */}
-            <Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Chip label="2" color="primary" size="small" sx={{ fontWeight: 700, width: 28, height: 28 }} />
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>تعبئة الصندوق أول مرة</Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 2, pr: 5 }}>
-                بعد الإعداد، الرصيد يكون صفراً. اضغط <strong>طلب تعبئة</strong> بالمبلغ الكامل (مثلاً 1,000 ريال)، ثم اعتمد الطلب. عند الاعتماد يُنشئ النظام تلقائياً هذا القيد المحاسبي:
-              </Typography>
-              <Box sx={{ mt: 1.5, p: 2, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid', borderColor: 'divider', pr: 5 }}>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 1, mb: 0.5 }}>
-                  <Typography variant="caption" sx={{ fontWeight: 700 }}>الحساب</Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 700, textAlign: 'center' }}>مدين</Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 700, textAlign: 'center' }}>دائن</Typography>
-                </Box>
-                <Divider sx={{ mb: 0.5 }} />
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 1 }}>
-                  <Typography variant="body2">صندوق النثريات (الصندوق الصغير)</Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center', color: 'success.main', fontWeight: 700 }}>✓</Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center' }}>—</Typography>
-                  <Typography variant="body2">البنك / الصندوق الرئيسي</Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center' }}>—</Typography>
-                  <Typography variant="body2" sx={{ textAlign: 'center', color: 'error.main', fontWeight: 700 }}>✓</Typography>
-                </Box>
-              </Box>
-            </Box>
+          <Row gutter={[12, 10]}>
+            <Col span={24}>
+              <FieldLabel icon={UserRound}>اسم المستفيد</FieldLabel>
+              <Input value={replenishForm.beneficiary_name} onChange={e => setReplenishForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={Landmark}>الحساب المصدر (بنك / خزينة)</FieldLabel>
+              <Select
+                showSearch
+                style={{ width: '100%' }}
+                value={replenishForm.contra_account_id?.id}
+                onChange={v => {
+                  setReplenishForm(f => ({ ...f, contra_account_id: assetAccounts.find(a => a.id === v) ?? null }))
+                  setTimeout(() => replenishDescriptionRef.current?.focus(), 0)
+                }}
+                notFoundContent="لا توجد حسابات"
+                filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                options={assetAccounts.filter(a => a.id !== fund?.account_id).map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+              />
+            </Col>
+            <Col span={24} style={{ marginBottom: 10 }}>
+              <FieldLabel icon={FileText}>البيان</FieldLabel>
+              <Input.TextArea ref={replenishDescriptionRef} rows={2} placeholder="مثال: تغذية شهرية" value={replenishForm.description} onChange={e => setReplenishForm(f => ({ ...f, description: e.target.value }))} />
+            </Col>
+          </Row>
+        </div>
+      </Modal>
 
-            <Divider />
+      {/* ── Delete Dialog ── */}
+      <Modal
+        open={!!deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        width={400}
+        title="حذف الحركة"
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setDeleteTarget(null)}>إلغاء</Button>
+            <Button type="primary" danger onClick={handleDelete} disabled={deleting} icon={deleting ? <Spin size="small" /> : <Trash2 size={16} />}>
+              حذف
+            </Button>
+          </Flex>
+        }
+      >
+        <Text type="secondary">
+          سيتم حذف الحركة والقيد المحاسبي المرتبط بها نهائياً وتعديل رصيد الصندوق. هذا الإجراء لا يمكن التراجع عنه.
+        </Text>
+        {deleteTarget && (
+          <div style={{ marginTop: 12, padding: 12, background: 'var(--ant-color-fill-alter)', borderRadius: 6 }}>
+            <Text style={{ fontWeight: 600 }}>
+              {deleteTarget.type === 'expense' ? 'مصروف' : 'تغذية'} — {numFmt(deleteTarget.amount)}
+            </Text>
+          </div>
+        )}
+      </Modal>
 
-            {/* Step 3 */}
-            <Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Chip label="3" color="primary" size="small" sx={{ fontWeight: 700, width: 28, height: 28 }} />
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>دورة حياة طلب الصرف</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', pr: 5, mb: 1.5 }}>
-                {[
-                  { label: 'طلب جديد', color: 'default' as const },
-                  { label: '←', color: 'default' as const },
-                  { label: 'معلق', color: 'warning' as const },
-                  { label: '←', color: 'default' as const },
-                  { label: 'موافق عليه', color: 'success' as const },
-                  { label: '←', color: 'default' as const },
-                  { label: 'مدفوع', color: 'default' as const },
-                ].map((s, i) => s.label === '←'
-                  ? <Typography key={i} variant="body2" color="text.disabled">←</Typography>
-                  : <Chip key={i} label={s.label} color={s.color} size="small" />
+      {/* ── WhatsApp Notification Status Dialog ── */}
+      <Modal
+        open={!!notificationResults}
+        onCancel={() => setNotificationResults(null)}
+        width={400}
+        title={<Flex align="center" gap={8}><MessageCircle size={18} color="var(--ant-color-success)" /> حالة إرسال إشعار واتساب</Flex>}
+        footer={
+          <Flex justify="flex-end">
+            <Button type="primary" onClick={() => setNotificationResults(null)}>تم</Button>
+          </Flex>
+        }
+      >
+        <Flex vertical gap={8} style={{ paddingTop: 8 }}>
+          {notificationResults?.map(n => (
+            <Flex key={n.role} align="center" gap={12}>
+              {n.status === 'sent' && <CheckCircle2 size={16} color="var(--ant-color-success)" />}
+              {n.status === 'failed' && <CircleAlert size={16} color="var(--ant-color-error)" />}
+              {n.status === 'skipped' && <CircleMinus size={16} color="var(--ant-color-text-disabled)" />}
+              <div>
+                <Text style={{ display: 'block' }}>{ROLE_LABEL[n.role]} — {STATUS_LABEL[n.status]}</Text>
+                {(n.error || n.phone) && (
+                  <Text type={n.status === 'failed' ? 'danger' : 'secondary'} style={{ fontSize: 12 }} dir={n.phone ? 'ltr' : undefined}>
+                    {n.error ?? n.phone}
+                  </Text>
                 )}
-                <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>أو</Typography>
-                <Chip label="مرفوض" color="error" size="small" />
-              </Box>
-              <Box component="ol" sx={{ pr: 6, color: 'text.secondary' }}>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>إنشاء الطلب:</strong> يضغط الموظف "طلب صرف جديد" ويُدخل الاسم والمبلغ والفئة والبيان.</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>الموافقة أو الرفض:</strong> يراجع المدير الطلبَ المعلق ويوافق عليه أو يرفضه مع ذكر السبب.</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}><strong>الصرف:</strong> يضغط أمين الصندوق "صرف" على الطلبات الموافق عليها — يُخصم المبلغ من رصيد الصندوق فوراً.</Typography>
-              </Box>
-            </Box>
-
-            <Divider />
-
-            {/* Step 4 */}
-            <Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Chip label="4" color="primary" size="small" sx={{ fontWeight: 700, width: 28, height: 28 }} />
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>تعبئة الصندوق (عند اقتراب النفاد)</Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 2, pr: 5 }}>
-                عندما يصل الرصيد لحد التنبيه أو يقترب من النفاد، اضغط <strong>طلب تعبئة</strong> وحدد المبلغ المطلوب. بعد اعتماده من المدير يُنشئ النظام قيداً محاسبياً تلقائياً ويُضيف المبلغ للرصيد.
-              </Typography>
-            </Box>
-
-            <Divider />
-
-            {/* Tips */}
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>نصائح مهمة</Typography>
-              <Box component="ul" sx={{ pr: 4, color: 'text.secondary' }}>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}>تأكد دائماً أن مجموع الإيصالات + الرصيد المتبقي = الحد الأقصى للصندوق.</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}>لا تُصرف مبالغ كبيرة من النثريات — استخدم التحويل البنكي أو الشيك للمبالغ الكبيرة.</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}>احرص على تحديد حساب المصروف في كل طلب لتتبع التحليل المالي بدقة.</Typography>
-                <Typography component="li" variant="body2" sx={{ lineHeight: 2 }}>اطبع تقرير الصندوق دورياً وقارنه بالرصيد الفعلي للتحقق من الانطباق.</Typography>
-              </Box>
-            </Box>
-
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ borderTop: 1, borderColor: 'divider', pt: 1.5 }}>
-          <Button variant="contained" onClick={() => setHelpOpen(false)}>فهمت، شكراً</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ── Dialog: Action (approve / reject / pay) ── */}
-      <Dialog open={!!actionDialog} onClose={() => { setActionDialog(null); setActionNote('') }} maxWidth="xs" fullWidth>
-        <DialogTitle>
-          {{ approve: 'موافقة على الطلب', reject: 'رفض الطلب', pay: 'صرف المبلغ', approveRepl: 'موافقة على التعبئة', rejectRepl: 'رفض التعبئة' }[actionDialog?.type ?? 'approve']}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth size="small" sx={{ mt: 1 }}
-            label={actionDialog?.label ?? ''}
-            value={actionNote}
-            onChange={e => setActionNote(e.target.value)}
-            required={actionDialog?.type === 'reject' || actionDialog?.type === 'rejectRepl'}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => { setActionDialog(null); setActionNote('') }}>إلغاء</Button>
-          <Button
-            variant="contained"
-            color={actionDialog?.type?.includes('reject') ? 'error' : actionDialog?.type === 'pay' ? 'primary' : 'success'}
-            onClick={handleAction}
-            disabled={(actionDialog?.type === 'reject' || actionDialog?.type === 'rejectRepl') && !actionNote}
-          >
-            تأكيد
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+              </div>
+            </Flex>
+          ))}
+        </Flex>
+      </Modal>
+    </div>
   )
 }

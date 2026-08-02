@@ -1,11 +1,9 @@
 import { createContext, useContext, useMemo, useState } from 'react'
-import { ThemeProvider } from '@mui/material/styles'
-import CssBaseline from '@mui/material/CssBaseline'
-import type { PaletteMode } from '@mui/material'
-import { createAppTheme } from '@/theme'
+import { ConfigProvider } from 'antd'
+import { createAntTheme, type ThemeMode } from '@/antdTheme'
 
 interface ThemeModeContextValue {
-  mode: PaletteMode
+  mode: ThemeMode
   toggleMode: () => void
 }
 
@@ -17,26 +15,25 @@ const ThemeModeContext = createContext<ThemeModeContextValue>({
 export const useThemeMode = () => useContext(ThemeModeContext)
 
 export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<PaletteMode>(() => {
+  const [mode, setMode] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('theme-mode')
     return (saved === 'dark' || saved === 'light') ? saved : 'light'
   })
 
   const toggleMode = () =>
     setMode(prev => {
-      const next: PaletteMode = prev === 'light' ? 'dark' : 'light'
+      const next: ThemeMode = prev === 'light' ? 'dark' : 'light'
       localStorage.setItem('theme-mode', next)
       return next
     })
 
-  const theme = useMemo(() => createAppTheme(mode), [mode])
+  const antTheme = useMemo(() => createAntTheme(mode), [mode])
 
   return (
     <ThemeModeContext.Provider value={{ mode, toggleMode }}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
+      <ConfigProvider direction="rtl" theme={antTheme}>
         {children}
-      </ThemeProvider>
+      </ConfigProvider>
     </ThemeModeContext.Provider>
   )
 }

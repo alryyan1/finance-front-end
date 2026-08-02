@@ -1,46 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import HelpButton from '@/components/common/HelpButton'
-import { keyframes } from '@emotion/react'
-import Box from '@mui/material/Box'
-import Typography from '@mui/material/Typography'
-import Button from '@mui/material/Button'
-import Paper from '@mui/material/Paper'
-import Table from '@mui/material/Table'
-import TableBody from '@mui/material/TableBody'
-import TableCell from '@mui/material/TableCell'
-import TableContainer from '@mui/material/TableContainer'
-import TableHead from '@mui/material/TableHead'
-import TableRow from '@mui/material/TableRow'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import TextField from '@mui/material/TextField'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import Select from '@mui/material/Select'
-import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
-import Switch from '@mui/material/Switch'
-import IconButton from '@mui/material/IconButton'
-import Chip from '@mui/material/Chip'
-import Alert from '@mui/material/Alert'
-import CircularProgress from '@mui/material/CircularProgress'
-import Divider from '@mui/material/Divider'
-import Collapse from '@mui/material/Collapse'
-import Tooltip from '@mui/material/Tooltip'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import AddOutlinedIcon from '@mui/icons-material/AddOutlined'
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined'
-import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined'
-import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import type { SelectChangeEvent } from '@mui/material/Select'
+import { useToast } from '@/lib/toast'
+import {
+  Alert, Button, Dropdown, Flex, Input, Modal, Segmented, Select, Spin, Switch, Table, Tag, Tooltip, Typography,
+} from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import type { MenuProps } from 'antd'
+import { ChevronDown, ChevronLeft, ListTree, Pencil, Plus, Rows3, Trash2 } from 'lucide-react'
 import { accountsApi } from '@/api/accounts'
 import type { Account, AccountSubType, AccountType } from '@/types/account'
+
+const { Title, Text } = Typography
 
 const TYPE_LABELS: Record<AccountType, string> = {
   asset:     'أصول',
@@ -50,10 +20,10 @@ const TYPE_LABELS: Record<AccountType, string> = {
   expense:   'مصروفات',
 }
 
-const TYPE_COLOR: Record<AccountType, 'primary' | 'error' | 'secondary' | 'success' | 'warning'> = {
-  asset:     'primary',
+const TYPE_COLOR: Record<AccountType, string> = {
+  asset:     'blue',
   liability: 'error',
-  equity:    'secondary',
+  equity:    'purple',
   revenue:   'success',
   expense:   'warning',
 }
@@ -194,14 +164,6 @@ const emptyForm = {
   is_active: true,
 }
 
-// ─── Highlight animation ──────────────────────────────────────────────────────
-
-const highlightFade = keyframes`
-  0%   { background-color: rgba(59, 130, 246, 0.22); }
-  60%  { background-color: rgba(59, 130, 246, 0.09); }
-  100% { background-color: rgba(59, 130, 246, 0); }
-`
-
 // ─── Tree node component ──────────────────────────────────────────────────────
 
 interface TreeNodeProps {
@@ -211,113 +173,99 @@ interface TreeNodeProps {
   parentColorMap: Map<number, string>
   newlyAddedId: number | null
   onToggle: (id: number) => void
-  onRowClick: (e: React.MouseEvent<HTMLElement>, node: TreeNode) => void
+  onAddChild: (node: Account) => void
+  onEdit: (node: Account) => void
+  onDelete: (node: Account) => void
 }
 
-function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedId, onToggle, onRowClick }: TreeNodeProps) {
+function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedId, onToggle, onAddChild, onEdit, onDelete }: TreeNodeProps) {
   const hasChildren = node.children.length > 0
   const isExpanded  = expandedIds.has(node.id)
   const siblingColor = node.parent_id !== null ? (parentColorMap.get(node.parent_id) ?? null) : null
 
+  const menuItems: MenuProps['items'] = [
+    { key: 'add', label: 'إضافة حساب فرعي', icon: <Plus size={15} color="var(--ant-color-primary)" /> },
+    { key: 'edit', label: 'تعديل', icon: <Pencil size={15} /> },
+    { key: 'delete', label: 'حذف', icon: <Trash2 size={15} />, danger: true },
+  ]
+
+  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'add') onAddChild(node)
+    else if (key === 'edit') onEdit(node)
+    else if (key === 'delete') onDelete(node)
+  }
+
   return (
     <>
-      <Box
-        onClick={(e) => onRowClick(e, node)}
-        sx={{
-          display: 'flex', alignItems: 'center', gap: 0.5,
-          px: 1, py: 0.6,
-          paddingInlineStart: `${4 + depth * 22}px`,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          borderLeft: siblingColor ? `3px solid ${siblingColor}` : '3px solid transparent',
-          opacity: node.is_active ? 1 : 0.45,
-          bgcolor: DEPTH_BG[depth % DEPTH_BG.length],
-          cursor: 'pointer',
-          '&:hover': { bgcolor: 'action.hover' },
-          transition: 'background-color 0.1s',
-          animation: node.id === newlyAddedId ? `${highlightFade} 2s ease-out forwards` : undefined,
-        }}
-      >
-        <Box sx={{ width: 26, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-          {hasChildren ? (
-            <IconButton
-              size="small"
-              onClick={(e) => { e.stopPropagation(); onToggle(node.id) }}
-              sx={{ p: 0.25 }}
-            >
-              {isExpanded
-                ? <ExpandMoreIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                : <ChevronLeftIcon sx={{ fontSize: 18, color: 'text.secondary' }} />}
-            </IconButton>
-          ) : (
-            <Box sx={{ width: 26 }} />
-          )}
-        </Box>
-
-        <Typography
-          sx={{ fontFamily: 'monospace', fontSize: 12, color: 'text.secondary',
-            minWidth: 64, flexShrink: 0, direction: 'ltr', textAlign: 'left' }}
-        >
-          {node.code}
-        </Typography>
-
-        <Typography
-          variant="body2"
-          sx={{
-            flex: 1, fontWeight: depth === 0 ? 700 : 400,
-            fontSize: depth === 0 ? 14 : 13,
-            color: depth === 0 ? 'text.primary' : 'text.secondary',
+      <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={['click']}>
+        <Flex
+          align="center" gap={4}
+          className={node.id === newlyAddedId ? 'highlight-fade' : undefined}
+          style={{
+            padding: '5px 8px',
+            paddingInlineStart: `${4 + depth * 22}px`,
+            borderBottom: '1px solid var(--ant-color-border-secondary)',
+            borderInlineStart: siblingColor ? `3px solid ${siblingColor}` : '3px solid transparent',
+            opacity: node.is_active ? 1 : 0.45,
+            background: DEPTH_BG[depth % DEPTH_BG.length],
+            cursor: 'pointer',
           }}
         >
-          {node.name}
-          {hasChildren && (
-            <Box
-              component="span"
-              sx={{
+          <div style={{ width: 26, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+            {hasChildren ? (
+              <Button
+                type="text" shape="circle" size="small"
+                onClick={(e) => { e.stopPropagation(); onToggle(node.id) }}
+                icon={isExpanded
+                  ? <ChevronDown size={16} color="var(--ant-color-text-secondary)" />
+                  : <ChevronLeft size={16} color="var(--ant-color-text-secondary)" />}
+              />
+            ) : (
+              <div style={{ width: 26 }} />
+            )}
+          </div>
+
+          <Text style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--ant-color-text-secondary)', minWidth: 64, flexShrink: 0, direction: 'ltr', textAlign: 'left' }}>
+            {node.code}
+          </Text>
+
+          <div style={{ flex: 1, fontWeight: depth === 0 ? 700 : 400, fontSize: depth === 0 ? 14 : 13, color: depth === 0 ? 'var(--ant-color-text)' : 'var(--ant-color-text-secondary)' }}>
+            {node.name}
+            {hasChildren && (
+              <span style={{
                 display: 'inline-block',
-                mr: 1.3, fontSize: 11, fontWeight: 600,
-                px: 0.6, py: 0.1, borderRadius: 0.75,
-                color: siblingColor ?? 'text.disabled',
-                bgcolor: siblingColor ? `${siblingColor}18` : 'transparent',
-              }}
-            >
-              {node.children.length}
-            </Box>
-          )}
-        </Typography>
+                marginRight: 10, fontSize: 11, fontWeight: 600,
+                padding: '1px 6px', borderRadius: 6,
+                color: siblingColor ?? 'var(--ant-color-text-disabled)',
+                background: siblingColor ? `${siblingColor}18` : 'transparent',
+              }}>
+                {node.children.length}
+              </span>
+            )}
+          </div>
 
-        <Chip
-          label={TYPE_LABELS[node.type]}
-          color={TYPE_COLOR[node.type]}
-          size="small" variant="outlined"
-          sx={{ fontSize: 11, flexShrink: 0 }}
+          <Tag color={TYPE_COLOR[node.type]} style={{ fontSize: 11, flexShrink: 0 }}>{TYPE_LABELS[node.type]}</Tag>
+
+          <Text style={{ fontSize: 12, fontWeight: 500, minWidth: 40, textAlign: 'center', flexShrink: 0 }} type={node.is_active ? 'success' : 'secondary'}>
+            {node.is_active ? 'نشط' : 'موقوف'}
+          </Text>
+        </Flex>
+      </Dropdown>
+
+      {hasChildren && isExpanded && node.children.map(child => (
+        <AccountTreeNode
+          key={child.id}
+          node={child}
+          depth={depth + 1}
+          expandedIds={expandedIds}
+          parentColorMap={parentColorMap}
+          newlyAddedId={newlyAddedId}
+          onToggle={onToggle}
+          onAddChild={onAddChild}
+          onEdit={onEdit}
+          onDelete={onDelete}
         />
-
-        <Typography
-          variant="caption"
-          sx={{ color: node.is_active ? 'success.main' : 'text.disabled',
-            fontWeight: 500, minWidth: 40, textAlign: 'center', flexShrink: 0 }}
-        >
-          {node.is_active ? 'نشط' : 'موقوف'}
-        </Typography>
-      </Box>
-
-      {hasChildren && (
-        <Collapse in={isExpanded} unmountOnExit>
-          {node.children.map(child => (
-            <AccountTreeNode
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              expandedIds={expandedIds}
-              parentColorMap={parentColorMap}
-              newlyAddedId={newlyAddedId}
-              onToggle={onToggle}
-              onRowClick={onRowClick}
-            />
-          ))}
-        </Collapse>
-      )}
+      ))}
     </>
   )
 }
@@ -325,6 +273,7 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AccountsPage() {
+  const toast = useToast()
   const [accounts, setAccounts]       = useState<Account[]>([])
   const [loading, setLoading]         = useState(true)
   const [viewMode, setViewMode]       = useState<'table' | 'tree'>('tree')
@@ -334,24 +283,13 @@ export default function AccountsPage() {
   const [editing, setEditing]       = useState<Account | null>(null)
   const [form, setForm]             = useState(emptyForm)
   const [saving, setSaving]         = useState(false)
-  const [formError, setFormError]   = useState<string | null>(null)
 
   const [deleteOpen, setDeleteOpen]     = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [deleting, setDeleting]         = useState(false)
-  const [deleteError, setDeleteError]   = useState<string | null>(null)
 
   const [newlyAddedId, setNewlyAddedId] = useState<number | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
-  const [menuNode, setMenuNode]     = useState<TreeNode | null>(null)
-
-  function handleRowClick(e: React.MouseEvent<HTMLElement>, node: TreeNode) {
-    setMenuAnchor(e.currentTarget)
-    setMenuNode(node)
-  }
-  function closeMenu() { setMenuAnchor(null); setMenuNode(null) }
 
   useEffect(() => { load() }, [])
 
@@ -383,13 +321,12 @@ export default function AccountsPage() {
   function openCreate() {
     setEditing(null)
     setForm({ ...emptyForm, code: suggestCode(null, accounts) })
-    setFormError(null); setDialogOpen(true)
+    setDialogOpen(true)
   }
 
   function openAddChild(parent: Account) {
     setEditing(null)
     setForm({ code: suggestCode(parent.id, accounts), name: '', type: parent.type, sub_type: null, parent_id: parent.id, is_active: true })
-    setFormError(null)
     setDialogOpen(true)
     setExpandedIds(prev => new Set(prev).add(parent.id))
   }
@@ -397,17 +334,18 @@ export default function AccountsPage() {
   function openEdit(a: Account) {
     setEditing(a)
     setForm({ code: a.code, name: a.name, type: a.type, sub_type: a.sub_type, parent_id: a.parent_id, is_active: a.is_active })
-    setFormError(null); setDialogOpen(true)
+    setDialogOpen(true)
   }
 
   async function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault()
-    setSaving(true); setFormError(null)
+    setSaving(true)
     try {
       if (editing) {
         const updated = await accountsApi.update(editing.id, form)
         setDialogOpen(false)
         setAccounts(prev => prev.map(a => a.id === editing.id ? { ...a, ...updated } : a))
+        toast.success('تم حفظ الحساب')
       } else {
         setDialogOpen(false)
         const created = await accountsApi.create(form)
@@ -415,28 +353,30 @@ export default function AccountsPage() {
         if (highlightTimer.current) clearTimeout(highlightTimer.current)
         setNewlyAddedId(created.id)
         highlightTimer.current = setTimeout(() => setNewlyAddedId(null), 2500)
+        toast.success('تم إضافة الحساب')
       }
     } catch (err) {
-      setFormError(extractError(err))
+      toast.error(extractError(err))
       setDialogOpen(true)
     }
     finally { setSaving(false) }
   }
 
   function confirmDelete(a: Account) {
-    setDeleteTarget(a); setDeleteError(null); setDeleteOpen(true)
+    setDeleteTarget(a); setDeleteOpen(true)
   }
   async function handleDelete() {
     if (!deleteTarget) return
-    setDeleting(true); setDeleteError(null)
+    setDeleting(true)
     const snapshot = accounts
     setAccounts(prev => prev.filter(a => a.id !== deleteTarget.id))
     setDeleteOpen(false)
     try {
       await accountsApi.remove(deleteTarget.id)
+      toast.success('تم حذف الحساب')
     } catch (err) {
       setAccounts(snapshot)
-      setDeleteError(extractError(err))
+      toast.error(extractError(err))
       setDeleteOpen(true)
     } finally {
       setDeleting(false)
@@ -447,78 +387,101 @@ export default function AccountsPage() {
     ? new Set([editing.id, ...getDescendantIds(editing.id, accounts)])
     : new Set<number>()
 
-  return (
-    <Box>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>شجرة الحسابات</Typography>
-          <Typography variant="body2" color="text.secondary">دليل الحسابات المحاسبي</Typography>
-        </Box>
+  const hasChildrenOfDeleteTarget = !!deleteTarget && accounts.some(a => a.parent_id === deleteTarget.id)
 
-        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+  const columns: ColumnsType<AccountNode> = [
+    { title: 'الكود', dataIndex: 'code', width: 90, render: (v: string) => <Text style={{ fontFamily: 'monospace', fontSize: 13 }} type="secondary">{v}</Text> },
+    {
+      title: 'الاسم',
+      render: (_: unknown, node) => (
+        <Flex align="center" gap={4} style={{ paddingInlineStart: node.level * 20 }}>
+          {node.level > 0 && <Text type="secondary" style={{ lineHeight: 1 }}>└</Text>}
+          <Text style={{ fontWeight: node.level === 0 ? 600 : 400 }}>{node.name}</Text>
+        </Flex>
+      ),
+    },
+    { title: 'النوع', width: 130, render: (_: unknown, node) => <Tag color={TYPE_COLOR[node.type]}>{TYPE_LABELS[node.type]}</Tag> },
+    {
+      title: 'الحالة', width: 80,
+      render: (_: unknown, node) => (
+        <Text style={{ fontSize: 12, fontWeight: 500 }} type={node.is_active ? 'success' : 'secondary'}>
+          {node.is_active ? 'نشط' : 'موقوف'}
+        </Text>
+      ),
+    },
+    {
+      title: 'إجراءات', width: 80, align: 'center',
+      render: (_: unknown, node) => (
+        <Flex justify="center">
+          <Button type="text" shape="circle" size="small" onClick={() => openEdit(node)} icon={<Pencil size={15} />} />
+          <Button type="text" shape="circle" size="small" danger onClick={() => confirmDelete(node)} icon={<Trash2 size={15} />} />
+        </Flex>
+      ),
+    },
+  ]
+
+  return (
+    <div>
+      {/* Header */}
+      <Flex align="center" justify="space-between" style={{ marginBottom: 24 }}>
+        <div>
+          <Title level={4} style={{ margin: 0 }}>شجرة الحسابات</Title>
+          <Text type="secondary">دليل الحسابات المحاسبي</Text>
+        </div>
+
+        <Flex gap={12} align="center">
           <HelpButton title="دليل استخدام شجرة الحسابات">
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>ما هي شجرة الحسابات؟</Typography>
-                <Typography variant="body2">شجرة الحسابات هي الهيكل الأساسي للنظام المحاسبي. تُنظَّم الحسابات في مستويات هرمية: حسابات رئيسية → حسابات فرعية. كل حساب له رمز ونوع (أصول، خصوم، حقوق ملكية، إيرادات، مصروفات).</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>إضافة حساب جديد</Typography>
-                <Typography variant="body2">اضغط "حساب جديد"، أدخل الرمز والاسم، حدد النوع، واختر الحساب الأب إذا كان حساباً فرعياً. الحسابات التي لها قيود لا يمكن حذفها.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>العرض الشجري والجدولي</Typography>
-                <Typography variant="body2">يمكن التبديل بين العرض الشجري (يُظهر التسلسل الهرمي) والعرض الجدولي (يُظهر قائمة مسطحة). في العرض الشجري يمكن توسيع وطي الشجرة بالكامل.</Typography></Box>
-              <Box><Typography variant="subtitle1" sx={{ fontWeight: 700 }} gutterBottom>الأنواع الخمسة للحسابات</Typography>
-                <Typography variant="body2">أصول (Assets) · خصوم (Liabilities) · حقوق الملكية (Equity) · إيرادات (Revenue) · مصروفات (Expenses). النوع يحدد طبيعة الحساب في التقارير المالية.</Typography></Box>
-            </Box>
+            <Flex vertical gap={16}>
+              <div><Title level={5}>ما هي شجرة الحسابات؟</Title>
+                <Text>شجرة الحسابات هي الهيكل الأساسي للنظام المحاسبي. تُنظَّم الحسابات في مستويات هرمية: حسابات رئيسية → حسابات فرعية. كل حساب له رمز ونوع (أصول، خصوم، حقوق ملكية، إيرادات، مصروفات).</Text></div>
+              <div><Title level={5}>إضافة حساب جديد</Title>
+                <Text>اضغط "حساب جديد"، أدخل الرمز والاسم، حدد النوع، واختر الحساب الأب إذا كان حساباً فرعياً. الحسابات التي لها قيود لا يمكن حذفها.</Text></div>
+              <div><Title level={5}>العرض الشجري والجدولي</Title>
+                <Text>يمكن التبديل بين العرض الشجري (يُظهر التسلسل الهرمي) والعرض الجدولي (يُظهر قائمة مسطحة). في العرض الشجري يمكن توسيع وطي الشجرة بالكامل.</Text></div>
+              <div><Title level={5}>الأنواع الخمسة للحسابات</Title>
+                <Text>أصول (Assets) · خصوم (Liabilities) · حقوق الملكية (Equity) · إيرادات (Revenue) · مصروفات (Expenses). النوع يحدد طبيعة الحساب في التقارير المالية.</Text></div>
+            </Flex>
           </HelpButton>
           {viewMode === 'tree' && !loading && (
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              <Button size="small" variant="text" onClick={expandAll}   sx={{ fontSize: 12 }}>توسيع الكل</Button>
-              <Button size="small" variant="text" onClick={collapseAll} sx={{ fontSize: 12 }}>طي الكل</Button>
-            </Box>
+            <Flex gap={4}>
+              <Button size="small" type="text" onClick={expandAll}>توسيع الكل</Button>
+              <Button size="small" type="text" onClick={collapseAll}>طي الكل</Button>
+            </Flex>
           )}
 
-          <ToggleButtonGroup
-            value={viewMode} exclusive size="small"
-            onChange={(_, v) => v && setViewMode(v)}
-          >
-            <ToggleButton value="tree">
-              <Tooltip title="عرض الشجرة">
-                <AccountTreeOutlinedIcon fontSize="small" />
-              </Tooltip>
-            </ToggleButton>
-            <ToggleButton value="table">
-              <Tooltip title="عرض الجدول">
-                <TableRowsOutlinedIcon fontSize="small" />
-              </Tooltip>
-            </ToggleButton>
-          </ToggleButtonGroup>
+          <Segmented
+            value={viewMode}
+            onChange={v => setViewMode(v as 'table' | 'tree')}
+            options={[
+              { value: 'tree', icon: <Tooltip title="عرض الشجرة"><ListTree size={15} /></Tooltip> },
+              { value: 'table', icon: <Tooltip title="عرض الجدول"><Rows3 size={15} /></Tooltip> },
+            ]}
+          />
 
-          <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={openCreate}>
+          <Button type="primary" icon={<Plus size={16} />} onClick={openCreate}>
             إضافة حساب
           </Button>
-        </Box>
-      </Box>
+        </Flex>
+      </Flex>
 
       {/* ── Tree view ── */}
       {viewMode === 'tree' && (
-        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 2, py: 1,
-            bgcolor: 'grey.50', borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ width: 26 }} />
-            <Typography variant="caption" sx={{ fontWeight: 700, minWidth: 64, color: 'text.secondary' }}>الكود</Typography>
-            <Typography variant="caption" sx={{ flex: 1, fontWeight: 700, color: 'text.secondary' }}>اسم الحساب</Typography>
-            <Typography variant="caption" sx={{ fontWeight: 700, minWidth: 100, color: 'text.secondary', textAlign: 'center' }}>النوع</Typography>
-            <Typography variant="caption" sx={{ fontWeight: 700, minWidth: 40, color: 'text.secondary', textAlign: 'center' }}>الحالة</Typography>
-            <Box sx={{ width: 68 }} />
-          </Box>
+        <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
+          <Flex align="center" gap={4} style={{ padding: '8px 16px', background: 'var(--ant-color-fill-alter)', borderBottom: '1px solid var(--ant-color-border-secondary)' }}>
+            <div style={{ width: 26 }} />
+            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 64 }} type="secondary">الكود</Text>
+            <Text style={{ flex: 1, fontWeight: 700, fontSize: 12 }} type="secondary">اسم الحساب</Text>
+            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 100, textAlign: 'center' }} type="secondary">النوع</Text>
+            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'center' }} type="secondary">الحالة</Text>
+            <div style={{ width: 68 }} />
+          </Flex>
 
           {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-              <CircularProgress size={28} />
-            </Box>
+            <Flex justify="center" style={{ padding: '64px 0' }}><Spin size="large" /></Flex>
           ) : treeData.length === 0 ? (
-            <Box sx={{ py: 6, textAlign: 'center', color: 'text.secondary' }}>
-              <Typography variant="body2">لا توجد حسابات. أضف حساباً للبدء.</Typography>
-            </Box>
+            <div style={{ padding: '48px 0', textAlign: 'center' }}>
+              <Text type="secondary">لا توجد حسابات. أضف حساباً للبدء.</Text>
+            </div>
           ) : (
             treeData.map(node => (
               <AccountTreeNode
@@ -529,225 +492,137 @@ export default function AccountsPage() {
                 parentColorMap={parentColorMap}
                 newlyAddedId={newlyAddedId}
                 onToggle={toggleExpand}
-                onRowClick={handleRowClick}
+                onAddChild={openAddChild}
+                onEdit={openEdit}
+                onDelete={confirmDelete}
               />
             ))
           )}
-        </Paper>
+        </div>
       )}
 
       {/* ── Table view ── */}
       {viewMode === 'table' && (
-        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: 90 }}>الكود</TableCell>
-                <TableCell>الاسم</TableCell>
-                <TableCell sx={{ width: 130 }}>النوع</TableCell>
-                <TableCell sx={{ width: 80 }}>الحالة</TableCell>
-                <TableCell sx={{ width: 80 }} align="center">إجراءات</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} />
-                  </TableCell>
-                </TableRow>
-              ) : flatData.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                    لا توجد حسابات. أضف حساباً للبدء.
-                  </TableCell>
-                </TableRow>
-              ) : flatData.map(node => (
-                <TableRow key={node.id}
-                  sx={{
-                    opacity: node.is_active ? 1 : 0.45,
-                    '&:hover': { bgcolor: 'action.hover' },
-                    animation: node.id === newlyAddedId ? `${highlightFade} 2s ease-out forwards` : undefined,
-                  }}>
-                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 13, color: 'text.secondary' }}>
-                    {node.code}
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, paddingInlineStart: `${node.level * 20}px` }}>
-                      {node.level > 0 && (
-                        <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1 }}>└</Typography>
-                      )}
-                      <Typography variant="body2" sx={{ fontWeight: node.level === 0 ? 600 : 400 }}>
-                        {node.name}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Chip label={TYPE_LABELS[node.type]} color={TYPE_COLOR[node.type]}
-                      size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption"
-                      sx={{ color: node.is_active ? 'success.main' : 'text.disabled', fontWeight: 500 }}>
-                      {node.is_active ? 'نشط' : 'موقوف'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
-                    <IconButton size="small" onClick={() => openEdit(node)} sx={{ color: 'text.secondary' }}>
-                      <EditOutlinedIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => confirmDelete(node)} sx={{ color: 'error.main' }}>
-                      <DeleteOutlineOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Table
+          size="small"
+          columns={columns}
+          dataSource={flatData}
+          rowKey="id"
+          loading={loading}
+          pagination={false}
+          locale={{ emptyText: 'لا توجد حسابات. أضف حساباً للبدء.' }}
+          rowClassName={node => node.id === newlyAddedId ? 'highlight-fade' : ''}
+        />
       )}
 
-      {/* ── Row action menu ── */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={!!menuAnchor}
-        onClose={closeMenu}
-        slotProps={{ paper: { elevation: 3, sx: { minWidth: 180, borderRadius: 1.5 } } }}
-      >
-        <MenuItem onClick={() => { closeMenu(); openAddChild(menuNode!) }}>
-          <AddOutlinedIcon sx={{ fontSize: 16, mr: 1, color: 'primary.main' }} />
-          إضافة حساب فرعي
-        </MenuItem>
-        <MenuItem onClick={() => { closeMenu(); openEdit(menuNode!) }}>
-          <EditOutlinedIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-          تعديل
-        </MenuItem>
-        <MenuItem onClick={() => { closeMenu(); confirmDelete(menuNode!) }} sx={{ color: 'error.main' }}>
-          <DeleteOutlineOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
-          حذف
-        </MenuItem>
-      </Menu>
-
       {/* ── Create / Edit Dialog ── */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editing ? 'تعديل الحساب' : 'إضافة حساب جديد'}</DialogTitle>
-        <Divider />
+      <Modal
+        open={dialogOpen}
+        onCancel={() => setDialogOpen(false)}
+        width={520}
+        title={editing ? 'تعديل الحساب' : 'إضافة حساب جديد'}
+        footer={null}
+      >
         <form onSubmit={handleSubmit}>
-          <DialogContent sx={{ pt: 2.5, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {formError && <Alert severity="error">{formError}</Alert>}
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 2 }}>
-              <TextField
-                label="الكود" value={form.code}
-                onChange={e => setForm(p => ({ ...p, code: e.target.value }))}
-                slotProps={{ htmlInput: { dir: 'ltr' } }} required fullWidth size="small"
-              />
-              <FormControl size="small" fullWidth>
-                <InputLabel>النوع</InputLabel>
+          <Flex vertical gap={16} style={{ paddingTop: 8 }}>
+            <Flex gap={16}>
+              <div style={{ flex: 5 }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الكود</Text>
+                <Input dir="ltr" value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))} required />
+              </div>
+              <div style={{ flex: 7 }}>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>النوع</Text>
                 <Select
-                  value={form.type} label="النوع"
-                  onChange={(e: SelectChangeEvent) => setForm(p => ({ ...p, type: e.target.value as AccountType, sub_type: null }))}
-                >
-                  {(Object.entries(TYPE_LABELS) as [AccountType, string][]).map(([v, label]) => (
-                    <MenuItem key={v} value={v}>{label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
+                  style={{ width: '100%' }}
+                  value={form.type}
+                  onChange={v => setForm(p => ({ ...p, type: v, sub_type: null }))}
+                  options={(Object.entries(TYPE_LABELS) as [AccountType, string][]).map(([v, label]) => ({ value: v, label }))}
+                />
+              </div>
+            </Flex>
 
             {SUB_TYPE_OPTIONS[form.type].length > 0 && (
-              <FormControl size="small" fullWidth>
-                <InputLabel>التصنيف الفرعي</InputLabel>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>التصنيف الفرعي</Text>
                 <Select
+                  style={{ width: '100%' }}
                   value={form.sub_type ?? ''}
-                  label="التصنيف الفرعي"
-                  onChange={(e: SelectChangeEvent) =>
-                    setForm(p => ({ ...p, sub_type: (e.target.value || null) as AccountSubType }))
-                  }
-                >
-                  <MenuItem value="">— غير محدد —</MenuItem>
-                  {SUB_TYPE_OPTIONS[form.type].map(opt => (
-                    <MenuItem key={opt.value} value={opt.value ?? ''}>{opt.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  onChange={v => setForm(p => ({ ...p, sub_type: (v || null) as AccountSubType }))}
+                  options={[
+                    { value: '', label: '— غير محدد —' },
+                    ...SUB_TYPE_OPTIONS[form.type].map(opt => ({ value: opt.value ?? '', label: opt.label })),
+                  ]}
+                />
+              </div>
             )}
 
-            <TextField
-              label="الاسم" value={form.name}
-              onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-              required fullWidth size="small"
-            />
+            <div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الاسم</Text>
+              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required />
+            </div>
 
-            <FormControl size="small" fullWidth>
-              <InputLabel>الحساب الأب</InputLabel>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الحساب الأب</Text>
               <Select
+                showSearch
+                style={{ width: '100%' }}
                 value={form.parent_id?.toString() ?? ''}
-                label="الحساب الأب"
-                onChange={(e: SelectChangeEvent) => {
-                  const newParentId = e.target.value === '' ? null : Number(e.target.value)
+                onChange={v => {
+                  const newParentId = v === '' ? null : Number(v)
                   setForm(p => ({
                     ...p,
                     parent_id: newParentId,
                     ...(!editing && { code: suggestCode(newParentId, accounts) }),
                   }))
                 }}
-              >
-                <MenuItem value="">— بدون أب —</MenuItem>
-                {accounts.filter(a => !excludeIds.has(a.id)).map(a => (
-                  <MenuItem key={a.id} value={a.id.toString()}>{a.code} — {a.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                options={[
+                  { value: '', label: '— بدون أب —' },
+                  ...accounts.filter(a => !excludeIds.has(a.id)).map(a => ({ value: a.id.toString(), label: `${a.code} — ${a.name}` })),
+                ]}
+              />
+            </div>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 2, py: 1 }}>
-              <Typography variant="body2">الحساب نشط</Typography>
-              <Switch checked={form.is_active}
-                onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))} size="small" />
-            </Box>
-          </DialogContent>
-          <Divider />
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <Button variant="outlined" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button variant="contained" type="submit" disabled={saving}>
-              {saving ? 'جارٍ الحفظ…' : editing ? 'تحديث' : 'إضافة'}
-            </Button>
-          </DialogActions>
+            <Flex align="center" justify="space-between" style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, padding: '8px 16px' }}>
+              <Text>الحساب نشط</Text>
+              <Switch checked={form.is_active} onChange={checked => setForm(p => ({ ...p, is_active: checked }))} />
+            </Flex>
+
+            <Flex justify="flex-end" gap={8} style={{ marginTop: 8 }}>
+              <Button onClick={() => setDialogOpen(false)}>إلغاء</Button>
+              <Button type="primary" htmlType="submit" loading={saving}>
+                {editing ? 'تحديث' : 'إضافة'}
+              </Button>
+            </Flex>
+          </Flex>
         </form>
-      </Dialog>
+      </Modal>
 
       {/* ── Delete Confirmation ── */}
-      {(() => {
-        const hasChildren = !!deleteTarget && accounts.some(a => a.parent_id === deleteTarget.id)
-        return (
-          <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeleteError(null) }} maxWidth="xs" fullWidth>
-            <DialogTitle>تأكيد الحذف</DialogTitle>
-            <Divider />
-            <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Typography variant="body2" color="text.secondary">
-                هل أنت متأكد من حذف الحساب{' '}
-                <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  {deleteTarget?.code} — {deleteTarget?.name}
-                </Box>؟
-              </Typography>
-              {hasChildren && (
-                <Alert severity="warning">
-                  لا يمكن الحذف — هذا الحساب يحتوي على حسابات فرعية. احذف الحسابات الفرعية أولاً.
-                </Alert>
-              )}
-              {deleteError && <Alert severity="error">{deleteError}</Alert>}
-            </DialogContent>
-            <Divider />
-            <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-              <Button variant="outlined" onClick={() => { setDeleteOpen(false); setDeleteError(null) }}>إلغاء</Button>
-              <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting || hasChildren}>
-                {deleting ? 'جارٍ الحذف…' : 'حذف'}
-              </Button>
-            </DialogActions>
-          </Dialog>
-        )
-      })()}
-    </Box>
+      <Modal
+        open={deleteOpen}
+        onCancel={() => setDeleteOpen(false)}
+        width={420}
+        title="تأكيد الحذف"
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setDeleteOpen(false)}>إلغاء</Button>
+            <Button type="primary" danger onClick={handleDelete} disabled={deleting || hasChildrenOfDeleteTarget}>
+              {deleting ? <Spin size="small" /> : 'حذف'}
+            </Button>
+          </Flex>
+        }
+      >
+        <Flex vertical gap={12} style={{ paddingTop: 8 }}>
+          <Text type="secondary">
+            هل أنت متأكد من حذف الحساب{' '}
+            <span style={{ fontWeight: 600, color: 'var(--ant-color-text)' }}>{deleteTarget?.code} — {deleteTarget?.name}</span>؟
+          </Text>
+          {hasChildrenOfDeleteTarget && (
+            <Alert type="warning" showIcon message="لا يمكن الحذف — هذا الحساب يحتوي على حسابات فرعية. احذف الحسابات الفرعية أولاً." />
+          )}
+        </Flex>
+      </Modal>
+    </div>
   )
 }

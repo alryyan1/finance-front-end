@@ -89,3 +89,37 @@ export const journalSettingsApi = {
   updateUser: (data: UserJournalAccounts): Promise<UserJournalAccounts> =>
     api.put<UserJournalAccounts>('/api/user/journal-accounts', data).then(d),
 }
+
+// ── Petty cash approval settings ────────────────────────────────────────────
+
+export type PettyCashNotifyRecipients = 'manager' | 'auditor' | 'both'
+
+export interface PettyCashApprovalSettings {
+  petty_cash_manager_user_id: number | null
+  petty_cash_auditor_user_id: number | null
+  petty_cash_manager_whatsapp_phone: string
+  petty_cash_auditor_whatsapp_phone: string
+  petty_cash_notify_on_create: boolean
+  petty_cash_notify_recipients: PettyCashNotifyRecipients
+  firebase_collection_name: string
+}
+
+function toPettyCashApprovalSettings(data: Record<string, unknown>): PettyCashApprovalSettings {
+  return {
+    petty_cash_manager_user_id: toIntOrNull(data.petty_cash_manager_user_id),
+    petty_cash_auditor_user_id: toIntOrNull(data.petty_cash_auditor_user_id),
+    petty_cash_manager_whatsapp_phone: String(data.petty_cash_manager_whatsapp_phone ?? ''),
+    petty_cash_auditor_whatsapp_phone: String(data.petty_cash_auditor_whatsapp_phone ?? ''),
+    petty_cash_notify_on_create: Boolean(data.petty_cash_notify_on_create ?? true),
+    petty_cash_notify_recipients: (data.petty_cash_notify_recipients as PettyCashNotifyRecipients) || 'both',
+    firebase_collection_name: String(data.firebase_collection_name ?? ''),
+  }
+}
+
+export const pettyCashSettingsApi = {
+  get: (): Promise<PettyCashApprovalSettings> =>
+    api.get<Record<string, unknown>>('/api/settings').then(r => toPettyCashApprovalSettings(r.data)),
+
+  update: (data: PettyCashApprovalSettings): Promise<PettyCashApprovalSettings> =>
+    api.put<Record<string, unknown>>('/api/settings', data).then(r => toPettyCashApprovalSettings(r.data)),
+}

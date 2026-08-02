@@ -1,31 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FiscalYear } from '@/api/fiscalYears'
+import { whatsappApi, type WhatsAppBusinessPhoneNumber } from '@/api/whatsapp'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { useFiscalYears } from '@/context/FiscalYearsContext'
-import AppBar from '@mui/material/AppBar'
-import Toolbar from '@mui/material/Toolbar'
-import Box from '@mui/material/Box'
-import IconButton from '@mui/material/IconButton'
-import Avatar from '@mui/material/Avatar'
-import Typography from '@mui/material/Typography'
-import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
-import ListItemIcon from '@mui/material/ListItemIcon'
-import Divider from '@mui/material/Divider'
-import Chip from '@mui/material/Chip'
-import Button from '@mui/material/Button'
-import Tooltip from '@mui/material/Tooltip'
-import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined'
-import AddIcon from '@mui/icons-material/Add'
-import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined'
-import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined'
-import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined'
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
-import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined'
-import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined'
-import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined'
+import { Avatar, Button, Dropdown, Flex, Tooltip, Typography, type MenuProps } from 'antd'
+import {
+  Calendar, CalendarClock, LockOpen, Lock, LogOut, MessageCircle, Moon, Plus, Sun, TriangleAlert,
+} from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
+
+const { Text } = Typography
 
 const today = new Date()
 const DATE_LABEL = today.toLocaleDateString('ar-SA', {
@@ -36,8 +21,12 @@ export default function Topbar() {
   const { user, logout } = useAuth()
   const { mode, toggleMode } = useThemeMode()
   const navigate = useNavigate()
-  const [anchor, setAnchor] = useState<null | HTMLElement>(null)
   const { years } = useFiscalYears()
+  const [whatsappNumber, setWhatsappNumber] = useState<WhatsAppBusinessPhoneNumber | null>(null)
+
+  useEffect(() => {
+    whatsappApi.getPhoneNumber().then(setWhatsappNumber).catch(() => setWhatsappNumber(null))
+  }, [])
 
   const activePeriod = useMemo<FiscalYear | null>(() => {
     return years.find(y => y.status === 'open') ?? null
@@ -57,144 +46,140 @@ export default function Topbar() {
     .toUpperCase() ?? '?'
 
   async function handleLogout() {
-    setAnchor(null)
     await logout()
     navigate('/login')
   }
 
+  const menuItems: MenuProps['items'] = [
+    {
+      key: 'info',
+      label: (
+        <Flex vertical style={{ padding: '4px 0' }}>
+          <Text style={{ fontWeight: 600 }}>{user?.name}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{user?.email}</Text>
+        </Flex>
+      ),
+      disabled: true,
+    },
+    { type: 'divider' },
+    ...(activePeriod !== undefined ? [{
+      key: 'period',
+      label: activePeriod ? activePeriod.name : 'لا توجد فترة مفتوحة',
+      icon: activePeriod ? <LockOpen size={16} color="var(--ant-color-success)" /> : <Lock size={16} color="var(--ant-color-warning)" />,
+      onClick: () => navigate('/fiscal-years'),
+    }] : []),
+    { type: 'divider' },
+    {
+      key: 'logout',
+      label: 'تسجيل الخروج',
+      icon: <LogOut size={16} />,
+      danger: true,
+      onClick: handleLogout,
+    },
+  ]
+
   return (
-    <AppBar
-      position="static"
-      elevation={0}
-      sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', color: 'text.primary', height: 64 }}
+    <header
+      style={{
+        background: 'var(--ant-color-bg-container)',
+        borderBottom: '1px solid var(--ant-color-border-secondary)',
+        color: 'var(--ant-color-text)',
+        height: 64,
+        direction: 'rtl',
+        flexShrink: 0,
+      }}
     >
-      <Toolbar sx={{ height: '100%', gap: 1.5 }}>
-        {/* User avatar + menu — right side in RTL */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
-            <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.3 }}>{user?.name}</Typography>
-            <Typography variant="caption" color="text.secondary">@{user?.username}</Typography>
-          </Box>
-          <IconButton onClick={e => setAnchor(e.currentTarget)} size="small" sx={{ p: 0.5 }}>
-            <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: 13, fontWeight: 700 }}>
+      <Flex align="center" gap={12} style={{ height: '100%', padding: '0 20px' }}>
+        {/* User avatar + menu */}
+        <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomLeft">
+          <Flex align="center" gap={8} style={{ cursor: 'pointer' }}>
+            <div className="topbar-username" style={{ textAlign: 'right' }}>
+              <Text style={{ fontWeight: 500, lineHeight: 1.3, display: 'block' }}>{user?.name}</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>@{user?.username}</Text>
+            </div>
+            <Avatar
+              size={34}
+              style={{ backgroundColor: 'var(--ant-color-primary)', fontSize: 13, fontWeight: 700 }}
+            >
               {initials}
             </Avatar>
-          </IconButton>
-        </Box>
+          </Flex>
+        </Dropdown>
 
         {/* Spacer */}
-        <Box sx={{ flexGrow: 1 }} />
+        <div style={{ flexGrow: 1 }} />
 
-        {/* ── Info chips ── */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        {/* ── Info items ── */}
+        <Flex align="center" gap={20}>
           {/* Today's date */}
-          <Chip
-            icon={<CalendarTodayOutlinedIcon sx={{ fontSize: '15px !important' }} />}
-            label={DATE_LABEL}
-            size="small"
-            variant="outlined"
-            sx={{ display: { xs: 'none', md: 'flex' }, fontSize: 12, color: 'text.secondary', borderColor: 'divider' }}
-          />
+          <Flex align="center" gap={4} className="topbar-today-date" style={{ color: 'var(--ant-color-text-secondary)' }}>
+            <Calendar size={15} />
+            <Text style={{ fontSize: 12 }}>{DATE_LABEL}</Text>
+          </Flex>
 
           {/* Active fiscal period */}
           <Tooltip title="اضغط لإدارة الفترات المالية">
-            <Chip
-              icon={
-                activePeriod === undefined
-                  ? <EventNoteOutlinedIcon sx={{ fontSize: '15px !important' }} />
-                  : activePeriod
-                    ? <LockOpenOutlinedIcon sx={{ fontSize: '15px !important' }} />
-                    : <WarningAmberOutlinedIcon sx={{ fontSize: '15px !important' }} />
-              }
-              label={
-                activePeriod === undefined ? '…'
+            <Flex
+              align="center" gap={4}
+              className="topbar-fiscal-period"
+              onClick={() => navigate('/settings/fiscal-years')}
+              style={{ color: 'var(--ant-color-text-secondary)', cursor: 'pointer' }}
+            >
+              {activePeriod === undefined
+                ? <CalendarClock size={15} />
+                : activePeriod
+                  ? <LockOpen size={15} />
+                  : <TriangleAlert size={15} />}
+              <Text style={{ fontSize: 12 }}>
+                {activePeriod === undefined ? '…'
                   : !activePeriod       ? 'لا توجد فترة مفتوحة'
                   : todayCovered        ? `${activePeriod.name} • مفتوحة`
-                  :                       `${activePeriod.name} • خارج نطاق اليوم`
-              }
-              size="small"
-              onClick={() => navigate('/settings/fiscal-years')}
-              color={
-                activePeriod === undefined ? 'default'
-                  : !activePeriod         ? 'error'
-                  : todayCovered          ? 'success'
-                  :                         'warning'
-              }
-              variant={activePeriod ? 'filled' : 'outlined'}
-              sx={{ fontSize: 12, cursor: 'pointer', display: { xs: 'none', sm: 'flex' } }}
-            />
+                  :                       `${activePeriod.name} • خارج نطاق اليوم`}
+              </Text>
+            </Flex>
           </Tooltip>
+
+          {/* WhatsApp business sending number */}
+          {whatsappNumber && (
+            <Tooltip title={`اسم الحساب الموثّق: ${whatsappNumber.verified_name}`}>
+              <Flex align="center" gap={4} className="topbar-whatsapp" style={{ color: 'var(--ant-color-text-secondary)' }}>
+                <MessageCircle size={15} />
+                <Text style={{ fontSize: 12 }} dir="ltr">{whatsappNumber.display_phone_number}</Text>
+              </Flex>
+            </Tooltip>
+          )}
 
           {/* Theme toggle */}
           <Tooltip title={mode === 'light' ? 'الوضع الداكن' : 'الوضع الفاتح'}>
-            <IconButton size="small" onClick={toggleMode} sx={{ color: 'text.secondary' }}>
-              {mode === 'light'
-                ? <DarkModeOutlinedIcon sx={{ fontSize: 20 }} />
-                : <LightModeOutlinedIcon sx={{ fontSize: 20 }} />}
-            </IconButton>
+            <Button
+              type="text" shape="circle" size="small"
+              onClick={toggleMode}
+              icon={mode === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            />
           </Tooltip>
 
           {/* Quick new entry */}
           <Button
-            variant="contained"
+            type="primary"
             size="small"
-            startIcon={<AddIcon />}
+            icon={<Plus size={16} />}
             onClick={() => navigate('/transactions/new')}
-            sx={{ fontWeight: 600, px: 1.5, display: { xs: 'none', sm: 'flex' } }}
+            className="topbar-new-entry"
+            style={{ fontWeight: 600 }}
           >
             قيد جديد
           </Button>
 
           {/* Mobile: icon only */}
-          <IconButton
-            color="primary"
-            size="small"
+          <Button
+            type="text" shape="circle" size="small"
+            className="topbar-new-entry-mobile"
+            color="primary" variant="text"
             onClick={() => navigate('/transactions/new')}
-            sx={{ display: { xs: 'flex', sm: 'none' } }}
-          >
-            <AddIcon />
-          </IconButton>
-        </Box>
-
-        <Menu
-          anchorEl={anchor}
-          open={Boolean(anchor)}
-          onClose={() => setAnchor(null)}
-          anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-          transformOrigin={{ horizontal: 'left', vertical: 'top' }}
-          slotProps={{ paper: { sx: { minWidth: 200, mt: 0.5 } } }}
-        >
-          <Box sx={{ px: 2, py: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>{user?.name}</Typography>
-            <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
-          </Box>
-          <Divider />
-
-          {/* Period status in menu on mobile */}
-          {activePeriod !== undefined && (
-            <MenuItem
-              dense
-              onClick={() => { setAnchor(null); navigate('/fiscal-years') }}
-              sx={{ gap: 1 }}
-            >
-              <ListItemIcon sx={{ minWidth: 0, color: activePeriod ? 'success.main' : 'warning.main' }}>
-                {activePeriod ? <LockOpenOutlinedIcon fontSize="small" /> : <LockOutlinedIcon fontSize="small" />}
-              </ListItemIcon>
-              <Typography variant="body2" color={activePeriod ? 'success.main' : 'warning.main'}>
-                {activePeriod ? activePeriod.name : 'لا توجد فترة مفتوحة'}
-              </Typography>
-            </MenuItem>
-          )}
-
-          <Divider />
-          <MenuItem onClick={handleLogout} sx={{ color: 'error.main', gap: 1 }}>
-            <ListItemIcon sx={{ color: 'error.main', minWidth: 0 }}>
-              <LogoutOutlinedIcon fontSize="small" />
-            </ListItemIcon>
-            تسجيل الخروج
-          </MenuItem>
-        </Menu>
-      </Toolbar>
-    </AppBar>
+            icon={<Plus size={18} />}
+          />
+        </Flex>
+      </Flex>
+    </header>
   )
 }
