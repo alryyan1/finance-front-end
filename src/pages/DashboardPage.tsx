@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Card, Col, Flex, Row, Skeleton, Table, Tag, Typography,
+  Card, Col, Flex, Progress, Row, Skeleton, Table, Tag, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
-import { ArrowLeftRight, TrendingUp, Users, Wallet } from 'lucide-react'
+import MonthlyTrendChart, { type MonthlyTrendPoint } from '@/components/dashboard/MonthlyTrendChart'
+import TopExpenseAccountsChart, { type TopExpenseAccount } from '@/components/dashboard/TopExpenseAccountsChart'
+import { AlertTriangle, ArrowLeftRight, CalendarClock, ClipboardCheck, TrendingUp, Users, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import api from '@/lib/axios'
 import { useAuth } from '@/context/AuthContext'
@@ -22,6 +24,23 @@ interface RecentEntry {
   lines_sum_debit: string | null
 }
 
+interface PettyCashFundSummary {
+  id: number
+  name: string
+  current_balance: string
+  max_amount: string
+  low_balance_threshold: string
+  is_low: boolean
+}
+
+interface FiscalYearSummary {
+  id: number
+  name: string
+  status: 'open' | 'closed'
+  start_date: string
+  end_date: string
+}
+
 interface DashboardData {
   accounts_count: number
   parties_count: number
@@ -29,6 +48,13 @@ interface DashboardData {
   total_movement: string
   net_profit: number
   recent_entries: RecentEntry[]
+  petty_cash_funds: PettyCashFundSummary[]
+  pending_approvals_count: number
+  awaiting_auditor_count: number
+  awaiting_manager_count: number
+  fiscal_year: FiscalYearSummary | null
+  monthly_trend: MonthlyTrendPoint[]
+  top_expense_accounts: TopExpenseAccount[]
 }
 
 interface StatCardProps {
@@ -115,6 +141,14 @@ export default function DashboardPage() {
       color: '#d97706',
       loading,
     },
+    {
+      label: 'موافقات نثريات معلّقة',
+      value: (data?.pending_approvals_count ?? 0).toLocaleString('en-US'),
+      sub: (data?.pending_approvals_count ?? 0) > 0 ? 'بحاجة إلى مراجعة' : 'لا يوجد معلّق',
+      icon: ClipboardCheck,
+      color: (data?.pending_approvals_count ?? 0) > 0 ? '#dc2626' : '#16a34a',
+      loading,
+    },
   ]
 
   const columns: ColumnsType<RecentEntry> = [
@@ -161,6 +195,8 @@ export default function DashboardPage() {
               <Text>لوحة التحكم تُقدّم ملخصاً سريعاً للوضع المالي الحالي: إجمالي الأصول، الخصوم، الإيرادات والمصروفات لهذا الشهر.</Text></div>
             <div><Title level={5}>بطاقات الإحصاء</Title>
               <Text>كل بطاقة تُظهر قيمة مالية إجمالية. اضغط على البطاقة للانتقال إلى الصفحة التفصيلية المقابلة.</Text></div>
+            <div><Title level={5}>الإيرادات والمصروفات وأعلى الحسابات</Title>
+              <Text>رسم بياني يقارن الإيرادات والمصروفات خلال آخر 6 أشهر، بجانب أعلى حسابات المصروفات خلال نفس الفترة. مرّر المؤشر فوق الأعمدة لعرض التفاصيل.</Text></div>
             <div><Title level={5}>آخر القيود</Title>
               <Text>يُعرض في أسفل الصفحة جدول بآخر القيود المحاسبية المسجّلة. للمزيد من التفاصيل انتقل لصفحة "القيود".</Text></div>
             <div><Title level={5}>التنقل في النظام</Title>
@@ -179,6 +215,93 @@ export default function DashboardPage() {
             <StatCard {...s} />
           </Col>
         ))}
+      </Row>
+
+      {/* Petty cash funds & fiscal year status */}
+      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
+        <Col xs={24} xl={16}>
+          <Card
+            title="صناديق العهدة"
+            styles={{ body: { padding: 20 } }}
+            onClick={() => navigate('/petty-cash')}
+            hoverable
+          >
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : (data?.petty_cash_funds?.length ?? 0) === 0 ? (
+              <Text type="secondary">لا توجد صناديق نشطة</Text>
+            ) : (
+              <Flex vertical gap={16}>
+                {data!.petty_cash_funds.map(fund => {
+                  const balance = Number(fund.current_balance)
+                  const max = Number(fund.max_amount)
+                  const percent = max > 0 ? Math.round((balance / max) * 100) : 0
+                  return (
+                    <div key={fund.id}>
+                      <Flex justify="space-between" align="center" style={{ marginBottom: 4 }}>
+                        <Flex align="center" gap={8}>
+                          <Text strong>{fund.name}</Text>
+                          {fund.is_low && (
+                            <Tag color="error" icon={<AlertTriangle size={12} />}>
+                              رصيد منخفض
+                            </Tag>
+                          )}
+                        </Flex>
+                        <Text style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+                          {formatCurrency(balance)} / {formatCurrency(max)}
+                        </Text>
+                      </Flex>
+                      <Progress
+                        percent={percent}
+                        showInfo={false}
+                        strokeColor={fund.is_low ? '#dc2626' : '#2563eb'}
+                      />
+                    </div>
+                  )
+                })}
+              </Flex>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} xl={8}>
+          <Card title="السنة المالية الحالية" styles={{ body: { padding: 20 } }}>
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 2 }} />
+            ) : !data?.fiscal_year ? (
+              <Flex align="center" gap={8}>
+                <AlertTriangle size={16} color="#dc2626" />
+                <Text type="secondary">لا توجد سنة مالية مفتوحة لهذا التاريخ</Text>
+              </Flex>
+            ) : (
+              <Flex vertical gap={8}>
+                <Flex align="center" gap={8}>
+                  <CalendarClock size={16} />
+                  <Text strong>{data.fiscal_year.name}</Text>
+                  <Tag color={data.fiscal_year.status === 'open' ? 'success' : 'default'}>
+                    {data.fiscal_year.status === 'open' ? 'مفتوحة' : 'مغلقة'}
+                  </Tag>
+                </Flex>
+                <Text type="secondary" style={{ direction: 'ltr', fontSize: 12 }}>
+                  {data.fiscal_year.start_date} → {data.fiscal_year.end_date}
+                </Text>
+              </Flex>
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Trend & top expense accounts */}
+      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
+        <Col xs={24} xl={16}>
+          <Card title="الإيرادات والمصروفات - آخر 6 أشهر" styles={{ body: { padding: 20 } }}>
+            <MonthlyTrendChart data={data?.monthly_trend ?? []} loading={loading} />
+          </Card>
+        </Col>
+        <Col xs={24} xl={8}>
+          <Card title="أعلى حسابات المصروفات" styles={{ body: { padding: 20 } }}>
+            <TopExpenseAccountsChart data={data?.top_expense_accounts ?? []} loading={loading} />
+          </Card>
+        </Col>
       </Row>
 
       {/* Recent entries */}
