@@ -18,8 +18,8 @@ import {
 import { useAuth } from '@/context/AuthContext'
 import { accountsApi } from '@/api/accounts'
 import { pettyCashSettingsApi, pettyCashAccountSettingsApi } from '@/api/settings'
-import { pettyCashApi, type PettyCashTransaction, type NotificationResult } from '@/api/pettyCash'
-import { openPdf } from '@/api/pdf'
+import { pettyCashApi, type PettyCashTransaction, type NotificationResult, type PettyCashTotals } from '@/api/pettyCash'
+import { openPdf, downloadExcel } from '@/api/pdf'
 import type { Account } from '@/types/account'
 
 const { Title, Text } = Typography
@@ -32,6 +32,8 @@ const numFmt = (v: string | number | null | undefined) =>
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
+const emptyCompoundLine = () => ({ contra_account: null as Account | null, amount: '' })
+
 const emptyExpenseForm = () => ({
   date:               today(),
   amount:             '',
@@ -40,6 +42,8 @@ const emptyExpenseForm = () => ({
   source_account_id:  null as Account | null,
   description:        '',
   document:           null as File | null,
+  compound:           false,
+  lines:              [emptyCompoundLine(), emptyCompoundLine()],
 })
 
 const ROLE_LABEL: Record<NotificationResult['role'], string> = { manager: 'المدير' }
@@ -145,6 +149,7 @@ export default function PettyCashPage() {
   const [page, setPage]         = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal]       = useState(0)
+  const [totals, setTotals]     = useState<PettyCashTotals | null>(null)
 
   // Expense dialog
   const [expenseOpen, setExpenseOpen]     = useState(false)
@@ -163,6 +168,9 @@ export default function PettyCashPage() {
 
   // PDF export
   const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Excel export
+  const [excelLoading, setExcelLoading] = useState(false)
 
   // Sync expense accounts to WhatsApp (Firestore)
   const [syncingAccounts, setSyncingAccounts] = useState(false)
@@ -203,6 +211,7 @@ export default function PettyCashPage() {
       .then(res => {
         setTransactions(res.data)
         setTotal(res.total)
+        setTotals(res.totals)
       })
       .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
@@ -332,18 +341,27 @@ export default function PettyCashPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [hasSourceAccount, expenseOpen, bankAccount, cashAccount])
 
+  const compoundTotal = expenseForm.lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0)
+  const compoundValid = expenseForm.compound
+    && expenseForm.lines.length >= 2
+    && expenseForm.lines.every(l => l.contra_account && parseFloat(l.amount) > 0)
+  const expenseFormValid = expenseForm.compound
+    ? compoundValid
+    : !!expenseForm.amount && !!expenseForm.contra_account_id
+
   const handleCreateExpense = async () => {
-    if (!expenseForm.amount || !expenseForm.contra_account_id || !expenseForm.source_account_id) return
+    if (!expenseFormValid || !expenseForm.source_account_id) return
     setCreatingExpense(true)
     try {
       const created = await pettyCashApi.createExpense({
         date: expenseForm.date,
-        amount: expenseForm.amount,
         beneficiary_name: expenseForm.beneficiary_name || undefined,
-        contra_account_id: expenseForm.contra_account_id.id,
         source_account_id: expenseForm.source_account_id.id,
         description: expenseForm.description || undefined,
         document: expenseForm.document,
+        ...(expenseForm.compound
+          ? { lines: expenseForm.lines.map(l => ({ contra_account_id: l.contra_account!.id, amount: l.amount })) }
+          : { amount: expenseForm.amount, contra_account_id: expenseForm.contra_account_id!.id }),
       })
       setExpenseOpen(false)
       setExpenseForm(emptyExpenseForm())
@@ -443,6 +461,17 @@ export default function PettyCashPage() {
     }
   }
 
+  const handleExcel = async () => {
+    setExcelLoading(true)
+    try {
+      await downloadExcel('/api/petty-cash/transactions/excel', { from, to }, 'petty-cash-transactions.xlsx')
+    } catch {
+      toast.error('تعذّر إنشاء ملف Excel')
+    } finally {
+      setExcelLoading(false)
+    }
+  }
+
   const handleSyncExpenseAccounts = async () => {
     setSyncingAccounts(true)
     try {
@@ -525,12 +554,22 @@ export default function PettyCashPage() {
       },
     },
     {
-      title: 'الحساب المقابل', width: 180,
-      render: (_: unknown, t) => <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.contra_account.name}</Text>,
-    },
-    {
-      title: 'الحساب الدائن', width: 150,
-      render: (_: unknown, t) => <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.source_account?.name ?? '—'}</Text>,
+      title: 'الحسابات', width: 280,
+      render: (_: unknown, t) => {
+        const debit = t.contra_account ? (
+          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>من ح/ {t.contra_account.name}</Text>
+        ) : (
+          <Tooltip title={t.lines.map(l => `${l.contra_account.name} — ${numFmt(l.amount)}`).join(' | ')}>
+            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>من ح/ متعدد ({t.lines.length})</Text>
+          </Tooltip>
+        )
+        return (
+          <Flex vertical gap={1}>
+            {debit}
+            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ {t.source_account?.name ?? '—'}</Text>
+          </Flex>
+        )
+      },
     },
     {
       title: 'أنشأه', width: 120,
@@ -614,8 +653,8 @@ export default function PettyCashPage() {
                 icon={uploadingDocFor === t.id ? <Spin size="small" /> : <Paperclip size={15} color="var(--ant-color-primary)" />} />
             </Tooltip>
           )}
-          <Tooltip title="حذف">
-            <Button type="text" shape="circle" size="small" danger onClick={() => setDeleteTarget(t)} icon={<Trash2 size={15} />} />
+          <Tooltip title={t.status === 'approved' ? 'لا يمكن حذف حركة معتمدة' : 'حذف'}>
+            <Button type="text" shape="circle" size="small" danger disabled={t.status === 'approved'} onClick={() => setDeleteTarget(t)} icon={<Trash2 size={15} />} />
           </Tooltip>
         </Flex>
       ),
@@ -644,6 +683,15 @@ export default function PettyCashPage() {
                 <Text>يمكن إرفاق صورة أو ملف PDF لإيصال كل مصروف لتوثيقه.</Text></div>
             </Flex>
           </HelpButton>
+                {/* Totals summary */}
+          {totals && (
+            <div style={{ padding: '8px 14px', marginBottom: 3, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, textAlign: 'center' }}>
+              <Text style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#000' }}>إجمالي المصروفات</Text>
+              <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 18, color: 'var(--ant-color-error)' }}>
+                {numFmt(totals.expense)}
+              </span>
+            </div>
+          )}
           <Button type="primary" danger size="small" icon={<Banknote size={15} />} onClick={openExpenseDialog}>
                 مصروف جديد
               </Button>
@@ -677,6 +725,8 @@ export default function PettyCashPage() {
         </div>
       ) : (
         <>
+    
+
           {/* Toolbar */}
           <div style={{ padding: 3, marginBottom: 3, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
           
@@ -699,13 +749,8 @@ export default function PettyCashPage() {
                   icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
               </Tooltip>
               <Tooltip title="تصدير Excel">
-                <Button type="text" shape="circle" size="small" onClick={() => {
-                  const p = new URLSearchParams()
-                  if (from) p.set('from', from)
-                  if (to)   p.set('to', to)
-                  const qs = p.toString()
-                  navigate(`/petty-cash-spreadsheet${qs ? `?${qs}` : ''}`)
-                }} icon={<Sheet size={16} />} />
+                <Button type="text" shape="circle" size="small" onClick={handleExcel} disabled={excelLoading}
+                  icon={excelLoading ? <Spin size="small" /> : <Sheet size={16} />} />
               </Tooltip>
               <Tooltip title="مزامنة حسابات المصروفات مع واتساب">
                 <Button type="text" shape="circle" size="small" onClick={handleSyncExpenseAccounts} disabled={syncingAccounts}
@@ -748,7 +793,7 @@ export default function PettyCashPage() {
       <Modal
         open={expenseOpen}
         onCancel={() => setExpenseOpen(false)}
-        width={440}
+        width={640}
         centered
         styles={{ content: { borderRadius: 16, padding: 0, overflow: 'hidden' }, header: { padding: '14px 18px 0', margin: 0 }, body: { padding: '10px 18px 0' }, footer: { padding: '10px 18px 14px', margin: 0 } }}
         title={
@@ -774,7 +819,7 @@ export default function PettyCashPage() {
           <Flex justify="flex-end" gap={8}>
             <Button onClick={() => setExpenseOpen(false)}>إلغاء</Button>
             <Button type="primary" danger onClick={handleCreateExpense}
-              disabled={creatingExpense || !expenseForm.amount || !expenseForm.contra_account_id || !expenseForm.source_account_id}
+              disabled={creatingExpense || !expenseFormValid || !expenseForm.source_account_id}
               icon={creatingExpense ? <Spin size="small" /> : <Plus size={16} />}>
               حفظ المصروف
             </Button>
@@ -794,18 +839,20 @@ export default function PettyCashPage() {
             <div style={{
               margin: '2px 0 8px', direction: 'ltr', lineHeight: 1,
               fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-              color: expenseForm.amount ? 'var(--ant-color-error)' : '#000',
+              color: (expenseForm.compound ? compoundTotal > 0 : !!expenseForm.amount) ? 'var(--ant-color-error)' : '#000',
             }}>
-              {numFmt(expenseForm.amount || 0)}
+              {numFmt(expenseForm.compound ? compoundTotal : (expenseForm.amount || 0))}
             </div>
-            <div >
-              <InputNumber
-                ref={expenseAmountRef}
-                autoFocus  controls={false} 
-                value={expenseForm.amount === '' ? null : Number(expenseForm.amount)}
-                onChange={val => setExpenseForm(f => ({ ...f, amount: val == null ? '' : String(val) }))}
-              />
-            </div>
+            {!expenseForm.compound && (
+              <div >
+                <InputNumber
+                  ref={expenseAmountRef}
+                  autoFocus  controls={false}
+                  value={expenseForm.amount === '' ? null : Number(expenseForm.amount)}
+                  onChange={val => setExpenseForm(f => ({ ...f, amount: val == null ? '' : String(val) }))}
+                />
+              </div>
+            )}
           </div>
 
           <Row gutter={[12, 10]}>
@@ -814,19 +861,71 @@ export default function PettyCashPage() {
               <Input value={expenseForm.beneficiary_name} onChange={e => setExpenseForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
             </Col>
             <Col span={24}>
-              <FieldLabel icon={Landmark}>حساب المصروف</FieldLabel>
-              <Select
-                showSearch
-                style={{ width: '100%' }}
-                value={expenseForm.contra_account_id?.id}
-                onChange={v => {
-                  setExpenseForm(f => ({ ...f, contra_account_id: expenseAccounts.find(a => a.id === v) ?? null }))
-                  setTimeout(() => expenseDescriptionRef.current?.focus(), 0)
-                }}
-                notFoundContent="لا توجد حسابات"
-                filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-                options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
-              />
+              <Flex align="center" justify="space-between">
+                <FieldLabel icon={Landmark}>{expenseForm.compound ? 'حسابات المصروف' : 'حساب المصروف'}</FieldLabel>
+                <Button
+                  type="link" size="small" style={{ padding: 0, height: 'auto', fontSize: 11 }}
+                  onClick={() => setExpenseForm(f => ({ ...f, compound: !f.compound }))}
+                >
+                  {expenseForm.compound ? 'رجوع لحساب واحد' : 'تقسيم على عدة حسابات'}
+                </Button>
+              </Flex>
+              {expenseForm.compound ? (
+                <Flex vertical gap={6}>
+                  {expenseForm.lines.map((line, i) => (
+                    <Flex key={i} gap={6} align="center">
+                      <Select
+                        showSearch
+                        style={{ flex: 1 }}
+                        placeholder="اختر حساباً"
+                        value={line.contra_account?.id}
+                        onChange={v => setExpenseForm(f => ({
+                          ...f,
+                          lines: f.lines.map((l, idx) => idx === i ? { ...l, contra_account: expenseAccounts.find(a => a.id === v) ?? null } : l),
+                        }))}
+                        notFoundContent="لا توجد حسابات"
+                        filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                        options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                      />
+                      <InputNumber
+                        controls={false}
+                        style={{ width: 90 }}
+                        placeholder="المبلغ"
+                        value={line.amount === '' ? null : Number(line.amount)}
+                        onChange={val => setExpenseForm(f => ({
+                          ...f,
+                          lines: f.lines.map((l, idx) => idx === i ? { ...l, amount: val == null ? '' : String(val) } : l),
+                        }))}
+                      />
+                      <Button
+                        type="text" shape="circle" size="small" danger
+                        disabled={expenseForm.lines.length <= 2}
+                        onClick={() => setExpenseForm(f => ({ ...f, lines: f.lines.filter((_, idx) => idx !== i) }))}
+                        icon={<Trash2 size={14} />}
+                      />
+                    </Flex>
+                  ))}
+                  <Button
+                    icon={<Plus size={13} />} size="small"
+                    onClick={() => setExpenseForm(f => ({ ...f, lines: [...f.lines, emptyCompoundLine()] }))}
+                  >
+                    إضافة سطر
+                  </Button>
+                </Flex>
+              ) : (
+                <Select
+                  showSearch
+                  style={{ width: '100%' }}
+                  value={expenseForm.contra_account_id?.id}
+                  onChange={v => {
+                    setExpenseForm(f => ({ ...f, contra_account_id: expenseAccounts.find(a => a.id === v) ?? null }))
+                    setTimeout(() => expenseDescriptionRef.current?.focus(), 0)
+                  }}
+                  notFoundContent="لا توجد حسابات"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+              )}
             </Col>
             <Col span={24}>
               <FieldLabel icon={Landmark}>من حساب</FieldLabel>

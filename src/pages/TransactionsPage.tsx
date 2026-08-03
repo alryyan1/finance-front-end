@@ -44,7 +44,7 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
   return (
     <div style={{ padding: '4px 0' }}>
       {multiDebit && (
-        <Text style={{ color: 'var(--ant-color-primary)', fontWeight: 700, display: 'block', direction: 'ltr', fontSize: 12 }}>
+        <Text style={{ color: 'var(--ant-color-primary)', fontWeight: 700, display: 'block', direction: 'rtl', fontSize: 12 }}>
           من مذكورين · {debitTotal.toLocaleString('en-US')}
         </Text>
       )}

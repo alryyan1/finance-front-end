@@ -3,6 +3,13 @@ import api from '@/lib/axios'
 export type TransactionType = 'expense' | 'replenishment'
 export type TransactionStatus = 'pending' | 'approved'
 
+export interface PettyCashTransactionLine {
+  id: number
+  contra_account_id: number
+  contra_account: { id: number; code: string; name: string }
+  amount: string
+}
+
 export interface PettyCashTransaction {
   id: number
   type: TransactionType
@@ -10,8 +17,9 @@ export interface PettyCashTransaction {
   date: string
   amount: string
   beneficiary_name: string | null
-  contra_account_id: number
-  contra_account: { id: number; code: string; name: string }
+  contra_account_id: number | null
+  contra_account: { id: number; code: string; name: string } | null
+  lines: PettyCashTransactionLine[]
   source_account_id: number | null
   source_account: { id: number; code: string; name: string } | null
   created_by: { id: number; name: string } | null
@@ -24,9 +32,10 @@ export interface PettyCashTransaction {
 
 export interface ExpensePayload {
   date: string
-  amount: string
+  amount?: string
   beneficiary_name?: string
-  contra_account_id: number
+  contra_account_id?: number
+  lines?: { contra_account_id: number; amount: string }[]
   source_account_id: number
   description?: string
   document?: File | null
@@ -46,12 +55,17 @@ export interface NotificationsResponse {
   notifications: NotificationResult[]
 }
 
+export interface PettyCashTotals {
+  expense: number
+}
+
 export interface PaginatedTransactions {
   data: PettyCashTransaction[]
   current_page: number
   last_page: number
   per_page: number
   total: number
+  totals: PettyCashTotals
 }
 
 export const pettyCashApi = {
@@ -66,12 +80,19 @@ export const pettyCashApi = {
   createExpense: (data: ExpensePayload): Promise<PettyCashTransaction & Partial<NotificationsResponse>> => {
     const fd = new FormData()
     fd.append('date', data.date)
-    fd.append('amount', data.amount)
     if (data.beneficiary_name) fd.append('beneficiary_name', data.beneficiary_name)
-    fd.append('contra_account_id', String(data.contra_account_id))
     fd.append('source_account_id', String(data.source_account_id))
     if (data.description) fd.append('description', data.description)
     if (data.document) fd.append('document', data.document)
+    if (data.lines) {
+      data.lines.forEach((line, i) => {
+        fd.append(`lines[${i}][contra_account_id]`, String(line.contra_account_id))
+        fd.append(`lines[${i}][amount]`, line.amount)
+      })
+    } else {
+      fd.append('amount', data.amount!)
+      fd.append('contra_account_id', String(data.contra_account_id))
+    }
     return api.post<PettyCashTransaction & Partial<NotificationsResponse>>('/api/petty-cash/expenses', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
