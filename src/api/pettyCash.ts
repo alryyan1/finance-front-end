@@ -73,7 +73,7 @@ export const pettyCashApi = {
     api.get<PettyCashTransaction[]>('/api/petty-cash/transactions', { params }).then(r => r.data),
 
   listTransactionsPaginated: (params: {
-    from: string; to: string; type?: TransactionType; search?: string; page: number; per_page: number
+    from: string; to: string; type?: TransactionType; search?: string; source_account_id?: number; page: number; per_page: number
   }): Promise<PaginatedTransactions> =>
     api.get<PaginatedTransactions>('/api/petty-cash/transactions', { params }).then(r => r.data),
 

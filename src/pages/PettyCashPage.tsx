@@ -142,6 +142,7 @@ export default function PettyCashPage() {
   const [to, setTo]                     = useState(today())
   const [search, setSearch]             = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [sourceAccountFilter, setSourceAccountFilter] = useState<number | null>(null)
 
   // Pagination — the grid used to load every transaction in the date range at
   // once; the backend now paginates so page loads stay fast regardless of how
@@ -207,7 +208,9 @@ export default function PettyCashPage() {
 
   const loadTransactions = () => {
     setLoading(true)
-    pettyCashApi.listTransactionsPaginated({ from, to, search: debouncedSearch || undefined, page, per_page: pageSize })
+    pettyCashApi.listTransactionsPaginated({
+      from, to, search: debouncedSearch || undefined, source_account_id: sourceAccountFilter ?? undefined, page, per_page: pageSize,
+    })
       .then(res => {
         setTransactions(res.data)
         setTotal(res.total)
@@ -242,7 +245,7 @@ export default function PettyCashPage() {
     })
   }, [])
 
-  useEffect(() => { loadTransactions() }, [from, to, debouncedSearch, page, pageSize])
+  useEffect(() => { loadTransactions() }, [from, to, debouncedSearch, sourceAccountFilter, page, pageSize])
 
   // Live updates: the WhatsApp approve-button tap writes straight to Firestore (via the
   // pettyCashWebhook Cloud Function), bypassing this app entirely. Listen for changes on
@@ -453,7 +456,7 @@ export default function PettyCashPage() {
   const handlePdf = async () => {
     setPdfLoading(true)
     try {
-      await openPdf('/api/petty-cash/transactions/pdf', { from, to })
+      await openPdf('/api/petty-cash/transactions/pdf', { from, to, source_account_id: sourceAccountFilter ?? undefined })
     } catch {
       toast.error('تعذّر إنشاء ملف PDF')
     } finally {
