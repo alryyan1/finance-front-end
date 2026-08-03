@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Button, Col, Flex, Input, InputNumber, Modal, Progress, Row, Segmented, Select, Spin, Table, Tag, Tooltip, Typography,
+  Badge, Button, Col, Flex, Input, InputNumber, Modal, Progress, Row, Segmented, Select, Spin, Table, Tag, Tooltip, Typography,
   type GetRef,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -11,7 +11,7 @@ import DateInput from '@/components/common/DateInput'
 import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
-  Banknote, CheckCircle2, CircleAlert, CircleMinus, ClipboardCheck, Eye, FileDown, FileText, FileX,
+  Banknote, CheckCircle2, CircleAlert, CircleMinus, ClipboardCheck, Download, Eye, FileDown, FileText, FileX,
   Gavel, Landmark, MessageCircle, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, TriangleAlert, UserRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -79,10 +79,11 @@ const focusNextField = (e: ReactKeyboardEvent<HTMLDivElement>) => {
   if (idx > -1 && idx < focusables.length - 1) focusables[idx + 1].focus()
 }
 
-/** Short two-tone chime for a remote approval landing via the Firestore listener.
- *  Synthesized with the Web Audio API so no sound asset is needed — silently
- *  no-ops if the browser blocks audio (e.g. no user interaction yet). */
-function playApprovalChime() {
+/** Short two-tone chime for a remote update landing via a Firestore listener
+ *  (a WhatsApp-tap approval, or a new WhatsApp expense request). Synthesized
+ *  with the Web Audio API so no sound asset is needed — silently no-ops if
+ *  the browser blocks audio (e.g. no user interaction yet). */
+function playChime() {
   try {
     const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     const ctx = new AudioContextCtor()
@@ -173,6 +174,10 @@ export default function PettyCashPage() {
   // Sync expense accounts to WhatsApp (Firestore)
   const [syncingAccounts, setSyncingAccounts] = useState(false)
 
+  // Import pending "new expense" requests submitted via the WhatsApp Flow
+  const [importingWhatsApp, setImportingWhatsApp] = useState(false)
+  const [pendingWhatsAppCount, setPendingWhatsAppCount] = useState(0)
+
   // Rows just reconciled from a remote (WhatsApp-tap) approval — briefly highlighted + chimed
   const [updatedIds, setUpdatedIds] = useState<Set<number>>(new Set())
   const updatedHighlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -194,57 +199,13 @@ export default function PettyCashPage() {
     if (updatedHighlightTimer.current) clearTimeout(updatedHighlightTimer.current)
     setUpdatedIds(new Set(ids))
     updatedHighlightTimer.current = setTimeout(() => setUpdatedIds(new Set()), 2500)
-    playApprovalChime()
-  }
-
-  // Re-reconciles every currently-visible pending expense against its Firestore mirror
-  // doc, and flags (with the same highlight + chime as the live listener) any that
-  // actually flipped — catching an approval that happened while the tab was closed, or
-  // one the live listener missed. Safe to call even though the list endpoint already
-  // reconciles server-side: this only re-confirms already-pending rows, so it's a no-op
-  // the moment nothing changed. Runs on every list load, not just the first.
-  const syncPendingApprovals = (list: PettyCashTransaction[]) => {
-    const pending = list.filter(t => t.type === 'expense' && t.status === 'pending')
-    if (pending.length === 0) return
-
-    const ids = pending.map(t => t.id)
-    markSyncing(ids)
-
-    Promise.all(pending.map(t => pettyCashApi.reconcileTransaction(t.id).catch(() => null)))
-      .then(results => {
-        const updated = results.filter((t): t is PettyCashTransaction => t !== null)
-        if (updated.length === 0) return
-
-        const byId = new Map(updated.map(t => [t.id, t]))
-        setTransactions(prev => prev.map(t => byId.get(t.id) ?? t))
-
-        const changedIds = pending
-          .filter(before => {
-            const after = byId.get(before.id)
-            return !!after && (
-              after.status !== before.status ||
-              after.auditor_approved_at !== before.auditor_approved_at ||
-              after.manager_approved_at !== before.manager_approved_at
-            )
-          })
-          .map(t => t.id)
-
-        if (changedIds.length > 0) {
-          loadFund()
-          flashUpdated(changedIds)
-        }
-      })
-      .catch(err => console.error('Petty cash sync check failed', err))
-      .finally(() => clearSyncing(ids))
+    playChime()
   }
 
   const loadTransactions = () => {
     setLoading(true)
     pettyCashApi.listTransactions({ from, to, type: filterType !== 'all' ? filterType : undefined })
-      .then(list => {
-        setTransactions(list)
-        syncPendingApprovals(list)
-      })
+      .then(setTransactions)
       .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
   }
@@ -310,6 +271,33 @@ export default function PettyCashPage() {
       unsubscribe()
       if (updatedHighlightTimer.current) clearTimeout(updatedHighlightTimer.current)
     }
+  }, [firestoreCollectionName])
+
+  // Live count of "new expense" requests submitted via the WhatsApp Flow and not
+  // yet imported. Chimes when a new one lands so it isn't missed while the app is
+  // open — the import button (top of page) shows the count as a badge.
+  useEffect(() => {
+    if (!firestoreCollectionName) return
+
+    const db = getFirestoreDb()
+    const ref = collection(db, 'finance', firestoreCollectionName, 'whatsapp_new_requests')
+
+    let isFirstSnapshot = true
+    const unsubscribe = onSnapshot(ref, snapshot => {
+      setPendingWhatsAppCount(snapshot.size)
+
+      if (isFirstSnapshot) {
+        isFirstSnapshot = false
+        return
+      }
+
+      const hasNewRequest = snapshot.docChanges().some(change => change.type === 'added')
+      if (hasNewRequest) playChime()
+    }, err => {
+      console.error('Petty cash WhatsApp requests listener error', err)
+    })
+
+    return () => unsubscribe()
   }, [firestoreCollectionName])
 
   // "+" opens the new-expense dialog, unless the user is already typing somewhere
@@ -474,6 +462,22 @@ export default function PettyCashPage() {
       toast.error(e?.response?.data?.message ?? 'تعذّرت مزامنة حسابات المصروفات')
     } finally {
       setSyncingAccounts(false)
+    }
+  }
+
+  const handleImportWhatsAppRequests = async () => {
+    setImportingWhatsApp(true)
+    try {
+      const { imported, message } = await pettyCashApi.importWhatsAppRequests()
+      toast.success(message)
+      if (imported > 0) {
+        loadFund()
+        loadTransactions()
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر استيراد طلبات واتساب')
+    } finally {
+      setImportingWhatsApp(false)
     }
   }
 
@@ -642,6 +646,16 @@ export default function PettyCashPage() {
                 <Text>يمكن إرفاق صورة أو ملف PDF لإيصال كل مصروف لتوثيقه.</Text></div>
             </Flex>
           </HelpButton>
+          <Badge count={pendingWhatsAppCount} size="small" offset={[-4, 4]}>
+            <Button
+              size="small"
+              icon={importingWhatsApp ? <Spin size="small" /> : <Download size={14} />}
+              onClick={handleImportWhatsAppRequests}
+              disabled={importingWhatsApp}
+            >
+              استيراد طلبات واتساب
+            </Button>
+          </Badge>
           <Button size="small" icon={<Settings size={15} />} onClick={() => navigate('/settings?tab=petty-cash')}>
             {fund ? 'الإعدادات' : 'إعداد الصندوق'}
           </Button>

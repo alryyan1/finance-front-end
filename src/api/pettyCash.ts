@@ -129,4 +129,7 @@ export const pettyCashApi = {
 
   syncExpenseAccounts: (): Promise<{ message: string }> =>
     api.post<{ message: string }>('/api/petty-cash/sync-expense-accounts').then(r => r.data),
+
+  importWhatsAppRequests: (): Promise<{ imported: number; message: string }> =>
+    api.post<{ imported: number; message: string }>('/api/petty-cash/import-whatsapp-requests').then(r => r.data),
 }
