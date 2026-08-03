@@ -28,38 +28,6 @@ const TYPE_COLOR: Record<AccountType, string> = {
   expense:   'warning',
 }
 
-// ─── Depth background palette ────────────────────────────────────────────────
-const DEPTH_BG = [
-  '#f1f5f9',  // depth 0 — slate-100
-  '#eff6ff',  // depth 1 — blue-50
-  '#f0fdf4',  // depth 2 — green-50
-  '#faf5ff',  // depth 3 — purple-50
-  '#fff7ed',  // depth 4 — orange-50
-  '#fdf2f8',  // depth 5 — pink-50
-]
-
-// ─── Sibling color palette ────────────────────────────────────────────────────
-
-const SIBLING_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#6366f1',
-  '#84cc16', '#a855f7', '#0ea5e9', '#d946ef', '#22c55e',
-]
-
-// Maps each parent_id → a color. Children sharing the same parent_id share the same color.
-function buildParentColorMap(accounts: Account[]): Map<number, string> {
-  const map = new Map<number, string>()
-  let idx = 0
-  const sorted = [...accounts].sort((a, b) => a.code.localeCompare(b.code))
-  for (const a of sorted) {
-    if (a.parent_id !== null && !map.has(a.parent_id)) {
-      map.set(a.parent_id, SIBLING_COLORS[idx % SIBLING_COLORS.length])
-      idx++
-    }
-  }
-  return map
-}
-
 // ─── Tree helpers ────────────────────────────────────────────────────────────
 
 interface TreeNode extends Account { children: TreeNode[] }
@@ -170,7 +138,6 @@ interface TreeNodeProps {
   node: TreeNode
   depth: number
   expandedIds: Set<number>
-  parentColorMap: Map<number, string>
   newlyAddedId: number | null
   onToggle: (id: number) => void
   onAddChild: (node: Account) => void
@@ -178,10 +145,9 @@ interface TreeNodeProps {
   onDelete: (node: Account) => void
 }
 
-function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedId, onToggle, onAddChild, onEdit, onDelete }: TreeNodeProps) {
+function AccountTreeNode({ node, depth, expandedIds, newlyAddedId, onToggle, onAddChild, onEdit, onDelete }: TreeNodeProps) {
   const hasChildren = node.children.length > 0
   const isExpanded  = expandedIds.has(node.id)
-  const siblingColor = node.parent_id !== null ? (parentColorMap.get(node.parent_id) ?? null) : null
 
   const menuItems: MenuProps['items'] = [
     { key: 'add', label: 'إضافة حساب فرعي', icon: <Plus size={15} color="var(--ant-color-primary)" /> },
@@ -205,9 +171,7 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
             padding: '5px 8px',
             paddingInlineStart: `${4 + depth * 22}px`,
             borderBottom: '1px solid var(--ant-color-border-secondary)',
-            borderInlineStart: siblingColor ? `3px solid ${siblingColor}` : '3px solid transparent',
             opacity: node.is_active ? 1 : 0.45,
-            background: DEPTH_BG[depth % DEPTH_BG.length],
             cursor: 'pointer',
           }}
         >
@@ -236,8 +200,8 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
                 display: 'inline-block',
                 marginRight: 10, fontSize: 11, fontWeight: 600,
                 padding: '1px 6px', borderRadius: 6,
-                color: siblingColor ?? 'var(--ant-color-text-disabled)',
-                background: siblingColor ? `${siblingColor}18` : 'transparent',
+                color: 'var(--ant-color-text-secondary)',
+                background: 'var(--ant-color-fill-secondary)',
               }}>
                 {node.children.length}
               </span>
@@ -258,7 +222,6 @@ function AccountTreeNode({ node, depth, expandedIds, parentColorMap, newlyAddedI
           node={child}
           depth={depth + 1}
           expandedIds={expandedIds}
-          parentColorMap={parentColorMap}
           newlyAddedId={newlyAddedId}
           onToggle={onToggle}
           onAddChild={onAddChild}
@@ -306,8 +269,6 @@ export default function AccountsPage() {
 
   const treeData       = useMemo(() => buildTree(accounts), [accounts])
   const flatData       = useMemo(() => flattenTree(accounts), [accounts])
-  const parentColorMap = useMemo(() => buildParentColorMap(accounts), [accounts])
-
   const toggleExpand = (id: number) =>
     setExpandedIds(prev => {
       const next = new Set(prev)
@@ -489,7 +450,6 @@ export default function AccountsPage() {
                 node={node}
                 depth={0}
                 expandedIds={expandedIds}
-                parentColorMap={parentColorMap}
                 newlyAddedId={newlyAddedId}
                 onToggle={toggleExpand}
                 onAddChild={openAddChild}

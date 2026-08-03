@@ -82,14 +82,17 @@ export default function Topbar() {
     <header
       style={{
         background: 'var(--ant-color-bg-container)',
-        borderBottom: '1px solid var(--ant-color-border-secondary)',
+        borderBottom: '1px solid rgba(201,162,39,0.25)',
+        boxShadow: '0 1px 3px rgba(11,18,32,0.06)',
         color: 'var(--ant-color-text)',
         height: 64,
         direction: 'rtl',
         flexShrink: 0,
+        position: 'relative',
+        zIndex: 1,
       }}
     >
-      <Flex align="center" gap={12} style={{ height: '100%', padding: '0 20px' }}>
+      <Flex align="center" gap={12} style={{ height: '100%', padding: '0 24px' }}>
         {/* User avatar + menu */}
         <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomLeft">
           <Flex align="center" gap={8} style={{ cursor: 'pointer' }}>
@@ -99,7 +102,12 @@ export default function Topbar() {
             </div>
             <Avatar
               size={34}
-              style={{ backgroundColor: 'var(--ant-color-primary)', fontSize: 13, fontWeight: 700 }}
+              style={{
+                background: 'linear-gradient(135deg, #C9A227 0%, #8B6914 100%)',
+                color: '#0B1220',
+                fontSize: 13,
+                fontWeight: 700,
+              }}
             >
               {initials}
             </Avatar>
@@ -110,7 +118,7 @@ export default function Topbar() {
         <div style={{ flexGrow: 1 }} />
 
         {/* ── Info items ── */}
-        <Flex align="center" gap={20}>
+        <Flex align="center" gap={22}>
           {/* Today's date */}
           <Flex align="center" gap={4} className="topbar-today-date" style={{ color: 'var(--ant-color-text-secondary)' }}>
             <Calendar size={15} />

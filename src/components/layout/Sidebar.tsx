@@ -101,17 +101,18 @@ const navGroups: NavGroup[] = [
   },
 ]
 
-// ── Colours (always dark sidebar) ────────────────────────────────────────────
+// ── Colours (always dark navy-and-gold sidebar) ─────────────────────────────
 
-const BG          = '#0f172a'
-const BG_SECTION  = 'rgba(255,255,255,0.03)'
-const ACCENT      = '#3b82f6'          // blue-500
-const ACTIVE_BG   = 'rgba(59,130,246,0.15)'
-const HOVER_BG    = 'rgba(255,255,255,0.06)'
-const TEXT_DIM    = 'rgba(255,255,255,0.45)'
-const TEXT_MID    = 'rgba(255,255,255,0.70)'
+const BG          = '#0B1220'
+const BG_SECTION  = 'rgba(255,255,255,0.025)'
+const ACCENT      = '#C9A227'          // gold
+const ACCENT_DEEP = '#8B6914'          // deep gold, for gradients
+const ACTIVE_BG   = 'rgba(201,162,39,0.14)'
+const HOVER_BG    = 'rgba(255,255,255,0.05)'
+const TEXT_DIM    = 'rgba(255,255,255,0.42)'
+const TEXT_MID    = 'rgba(255,255,255,0.72)'
 const TEXT_FULL   = '#ffffff'
-const DIVIDER     = 'rgba(255,255,255,0.07)'
+const DIVIDER     = 'rgba(201,162,39,0.10)'
 
 // ── Sub-item ─────────────────────────────────────────────────────────────────
 
@@ -119,14 +120,16 @@ function SubItem({ to, label, icon: Icon }: NavChild) {
   return (
     <NavLink to={to} end style={{ textDecoration: 'none' }}>
       {({ isActive }) => (
-        <div style={{
-          position: 'relative',
-          display: 'flex', alignItems: 'center', gap: 12,
-          padding: '7px 16px', margin: '0 8px 2px', paddingRight: 32, borderRadius: 6, cursor: 'pointer',
-          color: isActive ? TEXT_FULL : TEXT_DIM,
-          background: isActive ? ACTIVE_BG : 'transparent',
-          transition: 'all 0.15s',
-        }}>
+        <div
+          className={`sidebar-nav-item${isActive ? ' is-active' : ''}`}
+          style={{
+            position: 'relative',
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '7px 16px', margin: '0 8px 2px', paddingRight: 32, borderRadius: 6, cursor: 'pointer',
+            color: isActive ? TEXT_FULL : TEXT_DIM,
+            background: isActive ? ACTIVE_BG : 'transparent',
+            transition: 'background 0.15s, color 0.15s',
+          }}>
           <Icon size={15} style={{ opacity: isActive ? 1 : 0.7, flexShrink: 0 }} />
           <span style={{ fontWeight: isActive ? 600 : 400, color: 'inherit', fontSize: 12.5 }}>
             {label}
@@ -135,6 +138,7 @@ function SubItem({ to, label, icon: Icon }: NavChild) {
             <span style={{
               position: 'absolute', right: 0, top: '20%', bottom: '20%',
               width: 3, borderRadius: '3px 0 0 3px', background: ACCENT,
+              boxShadow: `0 0 6px ${ACCENT}80`,
             }} />
           )}
         </div>
@@ -163,13 +167,14 @@ function NavRow({
         // Collapsible parent — no NavLink, just a toggle button
         <div
           onClick={onToggle}
+          className={`sidebar-nav-item${sectionActive ? ' is-active' : ''}`}
           style={{
             position: 'relative',
             display: 'flex', alignItems: 'center', gap: 12,
             padding: '9px 12px', margin: '0 4px 2px', borderRadius: 6, cursor: 'pointer',
             color: sectionActive ? TEXT_FULL : TEXT_MID,
             background: sectionActive ? ACTIVE_BG : 'transparent',
-            transition: 'all 0.15s',
+            transition: 'background 0.15s, color 0.15s',
             userSelect: 'none',
           }}
         >
@@ -185,14 +190,16 @@ function NavRow({
         // Regular NavLink
         <NavLink to={item.to} end={item.end ?? true} style={{ textDecoration: 'none' }}>
           {({ isActive }) => (
-            <div style={{
-              position: 'relative',
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '9px 12px', margin: '0 4px 2px', borderRadius: 6, cursor: 'pointer',
-              color: isActive ? TEXT_FULL : TEXT_MID,
-              background: isActive ? ACTIVE_BG : 'transparent',
-              transition: 'all 0.15s',
-            }}>
+            <div
+              className={`sidebar-nav-item${isActive ? ' is-active' : ''}`}
+              style={{
+                position: 'relative',
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '9px 12px', margin: '0 4px 2px', borderRadius: 6, cursor: 'pointer',
+                color: isActive ? TEXT_FULL : TEXT_MID,
+                background: isActive ? ACTIVE_BG : 'transparent',
+                transition: 'background 0.15s, color 0.15s',
+              }}>
               <item.icon size={19} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1, fontWeight: isActive ? 600 : 400, color: 'inherit', fontSize: 13.5 }}>
                 {item.label}
@@ -201,6 +208,7 @@ function NavRow({
                 <span style={{
                   position: 'absolute', right: 0, top: '18%', bottom: '18%',
                   width: 3, borderRadius: '3px 0 0 3px', background: ACCENT,
+                  boxShadow: `0 0 6px ${ACCENT}80`,
                 }} />
               )}
             </div>
@@ -267,18 +275,18 @@ export default function Sidebar() {
       }}>
         <div style={{
           width: 34, height: 34,
-          background: `linear-gradient(135deg, ${ACCENT} 0%, #6366f1 100%)`,
+          background: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DEEP} 100%)`,
           borderRadius: 6,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: `0 0 12px rgba(59,130,246,0.4)`,
+          boxShadow: `0 0 12px rgba(201,162,39,0.35)`,
         }}>
-          <span style={{ color: 'white', fontWeight: 800, fontSize: 15, lineHeight: 1 }}>م</span>
+          <span style={{ color: BG, fontWeight: 800, fontSize: 15, lineHeight: 1 }}>م</span>
         </div>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 15, color: TEXT_FULL, lineHeight: 1.2 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: TEXT_FULL, lineHeight: 1.2, letterSpacing: '0.02em' }}>
             المالية
           </div>
-          <div style={{ fontSize: 10, color: TEXT_DIM, lineHeight: 1 }}>
+          <div style={{ fontSize: 10, color: ACCENT, lineHeight: 1, letterSpacing: '0.04em' }}>
             نظام المحاسبة
           </div>
         </div>
