@@ -2,7 +2,6 @@ import { Outlet } from 'react-router-dom'
 import { Flex } from 'antd'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
-import AiChatButton from '@/components/AiChat/AiChatButton'
 import { FiscalYearsProvider } from '@/context/FiscalYearsContext'
 
 export const TOPBAR_HEIGHT = 64
@@ -20,7 +19,6 @@ export default function AppLayout() {
             <Outlet />
           </div>
         </Flex>
-        <AiChatButton />
       </Flex>
     </FiscalYearsProvider>
   )

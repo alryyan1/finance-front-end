@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Card, Col, Flex, Progress, Row, Skeleton, Table, Tag, Typography,
+  Card, Col, Flex, Row, Skeleton, Table, Tag, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
@@ -24,15 +24,6 @@ interface RecentEntry {
   lines_sum_debit: string | null
 }
 
-interface PettyCashFundSummary {
-  id: number
-  name: string
-  current_balance: string
-  max_amount: string
-  low_balance_threshold: string
-  is_low: boolean
-}
-
 interface FiscalYearSummary {
   id: number
   name: string
@@ -48,9 +39,7 @@ interface DashboardData {
   total_movement: string
   net_profit: number
   recent_entries: RecentEntry[]
-  petty_cash_funds: PettyCashFundSummary[]
   pending_approvals_count: number
-  awaiting_auditor_count: number
   awaiting_manager_count: number
   fiscal_year: FiscalYearSummary | null
   monthly_trend: MonthlyTrendPoint[]
@@ -217,53 +206,9 @@ export default function DashboardPage() {
         ))}
       </Row>
 
-      {/* Petty cash funds & fiscal year status */}
+      {/* Fiscal year status */}
       <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
-        <Col xs={24} xl={16}>
-          <Card
-            title="صناديق العهدة"
-            styles={{ body: { padding: 20 } }}
-            onClick={() => navigate('/petty-cash')}
-            hoverable
-          >
-            {loading ? (
-              <Skeleton active paragraph={{ rows: 2 }} />
-            ) : (data?.petty_cash_funds?.length ?? 0) === 0 ? (
-              <Text type="secondary">لا توجد صناديق نشطة</Text>
-            ) : (
-              <Flex vertical gap={16}>
-                {data!.petty_cash_funds.map(fund => {
-                  const balance = Number(fund.current_balance)
-                  const max = Number(fund.max_amount)
-                  const percent = max > 0 ? Math.round((balance / max) * 100) : 0
-                  return (
-                    <div key={fund.id}>
-                      <Flex justify="space-between" align="center" style={{ marginBottom: 4 }}>
-                        <Flex align="center" gap={8}>
-                          <Text strong>{fund.name}</Text>
-                          {fund.is_low && (
-                            <Tag color="error" icon={<AlertTriangle size={12} />}>
-                              رصيد منخفض
-                            </Tag>
-                          )}
-                        </Flex>
-                        <Text style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
-                          {formatCurrency(balance)} / {formatCurrency(max)}
-                        </Text>
-                      </Flex>
-                      <Progress
-                        percent={percent}
-                        showInfo={false}
-                        strokeColor={fund.is_low ? '#dc2626' : '#2563eb'}
-                      />
-                    </div>
-                  )
-                })}
-              </Flex>
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} xl={8}>
+        <Col xs={24} xl={24}>
           <Card title="السنة المالية الحالية" styles={{ body: { padding: 20 } }}>
             {loading ? (
               <Skeleton active paragraph={{ rows: 2 }} />

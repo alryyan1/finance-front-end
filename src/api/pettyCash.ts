@@ -3,18 +3,6 @@ import api from '@/lib/axios'
 export type TransactionType = 'expense' | 'replenishment'
 export type TransactionStatus = 'pending' | 'approved'
 
-export interface PettyCashFund {
-  id: number
-  name: string
-  custodian_name: string
-  account_id: number
-  account?: { id: number; code: string; name: string }
-  max_amount: string
-  low_balance_threshold: string
-  current_balance: string
-  status: 'active' | 'inactive'
-}
-
 export interface PettyCashTransaction {
   id: number
   type: TransactionType
@@ -24,21 +12,14 @@ export interface PettyCashTransaction {
   beneficiary_name: string | null
   contra_account_id: number
   contra_account: { id: number; code: string; name: string }
+  source_account_id: number | null
+  source_account: { id: number; code: string; name: string } | null
+  created_by: { id: number; name: string } | null
   description: string | null
   document_path: string | null
   document_original_name: string | null
   journal_entry_id: number | null
-  auditor_approved_at: string | null
   manager_approved_at: string | null
-}
-
-export interface FundSetupPayload {
-  name: string
-  custodian_name: string
-  account_id: number
-  max_amount: string | number
-  low_balance_threshold: string | number
-  status: 'active' | 'inactive'
 }
 
 export interface ExpensePayload {
@@ -46,22 +27,15 @@ export interface ExpensePayload {
   amount: string
   beneficiary_name?: string
   contra_account_id: number
+  source_account_id: number
   description?: string
   document?: File | null
-}
-
-export interface ReplenishmentPayload {
-  date: string
-  amount: string
-  beneficiary_name?: string
-  contra_account_id: number
-  description?: string
 }
 
 export type NotificationStatus = 'sent' | 'failed' | 'skipped'
 
 export interface NotificationResult {
-  role: 'manager' | 'auditor'
+  role: 'manager'
   phone: string
   template: string
   status: NotificationStatus
@@ -72,15 +46,22 @@ export interface NotificationsResponse {
   notifications: NotificationResult[]
 }
 
+export interface PaginatedTransactions {
+  data: PettyCashTransaction[]
+  current_page: number
+  last_page: number
+  per_page: number
+  total: number
+}
+
 export const pettyCashApi = {
-  getFund: (): Promise<PettyCashFund | null> =>
-    api.get<PettyCashFund | null>('/api/petty-cash/fund').then(r => r.data),
-
-  setupFund: (data: FundSetupPayload): Promise<PettyCashFund> =>
-    api.post<PettyCashFund>('/api/petty-cash/fund', data).then(r => r.data),
-
   listTransactions: (params: { from: string; to: string; type?: TransactionType }): Promise<PettyCashTransaction[]> =>
     api.get<PettyCashTransaction[]>('/api/petty-cash/transactions', { params }).then(r => r.data),
+
+  listTransactionsPaginated: (params: {
+    from: string; to: string; type?: TransactionType; search?: string; page: number; per_page: number
+  }): Promise<PaginatedTransactions> =>
+    api.get<PaginatedTransactions>('/api/petty-cash/transactions', { params }).then(r => r.data),
 
   createExpense: (data: ExpensePayload): Promise<PettyCashTransaction & Partial<NotificationsResponse>> => {
     const fd = new FormData()
@@ -88,15 +69,13 @@ export const pettyCashApi = {
     fd.append('amount', data.amount)
     if (data.beneficiary_name) fd.append('beneficiary_name', data.beneficiary_name)
     fd.append('contra_account_id', String(data.contra_account_id))
+    fd.append('source_account_id', String(data.source_account_id))
     if (data.description) fd.append('description', data.description)
     if (data.document) fd.append('document', data.document)
     return api.post<PettyCashTransaction & Partial<NotificationsResponse>>('/api/petty-cash/expenses', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
-
-  createReplenishment: (data: ReplenishmentPayload): Promise<PettyCashTransaction> =>
-    api.post<PettyCashTransaction>('/api/petty-cash/replenishments', data).then(r => r.data),
 
   deleteTransaction: (id: number): Promise<void> =>
     api.delete(`/api/petty-cash/transactions/${id}`).then(() => undefined),
@@ -115,9 +94,6 @@ export const pettyCashApi = {
   deleteDocument: (id: number): Promise<PettyCashTransaction> =>
     api.delete<PettyCashTransaction>(`/api/petty-cash/transactions/${id}/document`).then(r => r.data),
 
-  approveByAuditor: (id: number): Promise<PettyCashTransaction> =>
-    api.post<PettyCashTransaction>(`/api/petty-cash/transactions/${id}/approve/auditor`).then(r => r.data),
-
   approveByManager: (id: number): Promise<PettyCashTransaction> =>
     api.post<PettyCashTransaction>(`/api/petty-cash/transactions/${id}/approve/manager`).then(r => r.data),
 
@@ -132,4 +108,7 @@ export const pettyCashApi = {
 
   importWhatsAppRequests: (): Promise<{ imported: number; message: string }> =>
     api.post<{ imported: number; message: string }>('/api/petty-cash/import-whatsapp-requests').then(r => r.data),
+
+  reconcilePending: (): Promise<{ checked: number; reconciled: number; message: string }> =>
+    api.post<{ checked: number; reconciled: number; message: string }>('/api/petty-cash/reconcile-pending').then(r => r.data),
 }

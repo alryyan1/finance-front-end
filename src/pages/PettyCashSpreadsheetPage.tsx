@@ -6,7 +6,7 @@ import '@univerjs/preset-sheets-core/lib/index.css'
 import { Flex, Spin, Typography } from 'antd'
 import { pettyCashApi, type PettyCashTransaction, type TransactionType } from '@/api/pettyCash'
 
-const HEADERS = ['التاريخ', 'النوع', 'حالة الاعتماد', 'تاريخ اعتماد المراجع', 'تاريخ اعتماد المدير', 'المستفيد', 'الحساب المقابل', 'المبلغ', 'البيان']
+const HEADERS = ['التاريخ', 'النوع', 'حالة الاعتماد', 'تاريخ اعتماد المدير', 'المستفيد', 'الحساب المقابل', 'المبلغ', 'البيان']
 
 const fmtDateTime = (v: string | null | undefined) =>
   v ? new Date(v).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : ''
@@ -15,10 +15,7 @@ const typeLabel = (t: PettyCashTransaction) => (t.type === 'expense' ? 'مصرو
 
 const statusLabel = (t: PettyCashTransaction) => {
   if (t.type !== 'expense') return ''
-  if (t.status === 'approved') return 'معتمد'
-  if (t.auditor_approved_at && !t.manager_approved_at) return 'بانتظار اعتماد المدير'
-  if (t.manager_approved_at && !t.auditor_approved_at) return 'بانتظار اعتماد المراجع'
-  return 'بانتظار الاعتماد'
+  return t.status === 'approved' ? 'معتمد' : 'بانتظار اعتماد المدير'
 }
 
 function buildSheetData(transactions: PettyCashTransaction[]) {
@@ -29,7 +26,6 @@ function buildSheetData(transactions: PettyCashTransaction[]) {
       t.date,
       typeLabel(t),
       statusLabel(t),
-      fmtDateTime(t.auditor_approved_at),
       fmtDateTime(t.manager_approved_at),
       t.beneficiary_name ?? '',
       t.contra_account.name,
@@ -119,14 +115,13 @@ export default function PettyCashSpreadsheetPage() {
             sheet.setColumnWidth(0, 100) // Date
             sheet.setColumnWidth(1, 80)  // Type
             sheet.setColumnWidth(2, 150) // Approval status
-            sheet.setColumnWidth(3, 140) // Auditor approval date
-            sheet.setColumnWidth(4, 140) // Manager approval date
-            sheet.setColumnWidth(5, 150) // Beneficiary
-            sheet.setColumnWidth(6, 180) // Contra account
-            sheet.setColumnWidth(7, 110) // Amount
-            sheet.setColumnWidth(8, 220) // Description
+            sheet.setColumnWidth(3, 140) // Manager approval date
+            sheet.setColumnWidth(4, 150) // Beneficiary
+            sheet.setColumnWidth(5, 180) // Contra account
+            sheet.setColumnWidth(6, 110) // Amount
+            sheet.setColumnWidth(7, 220) // Description
 
-            const amountRange = sheet.getRange(1, 7, Math.max(cellData.length - 1, 1), 1)
+            const amountRange = sheet.getRange(1, 6, Math.max(cellData.length - 1, 1), 1)
             amountRange.setNumberFormat('#,##0')
           }
         } catch {

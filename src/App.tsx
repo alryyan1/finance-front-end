@@ -12,6 +12,7 @@ import TrialBalancePage from '@/pages/TrialBalancePage'
 import LedgerPage from '@/pages/LedgerPage'
 import IncomeStatementPage from '@/pages/IncomeStatementPage'
 import BalanceSheetPage from '@/pages/BalanceSheetPage'
+import StatementOfEquityPage from '@/pages/StatementOfEquityPage'
 import SettingsPage from '@/pages/SettingsPage'
 import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
 import FiscalYearsPage from '@/pages/FiscalYearsPage'
@@ -21,6 +22,7 @@ import BackupPage from '@/pages/BackupPage'
 import JournalSpreadsheetPage from '@/pages/JournalSpreadsheetPage'
 import PettyCashSpreadsheetPage from '@/pages/PettyCashSpreadsheetPage'
 import PrepaidRentPage from '@/pages/PrepaidRentPage'
+import AiAssistantPage from '@/pages/AiAssistantPage'
 
 export default function App() {
   return (
@@ -52,9 +54,11 @@ export default function App() {
             <Route path="/reports/ledger" element={<LedgerPage />} />
             <Route path="/reports/income-statement" element={<IncomeStatementPage />} />
             <Route path="/reports/balance-sheet" element={<BalanceSheetPage />} />
+            <Route path="/reports/statement-of-equity" element={<StatementOfEquityPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/opening-balances" element={<OpeningBalancesPage />} />
             <Route path="/settings/fiscal-years" element={<FiscalYearsPage />} />
+            <Route path="/ai-assistant" element={<AiAssistantPage />} />
           </Route>
 
           {/* Full-screen pages — same ProtectedRoute, but outside AppLayout */}

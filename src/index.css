@@ -54,6 +54,11 @@ body {
   }
 }
 
+/* Topbar: hover feedback on the user avatar/menu trigger (inline styles can't express :hover) */
+.topbar-user-trigger:hover {
+  background: var(--ant-color-fill-alter);
+}
+
 /* AccountsPage: fade highlight for a newly-created account row/node */
 @keyframes highlight-fade {
   0%   { background-color: rgba(59, 130, 246, 0.22); }

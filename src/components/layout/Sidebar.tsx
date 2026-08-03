@@ -12,6 +12,7 @@ import {
   BookOpen as BookOpenIcon,
   TrendingUp as TrendingUpIcon,
   Landmark as LandmarkIcon,
+  Coins as CoinsIcon,
   UserCog as UserCogIcon,
   DatabaseBackup as DatabaseBackupIcon,
   Settings as SettingsIcon,
@@ -21,6 +22,7 @@ import {
   ChevronUp as ChevronUpIcon,
   ChevronDown as ChevronDownIcon,
   Building2 as Building2Icon,
+  Sparkles as SparklesIcon,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -53,6 +55,7 @@ const navGroups: NavGroup[] = [
   {
     items: [
       { to: '/', label: 'لوحة التحكم', icon: LayoutDashboardIcon, end: true },
+      { to: '/ai-assistant', label: 'المساعد الذكي', icon: SparklesIcon },
     ],
   },
   {
@@ -75,6 +78,7 @@ const navGroups: NavGroup[] = [
           { to: '/reports/ledger',           label: 'كشف حساب',           icon: BookOpenIcon },
           { to: '/reports/income-statement', label: 'قائمة الدخل',        icon: TrendingUpIcon },
           { to: '/reports/balance-sheet',    label: 'الميزانية العمومية', icon: LandmarkIcon },
+          { to: '/reports/statement-of-equity', label: 'قائمة حقوق الملكية', icon: CoinsIcon },
         ],
       },
     ],

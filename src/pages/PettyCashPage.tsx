@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Badge, Button, Col, Flex, Input, InputNumber, Modal, Progress, Row, Segmented, Select, Spin, Table, Tag, Tooltip, Typography,
+  Badge, Button, Col, Flex, Input, InputNumber, Modal, Row, Segmented, Select, Spin, Table, Tooltip, Typography,
   type GetRef,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -11,27 +11,23 @@ import DateInput from '@/components/common/DateInput'
 import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
-  Banknote, CheckCircle2, CircleAlert, CircleMinus, ClipboardCheck, Download, Eye, FileDown, FileText, FileX,
-  Gavel, Landmark, MessageCircle, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, TriangleAlert, UserRound,
+  Banknote, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
+  Landmark, MessageCircle, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { accountsApi } from '@/api/accounts'
-import { pettyCashSettingsApi } from '@/api/settings'
-import { pettyCashApi, type PettyCashFund, type PettyCashTransaction, type NotificationResult } from '@/api/pettyCash'
+import { pettyCashSettingsApi, pettyCashAccountSettingsApi } from '@/api/settings'
+import { pettyCashApi, type PettyCashTransaction, type NotificationResult } from '@/api/pettyCash'
 import { openPdf } from '@/api/pdf'
 import type { Account } from '@/types/account'
 
 const { Title, Text } = Typography
 
 type TransactionType = 'expense' | 'replenishment'
-type FilterType = 'all' | TransactionType
 
 const numFmt = (v: string | number | null | undefined) =>
   Math.round(parseFloat(String(v ?? 0)) || 0).toLocaleString('en-US')
-
-const fmtDateTime = (v: string | null | undefined) =>
-  v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : null
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
@@ -41,25 +37,18 @@ const emptyExpenseForm = () => ({
   amount:             '',
   beneficiary_name:   '',
   contra_account_id:  null as Account | null,
+  source_account_id:  null as Account | null,
   description:        '',
   document:           null as File | null,
 })
 
-const ROLE_LABEL: Record<NotificationResult['role'], string> = { manager: 'المدير', auditor: 'المراجع' }
+const ROLE_LABEL: Record<NotificationResult['role'], string> = { manager: 'المدير' }
 const STATUS_LABEL: Record<NotificationResult['status'], string> = { sent: 'تم الإرسال', failed: 'فشل الإرسال', skipped: 'تم التخطي' }
-
-const emptyReplenishForm = () => ({
-  date:               today(),
-  amount:             '',
-  beneficiary_name:   '',
-  contra_account_id:  null as Account | null,
-  description:        '',
-})
 
 const FieldLabel = ({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) => (
   <Flex align="center" gap={5} style={{ marginBottom: 4 }}>
-    <Icon size={12} color="var(--ant-color-text-tertiary)" />
-    <Text type="secondary" style={{ fontSize: 11.5 }}>{children}</Text>
+    <Icon size={12} color="#000" />
+    <Text style={{ fontSize: 11.5, fontWeight: 700, color: '#000' }}>{children}</Text>
   </Flex>
 )
 
@@ -113,21 +102,25 @@ export default function PettyCashPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [fund, setFund]               = useState<PettyCashFund | null>(null)
+  const [cashAccount, setCashAccount] = useState<Account | null>(null)
+  const [bankAccount, setBankAccount] = useState<Account | null>(null)
   const [accounts, setAccounts]       = useState<Account[]>([])
+  // Guards the "accounts not configured" empty-state from flashing briefly on
+  // every visit while cashAccount/bankAccount are still their initial null —
+  // that state is indistinguishable from "genuinely not configured" until this
+  // settles.
+  const [accountSettingsLoading, setAccountSettingsLoading] = useState(true)
   const [transactions, setTransactions] = useState<PettyCashTransaction[]>([])
   const [loading, setLoading]         = useState(true)
 
   // Approval designation (who is allowed to approve)
-  const [approvalSettings, setApprovalSettings] = useState<{ managerUserId: number | null; auditorUserId: number | null }>({
+  const [approvalSettings, setApprovalSettings] = useState<{ managerUserId: number | null }>({
     managerUserId: null,
-    auditorUserId: null,
   })
   // Firestore tenant collection petty cash approvals are mirrored under — falls back to
   // the same default ("jawda") the backend uses when the setting hasn't been configured.
   const [firestoreCollectionName, setFirestoreCollectionName] = useState<string | null>(null)
   const isManager = !!user && user.id === approvalSettings.managerUserId
-  const isAuditor = !!user && user.id === approvalSettings.auditorUserId
 
   // Approve / upload-document in-flight state
   const [approving, setApproving]           = useState<number | null>(null)
@@ -141,10 +134,17 @@ export default function PettyCashPage() {
   const [notificationResults, setNotificationResults] = useState<NotificationResult[] | null>(null)
 
   // Filters
-  const [filterType, setFilterType]     = useState<FilterType>('all')
   const [from, setFrom]                 = useState(yearStart())
   const [to, setTo]                     = useState(today())
   const [search, setSearch]             = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  // Pagination — the grid used to load every transaction in the date range at
+  // once; the backend now paginates so page loads stay fast regardless of how
+  // much history is in range.
+  const [page, setPage]         = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [total, setTotal]       = useState(0)
 
   // Expense dialog
   const [expenseOpen, setExpenseOpen]     = useState(false)
@@ -153,13 +153,6 @@ export default function PettyCashPage() {
   const expenseDocInputRef = useRef<HTMLInputElement>(null)
   const expenseAmountRef = useRef<GetRef<typeof InputNumber>>(null)
   const expenseDescriptionRef = useRef<GetRef<typeof Input.TextArea>>(null)
-
-  // Replenishment dialog
-  const [replenishOpen, setReplenishOpen]     = useState(false)
-  const [replenishForm, setReplenishForm]     = useState(emptyReplenishForm())
-  const [creatingReplenish, setCreatingReplenish] = useState(false)
-  const replenishAmountRef = useRef<GetRef<typeof InputNumber>>(null)
-  const replenishDescriptionRef = useRef<GetRef<typeof Input.TextArea>>(null)
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<PettyCashTransaction | null>(null)
@@ -174,6 +167,10 @@ export default function PettyCashPage() {
   // Sync expense accounts to WhatsApp (Firestore)
   const [syncingAccounts, setSyncingAccounts] = useState(false)
 
+  // Manually reconcile still-pending expenses against their Firestore mirror docs
+  // (approvals/receipts made via WhatsApp) — moved off the page-load path for performance.
+  const [reconcilingPending, setReconcilingPending] = useState(false)
+
   // Import pending "new expense" requests submitted via the WhatsApp Flow
   const [importingWhatsApp, setImportingWhatsApp] = useState(false)
   const [pendingWhatsAppCount, setPendingWhatsAppCount] = useState(0)
@@ -184,8 +181,6 @@ export default function PettyCashPage() {
   // Rows currently being checked against their Firestore mirror doc — shows a small
   // spinner in the status column for as long as that check is in flight.
   const [syncingIds, setSyncingIds] = useState<Set<number>>(new Set())
-
-  const loadFund = () => pettyCashApi.getFund().then(setFund)
 
   const markSyncing = (ids: number[]) => setSyncingIds(prev => new Set([...prev, ...ids]))
   const clearSyncing = (ids: number[]) => setSyncingIds(prev => {
@@ -204,33 +199,49 @@ export default function PettyCashPage() {
 
   const loadTransactions = () => {
     setLoading(true)
-    pettyCashApi.listTransactions({ from, to, type: filterType !== 'all' ? filterType : undefined })
-      .then(setTransactions)
+    pettyCashApi.listTransactionsPaginated({ from, to, search: debouncedSearch || undefined, page, per_page: pageSize })
+      .then(res => {
+        setTransactions(res.data)
+        setTotal(res.total)
+      })
       .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
   }
 
+  // Debounce the search box so every keystroke doesn't fire a request — the
+  // filter now runs server-side (it used to filter the already-fully-loaded
+  // list in the browser, which no longer has every row available).
   useEffect(() => {
-    loadFund()
-    accountsApi.list().then(setAccounts)
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim())
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    Promise.all([accountsApi.list(), pettyCashAccountSettingsApi.get()]).then(([a, s]) => {
+      setAccounts(a)
+      setCashAccount(a.find(acc => acc.id === s.petty_cash_cash_account_id) ?? null)
+      setBankAccount(a.find(acc => acc.id === s.petty_cash_bank_account_id) ?? null)
+    }).finally(() => setAccountSettingsLoading(false))
     pettyCashSettingsApi.get().then(s => {
       setApprovalSettings({
         managerUserId: s.petty_cash_manager_user_id,
-        auditorUserId: s.petty_cash_auditor_user_id,
       })
       setFirestoreCollectionName(s.firebase_collection_name || 'jawda')
     })
   }, [])
 
-  useEffect(() => { loadTransactions() }, [filterType, from, to])
+  useEffect(() => { loadTransactions() }, [from, to, debouncedSearch, page, pageSize])
 
   // Live updates: the WhatsApp approve-button tap writes straight to Firestore (via the
   // pettyCashWebhook Cloud Function), bypassing this app entirely. Listen for changes on
   // that mirror collection so an approval made from someone's phone shows up here without
   // a manual reload. Firestore is a mirror, not the source of truth, so for every changed
   // doc we call the backend's reconcile endpoint — it re-reads that same Firestore doc and
-  // updates MySQL (auditor_approved_at / manager_approved_at, and posts the journal entry
-  // + deducts the fund once both sides are in) — then merge the authoritative row back in.
+  // updates MySQL (manager_approved_at, and posts the journal entry) — then
+  // merges the authoritative row back in.
   useEffect(() => {
     if (!firestoreCollectionName) return
 
@@ -258,7 +269,6 @@ export default function PettyCashPage() {
         .then(updated => {
           const byId = new Map(updated.map(t => [t.id, t]))
           setTransactions(prev => prev.map(t => byId.get(t.id) ?? t))
-          loadFund()
           flashUpdated(updated.map(t => t.id))
         })
         .catch(err => console.error('Petty cash reconcile error', err))
@@ -300,25 +310,30 @@ export default function PettyCashPage() {
     return () => unsubscribe()
   }, [firestoreCollectionName])
 
+  const expenseAccounts  = accounts.filter(a => a.type === 'expense')
+  const hasSourceAccount = !!bankAccount || !!cashAccount
+
+  const openExpenseDialog = () => {
+    setExpenseForm({ ...emptyExpenseForm(), source_account_id: bankAccount ?? cashAccount })
+    setExpenseOpen(true)
+  }
+
   // "+" opens the new-expense dialog, unless the user is already typing somewhere
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== '+' || expenseOpen) return
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable) return
-      if (!fund || fund.status !== 'active') return
+      if (!hasSourceAccount) return
       e.preventDefault()
-      setExpenseOpen(true)
+      openExpenseDialog()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [fund, expenseOpen])
-
-  const assetAccounts   = accounts.filter(a => a.type === 'asset')
-  const expenseAccounts = accounts.filter(a => a.type === 'expense')
+  }, [hasSourceAccount, expenseOpen, bankAccount, cashAccount])
 
   const handleCreateExpense = async () => {
-    if (!expenseForm.amount || !expenseForm.contra_account_id) return
+    if (!expenseForm.amount || !expenseForm.contra_account_id || !expenseForm.source_account_id) return
     setCreatingExpense(true)
     try {
       const created = await pettyCashApi.createExpense({
@@ -326,14 +341,15 @@ export default function PettyCashPage() {
         amount: expenseForm.amount,
         beneficiary_name: expenseForm.beneficiary_name || undefined,
         contra_account_id: expenseForm.contra_account_id.id,
+        source_account_id: expenseForm.source_account_id.id,
         description: expenseForm.description || undefined,
         document: expenseForm.document,
       })
       setExpenseOpen(false)
       setExpenseForm(emptyExpenseForm())
-      loadFund()
-      loadTransactions()
-      toast.success('تم حفظ المصروف بانتظار اعتماد المراجع والمدير')
+      if (page === 1) loadTransactions()
+      else setPage(1)
+      toast.success('تم حفظ المصروف بانتظار اعتماد المدير')
       if (created.notifications) setNotificationResults(created.notifications)
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? 'تعذّر حفظ المصروف')
@@ -354,36 +370,12 @@ export default function PettyCashPage() {
     }
   }
 
-  const handleCreateReplenishment = async () => {
-    if (!replenishForm.amount || !replenishForm.contra_account_id) return
-    setCreatingReplenish(true)
-    try {
-      await pettyCashApi.createReplenishment({
-        date:               replenishForm.date,
-        amount:             replenishForm.amount,
-        beneficiary_name:   replenishForm.beneficiary_name || undefined,
-        contra_account_id:  replenishForm.contra_account_id.id,
-        description:        replenishForm.description || undefined,
-      })
-      setReplenishOpen(false)
-      setReplenishForm(emptyReplenishForm())
-      loadFund()
-      loadTransactions()
-      toast.success('تم حفظ التغذية')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ التغذية')
-    } finally {
-      setCreatingReplenish(false)
-    }
-  }
-
   const handleDelete = async () => {
     if (!deleteTarget) return
     setDeleting(true)
     try {
       await pettyCashApi.deleteTransaction(deleteTarget.id)
       setDeleteTarget(null)
-      loadFund()
       loadTransactions()
       toast.success('تم حذف الحركة')
     } catch (e: any) {
@@ -443,9 +435,7 @@ export default function PettyCashPage() {
   const handlePdf = async () => {
     setPdfLoading(true)
     try {
-      await openPdf('/api/petty-cash/transactions/pdf', {
-        from, to, type: filterType !== 'all' ? filterType : undefined,
-      })
+      await openPdf('/api/petty-cash/transactions/pdf', { from, to })
     } catch {
       toast.error('تعذّر إنشاء ملف PDF')
     } finally {
@@ -465,14 +455,27 @@ export default function PettyCashPage() {
     }
   }
 
+  const handleReconcilePending = async () => {
+    setReconcilingPending(true)
+    try {
+      const { message, reconciled } = await pettyCashApi.reconcilePending()
+      toast.success(message)
+      if (reconciled > 0) loadTransactions()
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّرت مزامنة الاعتمادات المعلّقة')
+    } finally {
+      setReconcilingPending(false)
+    }
+  }
+
   const handleImportWhatsAppRequests = async () => {
     setImportingWhatsApp(true)
     try {
       const { imported, message } = await pettyCashApi.importWhatsAppRequests()
       toast.success(message)
       if (imported > 0) {
-        loadFund()
-        loadTransactions()
+        if (page === 1) loadTransactions()
+        else setPage(1)
       }
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? 'تعذّر استيراد طلبات واتساب')
@@ -481,36 +484,18 @@ export default function PettyCashPage() {
     }
   }
 
-  const handleApprove = async (t: PettyCashTransaction, role: 'auditor' | 'manager') => {
+  const handleApprove = async (t: PettyCashTransaction) => {
     setApproving(t.id)
     try {
-      await (role === 'auditor' ? pettyCashApi.approveByAuditor(t.id) : pettyCashApi.approveByManager(t.id))
-      loadFund()
+      await pettyCashApi.approveByManager(t.id)
       loadTransactions()
-      toast.success(role === 'auditor' ? 'تم اعتماد المصروف من قبل المراجع' : 'تم اعتماد المصروف من قبل المدير')
+      toast.success('تم اعتماد المصروف من قبل المدير')
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? 'تعذّر اعتماد المصروف')
     } finally {
       setApproving(null)
     }
   }
-
-  const balance   = parseFloat(String(fund?.current_balance ?? 0)) || 0
-  const max       = parseFloat(String(fund?.max_amount ?? 0)) || 0
-  const threshold = parseFloat(String(fund?.low_balance_threshold ?? 0)) || 0
-  const pct       = max > 0 ? Math.min((balance / max) * 100, 100) : 0
-  const isLow     = !!fund && balance <= threshold
-
-  const visibleTransactions = (() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return transactions
-    return transactions.filter(t =>
-      (t.beneficiary_name ?? '').toLowerCase().includes(q) ||
-      (t.description ?? '').toLowerCase().includes(q) ||
-      t.contra_account.name.toLowerCase().includes(q) ||
-      String(t.amount).includes(q)
-    )
-  })()
 
   const columns: ColumnsType<PettyCashTransaction> = [
     {
@@ -519,28 +504,48 @@ export default function PettyCashPage() {
     },
     {
       title: 'التاريخ', width: 95, align: 'center',
-      render: (_: unknown, t) => <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)', fontSize: 12.5 }}>{t.date}</span>,
+      render: (_: unknown, t) => <span style={{ direction: 'ltr', color: '#000', fontWeight: 700, fontSize: 12.5 }}>{t.date}</span>,
     },
     {
       title: 'البيان',
-      render: (_: unknown, t) => (
-        <div style={{ maxWidth: 280 }}>
-          <div style={{ fontWeight: 500, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5 }}>
-            {t.description || (t.type === 'expense' ? 'مصروف نثرية' : 'تغذية الصندوق')}
+      render: (_: unknown, t) => {
+        const content = (
+          <div style={{ maxWidth: 280 }}>
+            <div style={{ fontWeight: 500, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5 }}>
+              {t.description || (t.type === 'expense' ? 'مصروف نثرية' : 'تغذية الصندوق')}
+            </div>
+            {t.beneficiary_name && <Text style={{ fontSize: 11, display: 'block', fontWeight: 700, color: '#000' }}>{t.beneficiary_name}</Text>}
           </div>
-          {t.beneficiary_name && <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>{t.beneficiary_name}</Text>}
-        </div>
-      ),
+        )
+        return t.journal_entry_id ? (
+          <Tooltip title={`تم إنشاء القيد المحاسبي رقم ${t.journal_entry_id}`}>
+            <Badge.Ribbon text="قيد" color="blue">{content}</Badge.Ribbon>
+          </Tooltip>
+        ) : content
+      },
     },
     {
-      title: 'الحساب المقابل', width: 200,
-      render: (_: unknown, t) => <Text type="secondary" style={{ fontSize: 12.5 }}>{t.contra_account.name}</Text>,
+      title: 'الحساب المقابل', width: 180,
+      render: (_: unknown, t) => <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.contra_account.name}</Text>,
+    },
+    {
+      title: 'الحساب الدائن', width: 150,
+      render: (_: unknown, t) => <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.source_account?.name ?? '—'}</Text>,
+    },
+    {
+      title: 'أنشأه', width: 120,
+      render: (_: unknown, t) => (
+        <Flex align="center" gap={4}>
+          <UserRound size={12} color="#000" />
+          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.created_by?.name ?? '—'}</Text>
+        </Flex>
+      ),
     },
     {
       title: 'المبلغ', width: 110, align: 'left',
       render: (_: unknown, t) => (
         <span style={{
-          direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 12.5,
+          direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 16.5,
           color: t.type === 'expense' ? 'var(--ant-color-error)' : 'var(--ant-color-success)',
         }}>
           {t.type === 'expense' ? '-' : '+'}{numFmt(t.amount)}
@@ -548,7 +553,7 @@ export default function PettyCashPage() {
       ),
     },
     {
-      title: 'الحالة', width: 70, align: 'center',
+      title: 'الحالة', width: 100, align: 'center',
       render: (_: unknown, t) => t.type === 'expense' && (
         <Flex align="center" justify="center" gap={4}>
           {syncingIds.has(t.id) && (
@@ -562,9 +567,16 @@ export default function PettyCashPage() {
               background: t.status === 'approved' ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
             }} />
           </Tooltip>
-          <Tooltip title={t.auditor_approved_at ? `راجعه المراجع بتاريخ ${fmtDateTime(t.auditor_approved_at)}` : 'لم تتم مراجعته بعد'}>
-            <ClipboardCheck size={15} color={t.auditor_approved_at ? 'var(--ant-color-info)' : 'var(--ant-color-text-disabled)'} />
-          </Tooltip>
+          {isManager && (
+            <Tooltip title={t.manager_approved_at ? 'تم الاعتماد' : 'اعتماد نهائي (مدير) — يُنشئ القيد المحاسبي'}>
+              <Button size="small"
+                onClick={() => handleApprove(t)}
+                disabled={approving === t.id || !!t.manager_approved_at}
+              >
+                {approving === t.id ? <Spin size="small" /> : 'اعتماد'}
+              </Button>
+            </Tooltip>
+          )}
         </Flex>
       ),
     },
@@ -572,20 +584,8 @@ export default function PettyCashPage() {
       title: 'إجراءات', width: 200, align: 'center',
       render: (_: unknown, t) => (
         <Flex align="center" justify="center" wrap="nowrap">
-          {t.type === 'expense' && isManager && !t.manager_approved_at && (
-            <Tooltip title="اعتماد نهائي (مدير) — يُنشئ القيد ويخصم الرصيد">
-              <Button type="text" shape="circle" size="small" onClick={() => handleApprove(t, 'manager')} disabled={approving === t.id}
-                icon={approving === t.id ? <Spin size="small" /> : <Gavel size={15} color="var(--ant-color-success)" />} />
-            </Tooltip>
-          )}
-          {t.type === 'expense' && isAuditor && !t.auditor_approved_at && (
-            <Tooltip title="تأكيد المراجعة">
-              <Button type="text" shape="circle" size="small" onClick={() => handleApprove(t, 'auditor')} disabled={approving === t.id}
-                icon={approving === t.id ? <Spin size="small" /> : <ClipboardCheck size={15} color="var(--ant-color-info)" />} />
-            </Tooltip>
-          )}
           {t.type === 'expense' && t.status === 'pending' && (
-            <Tooltip title="إرسال إشعار واتساب للمراجع والمدير">
+            <Tooltip title="إرسال إشعار واتساب للمدير">
               <Button type="text" shape="circle" size="small" onClick={() => handleSendNotification(t)} disabled={notifying === t.id}
                 icon={notifying === t.id ? <Spin size="small" /> : <MessageCircle size={15} color="var(--ant-color-success)" />} />
             </Tooltip>
@@ -599,7 +599,7 @@ export default function PettyCashPage() {
               <Tooltip title="استبدال المستند">
                 <Button type="text" shape="circle" size="small" disabled={uploadingDocFor === t.id}
                   onClick={() => { setUploadTarget(t); rowDocInputRef.current?.click() }}
-                  icon={uploadingDocFor === t.id ? <Spin size="small" /> : <Paperclip size={15} color="var(--ant-color-text-secondary)" />} />
+                  icon={uploadingDocFor === t.id ? <Spin size="small" /> : <Paperclip size={15} color="#000" />} />
               </Tooltip>
               <Tooltip title="إزالة المستند">
                 <Button type="text" shape="circle" size="small" danger disabled={deletingDocFor === t.id}
@@ -631,21 +631,22 @@ export default function PettyCashPage() {
           e.target.value = ''
         }} />
       {/* Header */}
-      <Flex justify="space-between" align="center" style={{ marginBottom: 12 }}>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 2 }}>
         <Text strong style={{ fontSize: 16 }}>صندوق النثريات</Text>
         <Flex gap={8} align="center">
           <HelpButton title="دليل استخدام صندوق النثريات">
             <Flex vertical gap={16}>
               <div><Title level={5}>ما هو صندوق النثريات؟</Title>
-                <Text>مبلغ نقدي محدود يُستخدم لتغطية مصروفات صغيرة ومتكررة. كل مصروف يُنقص الرصيد ويُنشئ قيداً محاسبياً (مدين المصروف، دائن حساب الصندوق).</Text></div>
+                <Text>مصروفات صغيرة ومتكررة تُصرف نقداً أو من البنك. كل مصروف يُنشئ قيداً محاسبياً (مدين المصروف، دائن الحساب المُختار).</Text></div>
               <div><Title level={5}>الاعتماد</Title>
-                <Text>اعتماد المدير هو ما يُنشئ القيد المحاسبي ويخصم الرصيد فعلياً. اعتماد المراجع تسجيل مراجعة فقط ولا يؤثر على الحركة المحاسبية.</Text></div>
-              <div><Title level={5}>التغذية</Title>
-                <Text>عند انخفاض الرصيد، يمكن تغذية الصندوق من حساب آخر (بنك أو خزينة)، مما يزيد الرصيد وينشئ قيداً محاسبياً (مدين حساب الصندوق، دائن الحساب المصدر).</Text></div>
+                <Text>اعتماد المدير هو ما يُنشئ القيد المحاسبي فعلياً.</Text></div>
               <div><Title level={5}>المرفقات</Title>
                 <Text>يمكن إرفاق صورة أو ملف PDF لإيصال كل مصروف لتوثيقه.</Text></div>
             </Flex>
           </HelpButton>
+          <Button type="primary" danger size="small" icon={<Banknote size={15} />} onClick={openExpenseDialog}>
+                مصروف جديد
+              </Button>
           <Badge count={pendingWhatsAppCount} size="small" offset={[-4, 4]}>
             <Button
               size="small"
@@ -655,55 +656,32 @@ export default function PettyCashPage() {
             >
               استيراد طلبات واتساب
             </Button>
+            
           </Badge>
           <Button size="small" icon={<Settings size={15} />} onClick={() => navigate('/settings?tab=petty-cash')}>
-            {fund ? 'الإعدادات' : 'إعداد الصندوق'}
+            {hasSourceAccount ? 'الإعدادات' : 'إعداد الحسابات'}
           </Button>
         </Flex>
       </Flex>
 
-      {!fund ? (
+      {accountSettingsLoading ? (
+        <Flex justify="center" style={{ padding: '64px 0' }}><Spin size="large" /></Flex>
+      ) : !hasSourceAccount ? (
         <div style={{ padding: 48, textAlign: 'center', border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-          <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-            لم يتم إعداد صندوق النثريات بعد
+          <Text style={{ display: 'block', marginBottom: 16, fontWeight: 700, color: '#000' }}>
+            لم يتم إعداد حسابات صندوق النثريات بعد
           </Text>
           <Button type="primary" icon={<Plus size={16} />} onClick={() => navigate('/settings?tab=petty-cash')}>
-            إعداد الصندوق
+            إعداد الحسابات
           </Button>
         </div>
       ) : (
         <>
-          {/* Fund status + toolbar, combined into one compact panel */}
-          <div style={{ padding: 10, marginBottom: 12, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-            <Flex align="center" gap={12} wrap="wrap">
-              <div style={{ minWidth: 110 }}>
-                <Text style={{ fontWeight: 700, lineHeight: 1.2, display: 'block' }}>{fund.name}</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>{fund.custodian_name}</Text>
-              </div>
+          {/* Toolbar */}
+          <div style={{ padding: 3, marginBottom: 3, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
+          
 
-              <Flex align="baseline" gap={4}>
-                <Text style={{ fontWeight: 800, fontSize: 16, lineHeight: 1 }} type={isLow ? 'danger' : 'success'}>
-                  {numFmt(balance)}
-                </Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>/ {numFmt(max)}</Text>
-              </Flex>
-
-              <div style={{ flex: 1, minWidth: 80 }}>
-                <Progress percent={pct} showInfo={false} strokeColor={isLow ? 'var(--ant-color-error)' : 'var(--ant-color-success)'} size="small" />
-              </div>
-
-              {isLow && <Tag color="warning" icon={<TriangleAlert size={12} style={{ marginLeft: 4 }} />}>منخفض</Tag>}
-
-              <Button type="primary" danger size="small" icon={<Banknote size={15} />}
-                onClick={() => setExpenseOpen(true)} disabled={fund.status !== 'active'}>
-                مصروف جديد
-              </Button>
-              <Button size="small" style={{ color: 'var(--ant-color-success)', borderColor: 'var(--ant-color-success-border)' }} onClick={() => setReplenishOpen(true)}>
-                تغذية
-              </Button>
-            </Flex>
-
-            <div style={{ margin: '8px 0', borderTop: '1px solid var(--ant-color-border-secondary)' }} />
+            <div style={{ margin: '2px 0', borderTop: '1px solid var(--ant-color-border-secondary)' }} />
 
             <Flex gap={8} align="center" wrap="wrap">
               <Input
@@ -712,20 +690,10 @@ export default function PettyCashPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 style={{ flex: 1, minWidth: 200 }}
-                prefix={<Search size={14} color="var(--ant-color-text-disabled)" />}
+                prefix={<Search size={14} color="#000" />}
               />
-              <DateInput size="small" value={from} onChange={e => setFrom(e.target.value)} style={{ width: 135 }} />
-              <DateInput size="small" value={to} onChange={e => setTo(e.target.value)} style={{ width: 135 }} />
-              <Segmented
-                size="small"
-                value={filterType}
-                onChange={v => setFilterType(v as FilterType)}
-                options={[
-                  { value: 'all', label: 'الكل' },
-                  { value: 'expense', label: 'مصروفات' },
-                  { value: 'replenishment', label: 'تغذية' },
-                ]}
-              />
+              <DateInput size="small" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }} style={{ width: 135 }} />
+              <DateInput size="small" value={to} onChange={e => { setTo(e.target.value); setPage(1) }} style={{ width: 135 }} />
               <Tooltip title="تصدير PDF">
                 <Button type="text" shape="circle" size="small" onClick={handlePdf} disabled={pdfLoading}
                   icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
@@ -735,7 +703,6 @@ export default function PettyCashPage() {
                   const p = new URLSearchParams()
                   if (from) p.set('from', from)
                   if (to)   p.set('to', to)
-                  if (filterType !== 'all') p.set('type', filterType)
                   const qs = p.toString()
                   navigate(`/petty-cash-spreadsheet${qs ? `?${qs}` : ''}`)
                 }} icon={<Sheet size={16} />} />
@@ -744,25 +711,36 @@ export default function PettyCashPage() {
                 <Button type="text" shape="circle" size="small" onClick={handleSyncExpenseAccounts} disabled={syncingAccounts}
                   icon={syncingAccounts ? <Spin size="small" /> : <RefreshCw size={16} />} />
               </Tooltip>
+              <Tooltip title="التحقق من اعتمادات واتساب المعلّقة">
+                <Button size="small" onClick={handleReconcilePending} disabled={reconcilingPending}
+                  icon={reconcilingPending ? <Spin size="small" /> : <CheckCheck size={15} />}>
+                  التحقق من الاعتمادات
+                </Button>
+              </Tooltip>
             </Flex>
           </div>
 
-          {loading ? (
-            <Flex justify="center" style={{ padding: '64px 0' }}><Spin size="large" /></Flex>
-          ) : (
-            <Table
-              size="small"
-              columns={columns}
-              dataSource={visibleTransactions}
-              rowKey="id"
-              pagination={false}
-              locale={{ emptyText: 'لا توجد حركات مطابقة' }}
-              rowClassName={t => updatedIds.has(t.id) ? 'highlight-fade' : ''}
-              onRow={t => ({
-                style: { borderInlineEnd: `3px solid ${t.type === 'expense' ? 'var(--ant-color-error)' : 'var(--ant-color-success)'}` },
-              })}
-            />
-          )}
+          <Table
+            size="small"
+            loading={loading}
+            columns={columns}
+            dataSource={transactions}
+            rowKey="id"
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50, 100],
+              showTotal: t => `الإجمالي: ${t}`,
+              onChange: (p, ps) => { setPage(p); setPageSize(ps) },
+            }}
+            locale={{ emptyText: 'لا توجد حركات مطابقة' }}
+            rowClassName={t => updatedIds.has(t.id) ? 'highlight-fade' : ''}
+            onRow={t => ({
+              style: { borderInlineEnd: `3px solid ${t.type === 'expense' ? 'var(--ant-color-error)' : 'var(--ant-color-success)'}` },
+            })}
+          />
         </>
       )}
 
@@ -796,7 +774,7 @@ export default function PettyCashPage() {
           <Flex justify="flex-end" gap={8}>
             <Button onClick={() => setExpenseOpen(false)}>إلغاء</Button>
             <Button type="primary" danger onClick={handleCreateExpense}
-              disabled={creatingExpense || !expenseForm.amount || !expenseForm.contra_account_id}
+              disabled={creatingExpense || !expenseForm.amount || !expenseForm.contra_account_id || !expenseForm.source_account_id}
               icon={creatingExpense ? <Spin size="small" /> : <Plus size={16} />}>
               حفظ المصروف
             </Button>
@@ -812,20 +790,18 @@ export default function PettyCashPage() {
             marginBottom: 12,
             textAlign: 'center',
           }}>
-            <Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.3 }}>المبلغ</Text>
+            <Text style={{ fontSize: 11, letterSpacing: 0.3, fontWeight: 700, color: '#000' }}>المبلغ</Text>
             <div style={{
               margin: '2px 0 8px', direction: 'ltr', lineHeight: 1,
               fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-              color: expenseForm.amount ? 'var(--ant-color-error)' : 'var(--ant-color-text-quaternary)',
+              color: expenseForm.amount ? 'var(--ant-color-error)' : '#000',
             }}>
               {numFmt(expenseForm.amount || 0)}
             </div>
-            <div className="petty-amount-pill">
+            <div >
               <InputNumber
                 ref={expenseAmountRef}
-                autoFocus min={0.01} step={1} controls={false} variant="borderless"
-                placeholder="0.00"
-                style={{ width: 130, direction: 'ltr', textAlign: 'center', fontSize: 13 }}
+                autoFocus  controls={false} 
                 value={expenseForm.amount === '' ? null : Number(expenseForm.amount)}
                 onChange={val => setExpenseForm(f => ({ ...f, amount: val == null ? '' : String(val) }))}
               />
@@ -853,6 +829,15 @@ export default function PettyCashPage() {
               />
             </Col>
             <Col span={24}>
+              <FieldLabel icon={Landmark}>من حساب</FieldLabel>
+              <Segmented
+                block
+                value={expenseForm.source_account_id?.id}
+                onChange={v => setExpenseForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
+                options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+              />
+            </Col>
+            <Col span={24}>
               <FieldLabel icon={FileText}>البيان</FieldLabel>
               <Input.TextArea ref={expenseDescriptionRef} rows={2} placeholder="مثال: مواصلات توصيل طرد" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} />
             </Col>
@@ -862,107 +847,13 @@ export default function PettyCashPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', marginBottom: 10 }}
                 onClick={() => expenseDocInputRef.current?.click()}
               >
-                <Paperclip size={14} color="var(--ant-color-text-tertiary)" />
-                <Text type="secondary" style={{ fontSize: 12.5 }}>
+                <Paperclip size={14} color="#000" />
+                <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>
                   {expenseForm.document ? expenseForm.document.name : 'إرفاق إيصال (اختياري)'}
                 </Text>
                 <input ref={expenseDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
                   onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
               </div>
-            </Col>
-          </Row>
-        </div>
-      </Modal>
-
-      {/* ── Replenishment Dialog ── */}
-      <Modal
-        open={replenishOpen}
-        onCancel={() => setReplenishOpen(false)}
-        width={440}
-        centered
-        styles={{ content: { borderRadius: 16, padding: 0, overflow: 'hidden' }, header: { padding: '14px 18px 0', margin: 0 }, body: { padding: '10px 18px 0' }, footer: { padding: '10px 18px 14px', margin: 0 } }}
-        title={
-          <Flex align="center" justify="space-between" gap={10} style={{ paddingInlineEnd: 28 }}>
-            <Flex align="center" gap={8}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-                background: 'var(--ant-color-success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Banknote size={16} color="var(--ant-color-success)" />
-              </div>
-              <Text strong style={{ fontSize: 14 }}>تغذية الصندوق</Text>
-            </Flex>
-            <DateInput
-              value={replenishForm.date}
-              onChange={e => setReplenishForm(f => ({ ...f, date: e.target.value }))}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); replenishAmountRef.current?.focus() } }}
-              style={{ width: 130 }}
-            />
-          </Flex>
-        }
-        footer={
-          <Flex justify="flex-end" gap={8}>
-            <Button onClick={() => setReplenishOpen(false)}>إلغاء</Button>
-            <Button type="primary" style={{ background: 'var(--ant-color-success)' }} onClick={handleCreateReplenishment}
-              disabled={creatingReplenish || !replenishForm.amount || !replenishForm.contra_account_id}
-              icon={creatingReplenish ? <Spin size="small" /> : <Plus size={16} />}>
-              حفظ التغذية
-            </Button>
-          </Flex>
-        }
-      >
-        <div onKeyDown={focusNextField}>
-          {/* Amount hero */}
-          <div style={{
-            background: 'linear-gradient(180deg, var(--ant-color-success-bg) 0%, var(--ant-color-bg-container) 100%)',
-            borderRadius: 12,
-            padding: '12px 16px',
-            marginBottom: 12,
-            textAlign: 'center',
-          }}>
-            <Text type="secondary" style={{ fontSize: 11, letterSpacing: 0.3 }}>المبلغ</Text>
-            <div style={{
-              margin: '2px 0 8px', direction: 'ltr', lineHeight: 1,
-              fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-              color: replenishForm.amount ? 'var(--ant-color-success)' : 'var(--ant-color-text-quaternary)',
-            }}>
-              {numFmt(replenishForm.amount || 0)}
-            </div>
-            <div className="petty-amount-pill">
-              <InputNumber
-                ref={replenishAmountRef}
-                autoFocus min={0.01} step={1} controls={false} variant="borderless"
-                placeholder="0.00"
-                style={{ width: 130, direction: 'ltr', textAlign: 'center', fontSize: 13 }}
-                value={replenishForm.amount === '' ? null : Number(replenishForm.amount)}
-                onChange={val => setReplenishForm(f => ({ ...f, amount: val == null ? '' : String(val) }))}
-              />
-            </div>
-          </div>
-
-          <Row gutter={[12, 10]}>
-            <Col span={24}>
-              <FieldLabel icon={UserRound}>اسم المستفيد</FieldLabel>
-              <Input value={replenishForm.beneficiary_name} onChange={e => setReplenishForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
-            </Col>
-            <Col span={24}>
-              <FieldLabel icon={Landmark}>الحساب المصدر (بنك / خزينة)</FieldLabel>
-              <Select
-                showSearch
-                style={{ width: '100%' }}
-                value={replenishForm.contra_account_id?.id}
-                onChange={v => {
-                  setReplenishForm(f => ({ ...f, contra_account_id: assetAccounts.find(a => a.id === v) ?? null }))
-                  setTimeout(() => replenishDescriptionRef.current?.focus(), 0)
-                }}
-                notFoundContent="لا توجد حسابات"
-                filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-                options={assetAccounts.filter(a => a.id !== fund?.account_id).map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
-              />
-            </Col>
-            <Col span={24} style={{ marginBottom: 10 }}>
-              <FieldLabel icon={FileText}>البيان</FieldLabel>
-              <Input.TextArea ref={replenishDescriptionRef} rows={2} placeholder="مثال: تغذية شهرية" value={replenishForm.description} onChange={e => setReplenishForm(f => ({ ...f, description: e.target.value }))} />
             </Col>
           </Row>
         </div>
@@ -983,8 +874,8 @@ export default function PettyCashPage() {
           </Flex>
         }
       >
-        <Text type="secondary">
-          سيتم حذف الحركة والقيد المحاسبي المرتبط بها نهائياً وتعديل رصيد الصندوق. هذا الإجراء لا يمكن التراجع عنه.
+        <Text style={{ fontWeight: 700, color: '#000' }}>
+          سيتم حذف الحركة والقيد المحاسبي المرتبط بها نهائياً. هذا الإجراء لا يمكن التراجع عنه.
         </Text>
         {deleteTarget && (
           <div style={{ marginTop: 12, padding: 12, background: 'var(--ant-color-fill-alter)', borderRadius: 6 }}>
@@ -1012,11 +903,11 @@ export default function PettyCashPage() {
             <Flex key={n.role} align="center" gap={12}>
               {n.status === 'sent' && <CheckCircle2 size={16} color="var(--ant-color-success)" />}
               {n.status === 'failed' && <CircleAlert size={16} color="var(--ant-color-error)" />}
-              {n.status === 'skipped' && <CircleMinus size={16} color="var(--ant-color-text-disabled)" />}
+              {n.status === 'skipped' && <CircleMinus size={16} color="#000" />}
               <div>
-                <Text style={{ display: 'block' }}>{ROLE_LABEL[n.role]} — {STATUS_LABEL[n.status]}</Text>
+                <Text style={{ display: 'block', fontWeight: 700, color: '#000' }}>{ROLE_LABEL[n.role]} — {STATUS_LABEL[n.status]}</Text>
                 {(n.error || n.phone) && (
-                  <Text type={n.status === 'failed' ? 'danger' : 'secondary'} style={{ fontSize: 12 }} dir={n.phone ? 'ltr' : undefined}>
+                  <Text type={n.status === 'failed' ? 'danger' : undefined} style={{ fontSize: 12, fontWeight: 700, color: n.status === 'failed' ? undefined : '#000' }} dir={n.phone ? 'ltr' : undefined}>
                     {n.error ?? n.phone}
                   </Text>
                 )}

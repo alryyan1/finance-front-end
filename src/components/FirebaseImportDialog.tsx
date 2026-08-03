@@ -8,6 +8,7 @@ import {
   type FirebaseJournalEntry,
 } from '@/lib/firebaseImport'
 import { journalApi } from '@/api/journal'
+import { pettyCashSettingsApi } from '@/api/settings'
 import { useToast } from '@/lib/toast'
 
 const { Text } = Typography
@@ -30,17 +31,27 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
   const [failed,    setFailed]    = useState<string[]>([])
   const [deleting,  setDeleting]  = useState<string | null>(null)  // firebaseId being deleted
 
+  // Firestore tenant collection journal entries are imported from — falls back to
+  // the same default ("jawda") the backend uses when the setting hasn't been configured.
+  const [storageName, setStorageName] = useState<string | null>(null)
+
   // Load pending entries whenever dialog opens
   useEffect(() => {
     if (!open) return
     setLoading(true); setDone(false); setFailed([])
-    Promise.all([fetchPendingEntries(), fetchDoctorMappings()])
+    pettyCashSettingsApi.get()
+      .then(s => {
+        const name = s.firebase_collection_name || 'jawda'
+        setStorageName(name)
+        return Promise.all([fetchPendingEntries(name), fetchDoctorMappings(name)])
+      })
       .then(([e, m]) => { setEntries(e); setDoctorMappings(m) })
       .catch(e => toast.error((e as Error).message ?? 'فشل التحميل'))
       .finally(() => setLoading(false))
   }, [open])
 
   const handleImportAll = async () => {
+    if (!storageName) return
     setImporting(true); setProgress(0); setFailed([])
     const errors: string[] = []
 
@@ -54,7 +65,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
           errors.push(`${entry.description} — أسطر غير كافية (حسابات غير قابلة للتحويل)`)
         } else {
           await journalApi.create({ ...payload, lines: validLines as any })
-          await markAsImported(entry.firebaseId)
+          await markAsImported(entry.firebaseId, storageName)
         }
       } catch (e) {
         errors.push(`${entry.description} — ${(e as Error).message}`)
@@ -69,10 +80,11 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
   }
 
   const handleDelete = async (entry: FirebaseJournalEntry) => {
+    if (!storageName) return
     if (!window.confirm(`حذف "${entry.description}" من Firebase نهائياً؟`)) return
     setDeleting(entry.firebaseId)
     try {
-      await deleteEntry(entry.firebaseId)
+      await deleteEntry(entry.firebaseId, storageName)
       setEntries(prev => prev.filter(e => e.firebaseId !== entry.firebaseId))
     } catch (e) {
       toast.error((e as Error).message ?? 'فشل الحذف')
@@ -82,10 +94,11 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
   }
 
   const handleDeleteAll = async () => {
+    if (!storageName) return
     if (!window.confirm(`حذف جميع القيود (${entries.length}) من Firebase نهائياً؟`)) return
     setDeleting('__all__')
     try {
-      await Promise.all(entries.map(e => deleteEntry(e.firebaseId)))
+      await Promise.all(entries.map(e => deleteEntry(e.firebaseId, storageName)))
       setEntries([])
     } catch (e) {
       toast.error((e as Error).message ?? 'فشل الحذف')

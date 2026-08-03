@@ -3,7 +3,6 @@ import api from '@/lib/axios'
 export interface FiscalYear {
   id: number
   name: string
-  period_type: 'yearly' | 'monthly'
   start_date: string
   end_date: string
   status: 'open' | 'closed'

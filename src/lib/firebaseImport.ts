@@ -1,10 +1,6 @@
 import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { getFirestoreDb as getDb } from '@/lib/firestore'
 
-// ── storage name ──────────────────────────────────────────────────────────────
-
-const STORAGE_NAME = (import.meta.env.VITE_JAWDA_STORAGE_NAME as string | undefined) || 'alroomy'
-
 // ── types ─────────────────────────────────────────────────────────────────────
 
 export interface FirebaseJournalLine {
@@ -71,20 +67,20 @@ function resolvePartyId(
  * Fetch doctor → party mappings from Firestore.
  * Returns { doctorId: firebasePartyId } e.g. { "1": "5", "3": "doctor_3" }
  */
-export async function fetchDoctorMappings(): Promise<Record<string, string>> {
+export async function fetchDoctorMappings(storageName: string): Promise<Record<string, string>> {
   const db   = getDb()
-  const snap = await getDocs(collection(db, 'finance', STORAGE_NAME, 'doctor_mappings'))
+  const snap = await getDocs(collection(db, 'finance', storageName, 'doctor_mappings'))
   const result: Record<string, string> = {}
   for (const d of snap.docs) result[d.id] = d.data().partyId as string
   return result
 }
 
 /** Fetch all journal entries from Firebase that have not been imported yet. */
-export async function fetchPendingEntries(): Promise<FirebaseJournalEntry[]> {
+export async function fetchPendingEntries(storageName: string): Promise<FirebaseJournalEntry[]> {
   const db = getDb()
   // Firestore "!=" query doesn't return docs where the field is absent;
   // fetch ALL and filter client-side to catch docs without the field.
-  const allSnap = await getDocs(collection(db, 'finance', STORAGE_NAME, 'journal_entries'))
+  const allSnap = await getDocs(collection(db, 'finance', storageName, 'journal_entries'))
 
   return allSnap.docs
     .filter(d => !d.data().imported)
@@ -99,16 +95,16 @@ export async function fetchPendingEntries(): Promise<FirebaseJournalEntry[]> {
 }
 
 /** Permanently delete a journal entry from Firebase. */
-export async function deleteEntry(firebaseId: string): Promise<void> {
+export async function deleteEntry(firebaseId: string, storageName: string): Promise<void> {
   const db  = getDb()
-  const ref = doc(db, 'finance', STORAGE_NAME, 'journal_entries', firebaseId)
+  const ref = doc(db, 'finance', storageName, 'journal_entries', firebaseId)
   await deleteDoc(ref)
 }
 
 /** Mark a Firebase entry as imported so it won't be fetched again. */
-export async function markAsImported(firebaseId: string): Promise<void> {
+export async function markAsImported(firebaseId: string, storageName: string): Promise<void> {
   const db  = getDb()
-  const ref = doc(db, 'finance', STORAGE_NAME, 'journal_entries', firebaseId)
+  const ref = doc(db, 'finance', storageName, 'journal_entries', firebaseId)
   await updateDoc(ref, { imported: true, importedAt: new Date().toISOString() })
 }
 

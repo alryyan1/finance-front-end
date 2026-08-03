@@ -92,26 +92,18 @@ export const journalSettingsApi = {
 
 // ── Petty cash approval settings ────────────────────────────────────────────
 
-export type PettyCashNotifyRecipients = 'manager' | 'auditor' | 'both'
-
 export interface PettyCashApprovalSettings {
   petty_cash_manager_user_id: number | null
-  petty_cash_auditor_user_id: number | null
   petty_cash_manager_whatsapp_phone: string
-  petty_cash_auditor_whatsapp_phone: string
   petty_cash_notify_on_create: boolean
-  petty_cash_notify_recipients: PettyCashNotifyRecipients
   firebase_collection_name: string
 }
 
 function toPettyCashApprovalSettings(data: Record<string, unknown>): PettyCashApprovalSettings {
   return {
     petty_cash_manager_user_id: toIntOrNull(data.petty_cash_manager_user_id),
-    petty_cash_auditor_user_id: toIntOrNull(data.petty_cash_auditor_user_id),
     petty_cash_manager_whatsapp_phone: String(data.petty_cash_manager_whatsapp_phone ?? ''),
-    petty_cash_auditor_whatsapp_phone: String(data.petty_cash_auditor_whatsapp_phone ?? ''),
     petty_cash_notify_on_create: Boolean(data.petty_cash_notify_on_create ?? true),
-    petty_cash_notify_recipients: (data.petty_cash_notify_recipients as PettyCashNotifyRecipients) || 'both',
     firebase_collection_name: String(data.firebase_collection_name ?? ''),
   }
 }
@@ -122,4 +114,26 @@ export const pettyCashSettingsApi = {
 
   update: (data: PettyCashApprovalSettings): Promise<PettyCashApprovalSettings> =>
     api.put<Record<string, unknown>>('/api/settings', data).then(r => toPettyCashApprovalSettings(r.data)),
+}
+
+// ── Petty cash account settings (which accounts expenses are paid from) ────
+
+export interface PettyCashAccountSettings {
+  petty_cash_cash_account_id: number | null
+  petty_cash_bank_account_id: number | null
+}
+
+function toPettyCashAccountSettings(data: Record<string, unknown>): PettyCashAccountSettings {
+  return {
+    petty_cash_cash_account_id: toIntOrNull(data.petty_cash_cash_account_id),
+    petty_cash_bank_account_id: toIntOrNull(data.petty_cash_bank_account_id),
+  }
+}
+
+export const pettyCashAccountSettingsApi = {
+  get: (): Promise<PettyCashAccountSettings> =>
+    api.get<Record<string, unknown>>('/api/settings').then(r => toPettyCashAccountSettings(r.data)),
+
+  update: (data: PettyCashAccountSettings): Promise<PettyCashAccountSettings> =>
+    api.put<Record<string, unknown>>('/api/settings', data).then(r => toPettyCashAccountSettings(r.data)),
 }

@@ -1,20 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Alert, Button, Divider, Flex, Input, Modal, Radio, Select, Spin, Switch, Tabs, Tag, Tooltip, Typography,
+  Alert, Button, Divider, Flex, Input, Modal, Select, Spin, Switch, Tabs, Tag, Tooltip, Typography,
 } from 'antd'
 import HelpButton from '@/components/common/HelpButton'
 import { useToast } from '@/lib/toast'
 import {
-  AlignLeft, AlignRight, Building2, CheckCircle2, Copy, Image as ImageIcon, KeyRound, Link as LinkIcon,
-  LayoutTemplate, MessageCircle, Plus, Save, Settings, Trash2, User, XCircle, PiggyBank, ClipboardCheck,
+  AlignLeft, AlignRight, Building2, Copy, Image as ImageIcon, KeyRound, Link as LinkIcon,
+  LayoutTemplate, MessageCircle, Plus, Save, Settings, Trash2, User, PiggyBank, ClipboardCheck,
 } from 'lucide-react'
 import api from '@/lib/axios'
 import {
-  settingsApi, pettyCashSettingsApi,
+  settingsApi, pettyCashSettingsApi, pettyCashAccountSettingsApi,
   type CompanySettings, type LogoPosition, type PettyCashApprovalSettings,
 } from '@/api/settings'
-import { pettyCashApi, type PettyCashFund } from '@/api/pettyCash'
 import { accountsApi } from '@/api/accounts'
 import type { Account } from '@/types/account'
 import { usersApi, type UserRecord } from '@/api/users'
@@ -80,15 +79,6 @@ function SectionHeader({ icon, title, subtitle, color, action }: SectionHeaderPr
   )
 }
 
-const emptyFundForm = () => ({
-  name:                   'صندوق النثريات',
-  custodian_name:         '',
-  account_id:             null as Account | null,
-  max_amount:             '',
-  low_balance_threshold:  '',
-  status:                 'active' as 'active' | 'inactive',
-})
-
 export default function SettingsPage() {
   const toast = useToast()
   const [searchParams] = useSearchParams()
@@ -104,22 +94,19 @@ export default function SettingsPage() {
   const [users,             setUsers]             = useState<UserRecord[]>([])
   const [pettyCashApproval, setPettyCashApproval]  = useState<PettyCashApprovalSettings>({
     petty_cash_manager_user_id: null,
-    petty_cash_auditor_user_id: null,
     petty_cash_manager_whatsapp_phone: '',
-    petty_cash_auditor_whatsapp_phone: '',
     petty_cash_notify_on_create: true,
-    petty_cash_notify_recipients: 'both',
     firebase_collection_name: '',
   })
   const [pettyCashLoading, setPettyCashLoading] = useState(true)
   const [pettyCashSaving,  setPettyCashSaving]  = useState(false)
 
-  // Petty cash fund settings state
-  const [accounts, setAccounts]     = useState<Account[]>([])
-  const [fund, setFund]             = useState<PettyCashFund | null>(null)
-  const [fundForm, setFundForm]     = useState(emptyFundForm())
-  const [fundLoading, setFundLoading] = useState(true)
-  const [fundSaving, setFundSaving]   = useState(false)
+  // Petty cash account settings state (which accounts expenses are paid from)
+  const [accounts, setAccounts]         = useState<Account[]>([])
+  const [cashAccount, setCashAccount]   = useState<Account | null>(null)
+  const [bankAccount, setBankAccount]   = useState<Account | null>(null)
+  const [pettyCashAccountsLoading, setPettyCashAccountsLoading] = useState(true)
+  const [pettyCashAccountsSaving, setPettyCashAccountsSaving]   = useState(false)
 
   useEffect(() => {
     settingsApi.get()
@@ -130,22 +117,13 @@ export default function SettingsPage() {
       .then(([u, p]) => { setUsers(u); setPettyCashApproval(p) })
       .finally(() => setPettyCashLoading(false))
 
-    Promise.all([accountsApi.list(), pettyCashApi.getFund()])
-      .then(([a, f]) => {
+    Promise.all([accountsApi.list(), pettyCashAccountSettingsApi.get()])
+      .then(([a, s]) => {
         setAccounts(a)
-        setFund(f)
-        if (f) {
-          setFundForm({
-            name:                  f.name,
-            custodian_name:        f.custodian_name,
-            account_id:            a.find(acc => acc.id === f.account_id) ?? null,
-            max_amount:            f.max_amount,
-            low_balance_threshold: f.low_balance_threshold,
-            status:                f.status,
-          })
-        }
+        setCashAccount(a.find(acc => acc.id === s.petty_cash_cash_account_id) ?? null)
+        setBankAccount(a.find(acc => acc.id === s.petty_cash_bank_account_id) ?? null)
       })
-      .finally(() => setFundLoading(false))
+      .finally(() => setPettyCashAccountsLoading(false))
   }, [])
 
   const handlePettyCashApprovalSave = async () => {
@@ -161,24 +139,20 @@ export default function SettingsPage() {
     }
   }
 
-  const handleFundSave = async () => {
-    if (!fundForm.name || !fundForm.custodian_name || !fundForm.account_id || !fundForm.max_amount) return
-    setFundSaving(true)
+  const handlePettyCashAccountsSave = async () => {
+    setPettyCashAccountsSaving(true)
     try {
-      const r = await pettyCashApi.setupFund({
-        name:                   fundForm.name,
-        custodian_name:         fundForm.custodian_name,
-        account_id:             fundForm.account_id.id,
-        max_amount:             fundForm.max_amount,
-        low_balance_threshold:  fundForm.low_balance_threshold || 0,
-        status:                 fundForm.status,
+      const r = await pettyCashAccountSettingsApi.update({
+        petty_cash_cash_account_id: cashAccount?.id ?? null,
+        petty_cash_bank_account_id: bankAccount?.id ?? null,
       })
-      setFund(r)
-      toast.success('تم حفظ إعدادات الصندوق')
+      setCashAccount(accounts.find(acc => acc.id === r.petty_cash_cash_account_id) ?? null)
+      setBankAccount(accounts.find(acc => acc.id === r.petty_cash_bank_account_id) ?? null)
+      toast.success('تم حفظ حسابات صندوق النثريات')
     } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ إعدادات الصندوق')
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ حسابات صندوق النثريات')
     } finally {
-      setFundSaving(false)
+      setPettyCashAccountsSaving(false)
     }
   }
 
@@ -441,57 +415,36 @@ export default function SettingsPage() {
           <SectionHeader
             icon={<PiggyBank size={20} />}
             color={SECTION_COLOR.pettyFund}
-            title={fund ? 'إعدادات الصندوق' : 'إعداد صندوق النثريات'}
-            subtitle="الحساب المحاسبي، الحدود، وأمين صندوق النثريات"
-            action={fund && (
-              <Tag
-                icon={fundForm.status === 'active' ? <CheckCircle2 size={12} style={{ marginLeft: 4 }} /> : <XCircle size={12} style={{ marginLeft: 4 }} />}
-                color={fundForm.status === 'active' ? 'success' : 'default'}
-              >
-                {fundForm.status === 'active' ? 'مُفعّل' : 'غير مُفعّل'}
-              </Tag>
-            )}
+            title="حسابات صندوق النثريات"
+            subtitle="الحساب النقدي والحساب البنكي اللذان تُصرف منهما مصروفات النثريات"
           />
 
-          {fundLoading ? <Spin /> : (
+          {pettyCashAccountsLoading ? <Spin /> : (
             <Flex vertical gap={20} style={{ maxWidth: 520 }}>
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>اسم الصندوق</Text>
-                <Input value={fundForm.name} onChange={e => setFundForm(f => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>أمين الصندوق</Text>
-                <Input value={fundForm.custodian_name} onChange={e => setFundForm(f => ({ ...f, custodian_name: e.target.value }))} />
-              </div>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حساب الصندوق (أصل)</Text>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حساب النقدية</Text>
                 <Select
                   showSearch
+                  allowClear
                   style={{ width: '100%' }}
-                  value={fundForm.account_id?.id}
-                  onChange={v => setFundForm(f => ({ ...f, account_id: assetAccounts.find(a => a.id === v) ?? null }))}
+                  value={cashAccount?.id}
+                  onChange={v => setCashAccount(assetAccounts.find(a => a.id === v) ?? null)}
                   notFoundContent="لا توجد حسابات"
                   filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
                   options={assetAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
                 />
               </div>
-              <Flex gap={16}>
-                <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الحد الأقصى</Text>
-                  <Input type="number" value={fundForm.max_amount} onChange={e => setFundForm(f => ({ ...f, max_amount: e.target.value }))} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حد التنبيه المنخفض</Text>
-                  <Input type="number" value={fundForm.low_balance_threshold} onChange={e => setFundForm(f => ({ ...f, low_balance_threshold: e.target.value }))} />
-                </div>
-              </Flex>
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الحالة</Text>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حساب البنك</Text>
                 <Select
+                  showSearch
+                  allowClear
                   style={{ width: '100%' }}
-                  value={fundForm.status}
-                  onChange={v => setFundForm(f => ({ ...f, status: v }))}
-                  options={[{ value: 'active', label: 'مُفعّل' }, { value: 'inactive', label: 'غير مُفعّل' }]}
+                  value={bankAccount?.id}
+                  onChange={v => setBankAccount(assetAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={assetAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
                 />
               </div>
 
@@ -500,11 +453,11 @@ export default function SettingsPage() {
               <Flex justify="flex-end">
                 <Button
                   type="primary"
-                  icon={fundSaving ? <Spin size="small" /> : <Save size={16} />}
-                  onClick={handleFundSave}
-                  disabled={fundSaving || !fundForm.name || !fundForm.custodian_name || !fundForm.account_id || !fundForm.max_amount}
+                  icon={pettyCashAccountsSaving ? <Spin size="small" /> : <Save size={16} />}
+                  onClick={handlePettyCashAccountsSave}
+                  disabled={pettyCashAccountsSaving}
                 >
-                  حفظ إعدادات الصندوق
+                  حفظ حسابات النثريات
                 </Button>
               </Flex>
             </Flex>
@@ -524,57 +477,30 @@ export default function SettingsPage() {
 
           {pettyCashLoading ? <Spin /> : (
             <Flex vertical gap={24}>
-              <Flex gap={16} wrap="wrap">
-                {/* Manager */}
-                <div style={{ flex: 1, minWidth: 260, padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
-                  <Flex align="center" gap={8} style={{ marginBottom: 16 }}>
-                    <User size={15} color={SECTION_COLOR.approval} />
-                    <Text style={{ fontWeight: 700 }}>المدير المعتمِد</Text>
-                  </Flex>
-                  <Flex vertical gap={14}>
-                    <Select
-                      showSearch
-                      placeholder="المستخدم"
-                      style={{ width: '100%' }}
-                      value={pettyCashApproval.petty_cash_manager_user_id ?? undefined}
-                      onChange={v => setPettyCashApproval(p => ({ ...p, petty_cash_manager_user_id: v ?? null }))}
-                      allowClear
-                      filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-                      options={users.map(u => ({ value: u.id, label: u.name }))}
-                    />
-                    <Input
-                      placeholder="رقم واتساب" dir="ltr"
-                      value={pettyCashApproval.petty_cash_manager_whatsapp_phone}
-                      onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_manager_whatsapp_phone: e.target.value }))}
-                    />
-                  </Flex>
-                </div>
-
-                {/* Auditor */}
-                <div style={{ flex: 1, minWidth: 260, padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
-                  <Flex align="center" gap={8} style={{ marginBottom: 16 }}>
-                    <User size={15} color={SECTION_COLOR.approval} />
-                    <Text style={{ fontWeight: 700 }}>المراجع المعتمِد</Text>
-                  </Flex>
-                  <Flex vertical gap={14}>
-                    <Select
-                      showSearch
-                      placeholder="المستخدم"
-                      style={{ width: '100%' }}
-                      value={pettyCashApproval.petty_cash_auditor_user_id ?? undefined}
-                      onChange={v => setPettyCashApproval(p => ({ ...p, petty_cash_auditor_user_id: v ?? null }))}
-                      allowClear
-                      filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-                      options={users.map(u => ({ value: u.id, label: u.name }))}
-                    />
-                    <Input
-                      placeholder="رقم واتساب" dir="ltr"
-                      value={pettyCashApproval.petty_cash_auditor_whatsapp_phone}
-                      onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_auditor_whatsapp_phone: e.target.value }))}
-                    />
-                  </Flex>
-                </div>
-              </Flex>
+              {/* Manager */}
+              <div style={{ maxWidth: 420, padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
+                <Flex align="center" gap={8} style={{ marginBottom: 16 }}>
+                  <User size={15} color={SECTION_COLOR.approval} />
+                  <Text style={{ fontWeight: 700 }}>المدير المعتمِد</Text>
+                </Flex>
+                <Flex vertical gap={14}>
+                  <Select
+                    showSearch
+                    placeholder="المستخدم"
+                    style={{ width: '100%' }}
+                    value={pettyCashApproval.petty_cash_manager_user_id ?? undefined}
+                    onChange={v => setPettyCashApproval(p => ({ ...p, petty_cash_manager_user_id: v ?? null }))}
+                    allowClear
+                    filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                    options={users.map(u => ({ value: u.id, label: u.name }))}
+                  />
+                  <Input
+                    placeholder="رقم واتساب" dir="ltr"
+                    value={pettyCashApproval.petty_cash_manager_whatsapp_phone}
+                    onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_manager_whatsapp_phone: e.target.value }))}
+                  />
+                </Flex>
+              </div>
 
               {/* WhatsApp auto-notify on creation */}
               <div style={{ padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
@@ -591,22 +517,6 @@ export default function SettingsPage() {
                     onChange={checked => setPettyCashApproval(p => ({ ...p, petty_cash_notify_on_create: checked }))}
                   />
                 </Flex>
-
-                {pettyCashApproval.petty_cash_notify_on_create && (
-                  <>
-                    <Divider style={{ margin: '16px 0' }} />
-                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>إرسال الإشعار إلى</Text>
-                    <Radio.Group
-                      value={pettyCashApproval.petty_cash_notify_recipients}
-                      onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_notify_recipients: e.target.value }))}
-                      options={[
-                        { value: 'both', label: 'المدير والمراجع' },
-                        { value: 'manager', label: 'المدير فقط' },
-                        { value: 'auditor', label: 'المراجع فقط' },
-                      ]}
-                    />
-                  </>
-                )}
               </div>
 
               {/* Firebase integration */}
