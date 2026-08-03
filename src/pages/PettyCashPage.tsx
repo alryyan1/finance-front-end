@@ -33,6 +33,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
 const emptyCompoundLine = () => ({ contra_account: null as Account | null, amount: '' })
+const emptyCreditLine = () => ({ source_account: null as Account | null, amount: '' })
 
 const emptyExpenseForm = () => ({
   date:               today(),
@@ -44,6 +45,7 @@ const emptyExpenseForm = () => ({
   document:           null as File | null,
   compound:           false,
   lines:              [emptyCompoundLine(), emptyCompoundLine()],
+  creditLines:        [emptyCreditLine()],
 })
 
 const ROLE_LABEL: Record<NotificationResult['role'], string> = { manager: 'المدير' }
@@ -326,7 +328,11 @@ export default function PettyCashPage() {
   const hasSourceAccount = !!bankAccount || !!cashAccount
 
   const openExpenseDialog = () => {
-    setExpenseForm({ ...emptyExpenseForm(), source_account_id: bankAccount ?? cashAccount })
+    setExpenseForm({
+      ...emptyExpenseForm(),
+      source_account_id: bankAccount ?? cashAccount,
+      creditLines: [{ source_account: bankAccount ?? cashAccount, amount: '' }],
+    })
     setExpenseOpen(true)
   }
 
@@ -345,26 +351,32 @@ export default function PettyCashPage() {
   }, [hasSourceAccount, expenseOpen, bankAccount, cashAccount])
 
   const compoundTotal = expenseForm.lines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0)
+  const creditLinesTotal = expenseForm.creditLines.reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0)
   const compoundValid = expenseForm.compound
     && expenseForm.lines.length >= 2
     && expenseForm.lines.every(l => l.contra_account && parseFloat(l.amount) > 0)
+    && expenseForm.creditLines.length >= 1
+    && expenseForm.creditLines.every(l => l.source_account && parseFloat(l.amount) > 0)
+    && Math.abs(creditLinesTotal - compoundTotal) < 0.01
   const expenseFormValid = expenseForm.compound
     ? compoundValid
-    : !!expenseForm.amount && !!expenseForm.contra_account_id
+    : !!expenseForm.amount && !!expenseForm.contra_account_id && !!expenseForm.source_account_id
 
   const handleCreateExpense = async () => {
-    if (!expenseFormValid || !expenseForm.source_account_id) return
+    if (!expenseFormValid) return
     setCreatingExpense(true)
     try {
       const created = await pettyCashApi.createExpense({
         date: expenseForm.date,
         beneficiary_name: expenseForm.beneficiary_name || undefined,
-        source_account_id: expenseForm.source_account_id.id,
         description: expenseForm.description || undefined,
         document: expenseForm.document,
         ...(expenseForm.compound
           ? { lines: expenseForm.lines.map(l => ({ contra_account_id: l.contra_account!.id, amount: l.amount })) }
           : { amount: expenseForm.amount, contra_account_id: expenseForm.contra_account_id!.id }),
+        ...(expenseForm.compound
+          ? { credit_lines: expenseForm.creditLines.map(l => ({ source_account_id: l.source_account!.id, amount: l.amount })) }
+          : { source_account_id: expenseForm.source_account_id!.id }),
       })
       setExpenseOpen(false)
       setExpenseForm(emptyExpenseForm())
@@ -467,7 +479,7 @@ export default function PettyCashPage() {
   const handleExcel = async () => {
     setExcelLoading(true)
     try {
-      await downloadExcel('/api/petty-cash/transactions/excel', { from, to }, 'petty-cash-transactions.xlsx')
+      await downloadExcel('/api/petty-cash/transactions/excel', { from, to, source_account_id: sourceAccountFilter ?? undefined }, 'petty-cash-transactions.xlsx')
     } catch {
       toast.error('تعذّر إنشاء ملف Excel')
     } finally {
@@ -566,10 +578,19 @@ export default function PettyCashPage() {
             <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>من ح/ متعدد ({t.lines.length})</Text>
           </Tooltip>
         )
+        const credit = t.source_account ? (
+          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ {t.source_account.name}</Text>
+        ) : t.credit_lines.length ? (
+          <Tooltip title={t.credit_lines.map(l => `${l.source_account.name} — ${numFmt(l.amount)}`).join(' | ')}>
+            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ متعدد ({t.credit_lines.length})</Text>
+          </Tooltip>
+        ) : (
+          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ —</Text>
+        )
         return (
           <Flex vertical gap={1}>
             {debit}
-            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ {t.source_account?.name ?? '—'}</Text>
+            {credit}
           </Flex>
         )
       },
@@ -747,6 +768,15 @@ export default function PettyCashPage() {
               />
               <DateInput size="small" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }} style={{ width: 135 }} />
               <DateInput size="small" value={to} onChange={e => { setTo(e.target.value); setPage(1) }} style={{ width: 135 }} />
+              <Select
+                size="small"
+                allowClear
+                placeholder="الحساب الدائن"
+                style={{ width: 150 }}
+                value={sourceAccountFilter ?? undefined}
+                onChange={v => { setSourceAccountFilter(v ?? null); setPage(1) }}
+                options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+              />
               <Tooltip title="تصدير PDF">
                 <Button type="text" shape="circle" size="small" onClick={handlePdf} disabled={pdfLoading}
                   icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
@@ -822,7 +852,7 @@ export default function PettyCashPage() {
           <Flex justify="flex-end" gap={8}>
             <Button onClick={() => setExpenseOpen(false)}>إلغاء</Button>
             <Button type="primary" danger onClick={handleCreateExpense}
-              disabled={creatingExpense || !expenseFormValid || !expenseForm.source_account_id}
+              disabled={creatingExpense || !expenseFormValid}
               icon={creatingExpense ? <Spin size="small" /> : <Plus size={16} />}>
               حفظ المصروف
             </Button>
@@ -932,12 +962,54 @@ export default function PettyCashPage() {
             </Col>
             <Col span={24}>
               <FieldLabel icon={Landmark}>من حساب</FieldLabel>
-              <Segmented
-                block
-                value={expenseForm.source_account_id?.id}
-                onChange={v => setExpenseForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
-                options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
-              />
+              {expenseForm.compound ? (
+                <Flex vertical gap={6}>
+                  {expenseForm.creditLines.map((line, i) => (
+                    <Flex key={i} gap={6} align="center">
+                      <Select
+                        style={{ flex: 1 }}
+                        placeholder="اختر حساباً"
+                        value={line.source_account?.id}
+                        onChange={v => setExpenseForm(f => ({
+                          ...f,
+                          creditLines: f.creditLines.map((l, idx) => idx === i ? { ...l, source_account: [bankAccount, cashAccount].find(a => a?.id === v) ?? null } : l),
+                        }))}
+                        options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+                      />
+                      <InputNumber
+                        controls={false}
+                        style={{ width: 90 }}
+                        placeholder="المبلغ"
+                        value={line.amount === '' ? null : Number(line.amount)}
+                        onChange={val => setExpenseForm(f => ({
+                          ...f,
+                          creditLines: f.creditLines.map((l, idx) => idx === i ? { ...l, amount: val == null ? '' : String(val) } : l),
+                        }))}
+                      />
+                      <Button
+                        type="text" shape="circle" size="small" danger
+                        disabled={expenseForm.creditLines.length <= 1}
+                        onClick={() => setExpenseForm(f => ({ ...f, creditLines: f.creditLines.filter((_, idx) => idx !== i) }))}
+                        icon={<Trash2 size={14} />}
+                      />
+                    </Flex>
+                  ))}
+                  <Button
+                    icon={<Plus size={13} />} size="small"
+                    disabled={expenseForm.creditLines.length >= 2}
+                    onClick={() => setExpenseForm(f => ({ ...f, creditLines: [...f.creditLines, emptyCreditLine()] }))}
+                  >
+                    إضافة حساب تمويل
+                  </Button>
+                </Flex>
+              ) : (
+                <Segmented
+                  block
+                  value={expenseForm.source_account_id?.id}
+                  onChange={v => setExpenseForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
+                  options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+                />
+              )}
             </Col>
             <Col span={24}>
               <FieldLabel icon={FileText}>البيان</FieldLabel>

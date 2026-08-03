@@ -10,6 +10,13 @@ export interface PettyCashTransactionLine {
   amount: string
 }
 
+export interface PettyCashTransactionSourceLine {
+  id: number
+  source_account_id: number
+  source_account: { id: number; code: string; name: string }
+  amount: string
+}
+
 export interface PettyCashTransaction {
   id: number
   type: TransactionType
@@ -22,6 +29,7 @@ export interface PettyCashTransaction {
   lines: PettyCashTransactionLine[]
   source_account_id: number | null
   source_account: { id: number; code: string; name: string } | null
+  credit_lines: PettyCashTransactionSourceLine[]
   created_by: { id: number; name: string } | null
   description: string | null
   document_path: string | null
@@ -36,7 +44,8 @@ export interface ExpensePayload {
   beneficiary_name?: string
   contra_account_id?: number
   lines?: { contra_account_id: number; amount: string }[]
-  source_account_id: number
+  source_account_id?: number
+  credit_lines?: { source_account_id: number; amount: string }[]
   description?: string
   document?: File | null
 }
@@ -81,7 +90,6 @@ export const pettyCashApi = {
     const fd = new FormData()
     fd.append('date', data.date)
     if (data.beneficiary_name) fd.append('beneficiary_name', data.beneficiary_name)
-    fd.append('source_account_id', String(data.source_account_id))
     if (data.description) fd.append('description', data.description)
     if (data.document) fd.append('document', data.document)
     if (data.lines) {
@@ -92,6 +100,14 @@ export const pettyCashApi = {
     } else {
       fd.append('amount', data.amount!)
       fd.append('contra_account_id', String(data.contra_account_id))
+    }
+    if (data.credit_lines) {
+      data.credit_lines.forEach((line, i) => {
+        fd.append(`credit_lines[${i}][source_account_id]`, String(line.source_account_id))
+        fd.append(`credit_lines[${i}][amount]`, line.amount)
+      })
+    } else {
+      fd.append('source_account_id', String(data.source_account_id))
     }
     return api.post<PettyCashTransaction & Partial<NotificationsResponse>>('/api/petty-cash/expenses', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
