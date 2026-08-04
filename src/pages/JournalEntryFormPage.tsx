@@ -1,12 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import createCache from '@emotion/cache'
+import { CacheProvider } from '@emotion/react'
+import rtlPlugin from 'stylis-plugin-rtl'
 import {
-  Alert, Button, Col, Divider, Flex, Input, InputNumber, Row, Select, Spin, Table, Tooltip, Typography,
-} from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+  Alert, Autocomplete, Box, Button, CircularProgress, createFilterOptions, Divider,
+  IconButton, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  TextField, Tooltip, Typography, createTheme, ThemeProvider,
+} from '@mui/material'
 import { ArrowLeft, Plus, Sparkles, Trash2 } from 'lucide-react'
-import DateInput from '@/components/common/DateInput'
+import { useThemeMode } from '@/context/ThemeModeContext'
 import { useToast } from '@/lib/toast'
+import api from '@/lib/axios'
 import { aiApi } from '@/api/ai'
 import { journalApi } from '@/api/journal'
 import { accountsApi } from '@/api/accounts'
@@ -16,14 +21,22 @@ import type { JournalEntryLinePayload } from '@/types/journal'
 import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
 
-const { Title, Text } = Typography
-
 interface LineForm {
   account: Account | null
   party: Party | null
   description: string
   debit: string
   credit: string
+}
+
+function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined | null>) {
+  return (node: T) => {
+    for (const ref of refs) {
+      if (!ref) continue
+      if (typeof ref === 'function') ref(node)
+      else (ref as React.MutableRefObject<T | null>).current = node
+    }
+  }
 }
 
 const emptyLine = (): LineForm => ({
@@ -34,16 +47,56 @@ const emptyLine = (): LineForm => ({
   credit: '',
 })
 
-const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` }
+const yearStart = () => `${new Date().getFullYear()}-01-01`
+
+interface TrialBalanceRow {
+  account_id: number
+  balance: string
+  balance_side: 'debit' | 'credit'
+}
+
+interface AccountOption {
+  value: number
+  label: string
+  isRoot: boolean
+  isParent: boolean
+  balanceLabel: string | null
+}
+
+interface PartyOption {
+  value: number
+  label: string
+}
+
+const accountFilterOptions = createFilterOptions<AccountOption>({ stringify: o => o.label, matchFrom: 'any' })
+const partyFilterOptions = createFilterOptions<PartyOption>({ stringify: o => o.label, matchFrom: 'any' })
+
+const rtlCache = createCache({ key: 'mui-jef-rtl', stylisPlugins: [rtlPlugin] })
 
 export default function JournalEntryFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const toast = useToast()
+  const { mode } = useThemeMode()
+
+  const theme = useMemo(() => createTheme({
+    direction: 'rtl',
+    palette: {
+      mode,
+      primary: { main: '#173A66' },
+      success: { main: '#16a34a' },
+      warning: { main: '#d97706' },
+      error: { main: '#dc2626' },
+    },
+    typography: { fontFamily: '"Tajawal", sans-serif' },
+    shape: { borderRadius: 10 },
+  }), [mode])
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [parties, setParties] = useState<Party[]>([])
+  const [balances, setBalances] = useState<Record<number, { amount: number; side: 'debit' | 'credit' }>>({})
   const [loadingMeta, setLoadingMeta] = useState(true)
   const [loadingEntry, setLoadingEntry] = useState(isEdit)
   const [saving, setSaving] = useState(false)
@@ -54,6 +107,11 @@ export default function JournalEntryFormPage() {
   const [lines, setLines] = useState<LineForm[]>([emptyLine(), emptyLine()])
   const [dateWarning, setDateWarning] = useState<string | null>(null)
 
+  const accountRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const entryDescriptionRef = useRef<HTMLInputElement | null>(null)
+  const debitRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const creditRefs = useRef<Record<number, HTMLInputElement | null>>({})
+
   const [suggestingLine, setSuggestingLine] = useState<number | null>(null)
 
   const suggestLineDescription = async (i: number) => {
@@ -61,7 +119,7 @@ export default function JournalEntryFormPage() {
     setSuggestingLine(i)
     try {
       const suggestion = await aiApi.suggestDescription({
-        debit_account:  line.debit  && line.account ? `${line.account.code} ${line.account.name}` : undefined,
+        debit_account: line.debit && line.account ? `${line.account.code} ${line.account.name}` : undefined,
         credit_account: line.credit && line.account ? `${line.account.code} ${line.account.name}` : undefined,
         amount: line.debit ? Number(line.debit) : line.credit ? Number(line.credit) : undefined,
       })
@@ -74,10 +132,17 @@ export default function JournalEntryFormPage() {
   const parentIds = new Set(accounts.map(a => a.parent_id).filter(id => id !== null))
 
   useEffect(() => {
-    Promise.all([accountsApi.list(), partiesApi.list()])
-      .then(([accs, parts]) => {
+    Promise.all([
+      accountsApi.list(),
+      partiesApi.list(),
+      api.get<{ rows: TrialBalanceRow[] }>('/api/reports/trial-balance', { params: { from: yearStart(), to: today() } }),
+    ])
+      .then(([accs, parts, trialBalance]) => {
         setAccounts(accs)
         setParties(parts)
+        const map: Record<number, { amount: number; side: 'debit' | 'credit' }> = {}
+        trialBalance.data.rows.forEach(r => { map[r.account_id] = { amount: Number(r.balance), side: r.balance_side } })
+        setBalances(map)
       })
       .finally(() => setLoadingMeta(false))
   }, [])
@@ -88,7 +153,6 @@ export default function JournalEntryFormPage() {
       setDate(entry.date)
       setReference(entry.reference ?? '')
       setDescription(entry.description)
-      // lines populated after accounts loaded — handled below
       setLines(
         (entry.lines ?? []).map(l => ({
           account: l.account ? ({ id: l.account.id, code: l.account.code, name: l.account.name } as Account) : null,
@@ -111,6 +175,11 @@ export default function JournalEntryFormPage() {
       setDateWarning(res.covered ? null : 'لا توجد فترة محاسبية مفتوحة تغطي هذا التاريخ — سيُحفظ القيد لكن تأكد من صحة التاريخ')
     }).catch(() => setDateWarning(null))
   }, [date])
+
+  useEffect(() => {
+    if (loadingMeta || loadingEntry) return
+    setTimeout(() => accountRefs.current[0]?.focus(), 0)
+  }, [loadingMeta, loadingEntry])
 
   const updateLine = (i: number, patch: Partial<LineForm>) => {
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l))
@@ -171,230 +240,331 @@ export default function JournalEntryFormPage() {
 
   if (loadingMeta || loadingEntry) {
     return (
-      <Flex justify="center" style={{ padding: '80px 0' }}>
-        <Spin size="large" />
-      </Flex>
+      <CacheProvider value={rtlCache}>
+        <ThemeProvider theme={theme}>
+          <Stack sx={{ alignItems: 'center', py: 10 }}>
+            <CircularProgress size={40} />
+          </Stack>
+        </ThemeProvider>
+      </CacheProvider>
     )
   }
 
   const numFmt = (n: number) => Math.round(n).toLocaleString('en-US')
 
-  const accountOptions = accounts.map(a => {
+  const accountOptions: AccountOption[] = accounts.map(a => {
     const isRoot = a.parent_id === null
     const isParent = parentIds.has(a.id)
-    return {
-      value: a.id,
-      label: `${a.code} — ${a.name}`,
-      disabled: isParent,
-      isRoot,
-      isParent,
-    }
+    const bal = balances[a.id]
+    const balanceLabel = bal && bal.amount > 0 ? `${numFmt(bal.amount)} ${bal.side === 'debit' ? 'م' : 'د'}` : null
+    return { value: a.id, label: `${a.code} — ${a.name}`, isRoot, isParent, balanceLabel }
   })
 
-  const partyOptions = parties.map(p => ({ value: p.id, label: p.name }))
-
-  const columns: ColumnsType<LineForm & { __i: number }> = [
-    {
-      title: 'الحساب',
-      width: '38%',
-      render: (_: unknown, line, i) => (
-        <Select
-          showSearch
-          allowClear
-          style={{ width: '100%' }}
-          placeholder="اختر حساباً"
-          value={line.account?.id}
-          onChange={v => updateLine(i, { account: accounts.find(a => a.id === v) ?? null })}
-          notFoundContent="لا توجد نتائج"
-          filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-          options={accountOptions}
-          optionRender={option => {
-            const { isRoot, isParent } = option.data as { isRoot: boolean; isParent: boolean }
-            return (
-              <span style={{
-                fontWeight: isRoot ? 700 : isParent ? 600 : 400,
-                color: isRoot ? '#1565c0' : isParent ? '#2e7d32' : 'inherit',
-                paddingRight: isRoot ? 0 : isParent ? 12 : 24,
-                fontSize: 13,
-              }}>
-                {option.label}
-              </span>
-            )
-          }}
-        />
-      ),
-    },
-    {
-      title: 'الجهة',
-      width: '16%',
-      render: (_: unknown, line, i) => (
-        <Select
-          showSearch
-          allowClear
-          style={{ width: '100%' }}
-          placeholder="اختياري"
-          value={line.party?.id}
-          onChange={v => {
-            const party = parties.find(p => p.id === v) ?? null
-            const update: Partial<LineForm> = { party }
-            if (party?.account && !line.account) {
-              const full = accounts.find(a => a.id === party.account!.id)
-              if (full) update.account = full
-            }
-            updateLine(i, update)
-          }}
-          notFoundContent="لا توجد نتائج"
-          filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-          options={partyOptions}
-        />
-      ),
-    },
-    {
-      title: 'البيان',
-      render: (_: unknown, line, i) => (
-        <Input
-          value={line.description}
-          onChange={e => updateLine(i, { description: e.target.value })}
-          placeholder="بيان السطر"
-          suffix={
-            <Tooltip title="اقتراح بيان بالذكاء الاصطناعي">
-              <Button
-                type="text" size="small" shape="circle"
-                disabled={suggestingLine === i}
-                onClick={() => suggestLineDescription(i)}
-                icon={suggestingLine === i ? <Spin size="small" /> : <Sparkles size={15} color="var(--ant-color-primary)" />}
-              />
-            </Tooltip>
-          }
-        />
-      ),
-    },
-    {
-      title: 'مدين',
-      align: 'left',
-      width: '12%',
-      render: (_: unknown, line, i) => (
-        <InputNumber
-          min={0} step={0.01} style={{ width: 110, direction: 'ltr' }}
-          value={line.debit === '' ? null : Number(line.debit)}
-          onChange={val => handleDebitChange(i, val == null ? '' : String(val))}
-        />
-      ),
-    },
-    {
-      title: 'دائن',
-      align: 'left',
-      width: '12%',
-      render: (_: unknown, line, i) => (
-        <InputNumber
-          min={0} step={0.01} style={{ width: 110, direction: 'ltr' }}
-          value={line.credit === '' ? null : Number(line.credit)}
-          onChange={val => handleCreditChange(i, val == null ? '' : String(val))}
-        />
-      ),
-    },
-    {
-      title: '',
-      width: 48,
-      render: (_: unknown, _line, i) => (
-        <Tooltip title="حذف السطر">
-          <Button
-            type="text" shape="circle" size="small" danger
-            onClick={() => removeLine(i)}
-            disabled={lines.length <= 2}
-            icon={<Trash2 size={15} />}
-          />
-        </Tooltip>
-      ),
-    },
-  ]
+  const partyOptions: PartyOption[] = parties.map(p => ({ value: p.id, label: p.name }))
 
   return (
-    <form onSubmit={handleSubmit}>
-      {/* Header */}
-      <Flex align="center" gap={16} style={{ marginBottom: 24 }}>
-        <Tooltip title="رجوع">
-          <Button shape="circle" onClick={() => navigate('/transactions')} icon={<ArrowLeft size={18} />} />
-        </Tooltip>
-        <Title level={4} style={{ margin: 0, flexGrow: 1 }}>
-          {isEdit ? 'تعديل القيد' : 'قيد جديد'}
-        </Title>
-        <Button
-          type="primary"
-          htmlType="submit"
-          disabled={saving || !isBalanced}
-          style={{ minWidth: 120 }}
-        >
-          {saving ? <Spin size="small" /> : 'حفظ القيد'}
-        </Button>
-      </Flex>
+    <CacheProvider value={rtlCache}>
+      <ThemeProvider theme={theme}>
+        <Box component="form" sx={{ userSelect: 'none' }} onSubmit={handleSubmit}>
+          {/* Header */}
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: 3 }}>
+            <Tooltip title="رجوع">
+              <IconButton onClick={() => navigate('/transactions')}>
+                <ArrowLeft size={18} />
+              </IconButton>
+            </Tooltip>
+            <Typography variant="h5" sx={{ flexGrow: 1, fontWeight: 700 }}>
+              {isEdit ? 'تعديل القيد' : 'قيد جديد'}
+            </Typography>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={saving || !isBalanced}
+              sx={{ minWidth: 120 }}
+            >
+              {saving ? <CircularProgress size={20} color="inherit" /> : 'حفظ القيد'}
+            </Button>
+          </Stack>
 
-      {dateWarning && (
-        <Alert type="warning" showIcon message={dateWarning} style={{ marginBottom: 16 }} />
-      )}
+          {dateWarning && (
+            <Alert severity="warning" sx={{ mb: 2 }}>{dateWarning}</Alert>
+          )}
 
-      {/* Entry header fields */}
-      <div style={{ padding: 24, marginBottom: 24, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-        <Row gutter={16}>
-          <Col xs={24} sm={6}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>التاريخ</Text>
-            <DateInput value={date} onChange={e => setDate(e.target.value)} required style={{ width: '100%' }} />
-          </Col>
-          <Col xs={24} sm={6}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>المرجع</Text>
-            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="اختياري" />
-          </Col>
-          <Col xs={24} sm={12}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الوصف</Text>
-            <Input value={description} onChange={e => setDescription(e.target.value)} required />
-          </Col>
-        </Row>
-      </div>
+          {/* Entry header fields */}
+          <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+            <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <TextField
+                label="التاريخ"
+                type="date"
+                size="small"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ width: 180 }}
+              />
+              <TextField
+                label="المرجع"
+                size="small"
+                placeholder="اختياري"
+                value={reference}
+                onChange={e => setReference(e.target.value)}
+                sx={{ width: 200 }}
+              />
+              <TextField
+                label="الوصف"
+                size="small"
+                fullWidth
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                slotProps={{ htmlInput: { ref: entryDescriptionRef } }}
+                sx={{ flex: 1, minWidth: 240 }}
+              />
+            </Stack>
+          </Paper>
 
-      {/* Lines table */}
-      <div style={{ marginBottom: 16, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
-        <Table
-          size="small"
-          columns={columns}
-          dataSource={lines.map((l, i) => ({ ...l, __i: i }))}
-          rowKey="__i"
-          pagination={false}
-        />
-        <div style={{ padding: '12px 16px' }}>
-          <Button icon={<Plus size={14} />} onClick={addLine} size="small">
-            إضافة سطر
-          </Button>
-        </div>
-      </div>
+          {/* Lines table */}
+          <Paper variant="outlined" sx={{ mb: 2, overflow: 'hidden' }}>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: '38%' }}>الحساب</TableCell>
+                    <TableCell sx={{ width: '16%' }}>الجهة</TableCell>
+                    <TableCell>البيان</TableCell>
+                    <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
+                    <TableCell align="left" sx={{ width: '12%' }}>دائن</TableCell>
+                    <TableCell sx={{ width: 48 }} />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {lines.map((line, i) => {
+                    const selectedAccount = line.account
+                      ? accountOptions.find(o => o.value === line.account!.id) ?? null
+                      : null
+                    const selectedParty = line.party
+                      ? partyOptions.find(o => o.value === line.party!.id) ?? null
+                      : null
+                    const lineBalance = line.account ? balances[line.account.id] : undefined
 
-      {/* Balance summary */}
-      <div style={{ padding: 16, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-        <Flex justify="flex-end" gap={32} align="center">
-          <div style={{ textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي المدين</Text>
-            <Text style={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Text>
-          </div>
-          <Divider type="vertical" style={{ height: 32 }} />
-          <div style={{ textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>إجمالي الدائن</Text>
-            <Text style={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Text>
-          </div>
-          <Divider type="vertical" style={{ height: 32 }} />
-          <div style={{ textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>الفرق</Text>
-            <Text style={{ fontWeight: 700, direction: 'ltr' }} type={isBalanced ? 'success' : 'danger'}>
-              {numFmt(Math.abs(totalDebit - totalCredit))}
-            </Text>
-          </div>
-          <div style={{
-            fontWeight: 700, padding: '4px 16px', borderRadius: 6,
-            background: isBalanced ? 'var(--ant-color-success-bg)' : 'var(--ant-color-error-bg)',
-            color: isBalanced ? 'var(--ant-color-success)' : 'var(--ant-color-error)',
-          }}>
-            {isBalanced ? 'متوازن' : 'غير متوازن'}
-          </div>
-        </Flex>
-      </div>
-    </form>
+                    return (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <Autocomplete
+                            size="small"
+                            options={accountOptions}
+                            value={selectedAccount}
+                            filterOptions={accountFilterOptions}
+                            getOptionLabel={o => o.label}
+                            isOptionEqualToValue={(o, v) => o.value === v.value}
+                            getOptionDisabled={o => o.isParent}
+                            noOptionsText="لا توجد نتائج"
+                            onChange={(_, v) => {
+                              const account = v ? accounts.find(a => a.id === v.value) ?? null : null
+                              updateLine(i, { account })
+                              if (account) {
+                                const target = i === 0 ? debitRefs : creditRefs
+                                setTimeout(() => target.current[i]?.focus(), 0)
+                              }
+                            }}
+                            renderOption={(props, option) => {
+                              const { key, ...rest } = props
+                              return (
+                                <Box component="li" key={key} {...rest}>
+                                  <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                    <Typography
+                                      sx={{
+                                        fontWeight: option.isRoot ? 700 : option.isParent ? 600 : 400,
+                                        color: option.isRoot ? '#1565c0' : option.isParent ? '#2e7d32' : 'inherit',
+                                        pr: option.isRoot ? 0 : option.isParent ? 1.5 : 3,
+                                        fontSize: 13,
+                                      }}
+                                    >
+                                      {option.label}
+                                    </Typography>
+                                    {option.balanceLabel && (
+                                      <Typography variant="caption" color="text.secondary" sx={{ direction: 'ltr' }}>
+                                        {option.balanceLabel}
+                                      </Typography>
+                                    )}
+                                  </Stack>
+                                </Box>
+                              )
+                            }}
+                            renderInput={params => (
+                              <TextField
+                                {...params}
+                                placeholder="اختر حساباً"
+                                slotProps={{
+                                  ...params.slotProps,
+                                  htmlInput: {
+                                    ...params.slotProps.htmlInput,
+                                    autoComplete: 'off',
+                                    ref: mergeRefs(params.slotProps.htmlInput.ref, (el: HTMLInputElement | null) => { accountRefs.current[i] = el }),
+                                  },
+                                }}
+                              />
+                            )}
+                          />
+                          {line.account && lineBalance && lineBalance.amount > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, direction: 'ltr' }}>
+                              الرصيد: {numFmt(lineBalance.amount)} {lineBalance.side === 'debit' ? 'مدين' : 'دائن'}
+                            </Typography>
+                          )}
+                        </TableCell>
+
+                        <TableCell>
+                          <Autocomplete
+                            size="small"
+                            options={partyOptions}
+                            value={selectedParty}
+                            filterOptions={partyFilterOptions}
+                            getOptionLabel={o => o.label}
+                            isOptionEqualToValue={(o, v) => o.value === v.value}
+                            noOptionsText="لا توجد نتائج"
+                            onChange={(_, v) => {
+                              const party = v ? parties.find(p => p.id === v.value) ?? null : null
+                              const update: Partial<LineForm> = { party }
+                              if (party?.account && !line.account) {
+                                const full = accounts.find(a => a.id === party.account!.id)
+                                if (full) update.account = full
+                              }
+                              updateLine(i, update)
+                            }}
+                            renderInput={params => (
+                              <TextField
+                                {...params}
+                                placeholder="اختياري"
+                                slotProps={{
+                                  ...params.slotProps,
+                                  htmlInput: { ...params.slotProps.htmlInput, autoComplete: 'off' },
+                                }}
+                              />
+                            )}
+                          />
+                        </TableCell>
+
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={line.description}
+                            onChange={e => updateLine(i, { description: e.target.value })}
+                            placeholder="بيان السطر"
+                            slotProps={{
+                              input: {
+                                endAdornment: (
+                                  <Tooltip title="اقتراح بيان بالذكاء الاصطناعي">
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        disabled={suggestingLine === i}
+                                        onClick={() => suggestLineDescription(i)}
+                                      >
+                                        {suggestingLine === i
+                                          ? <CircularProgress size={15} />
+                                          : <Sparkles size={15} color={theme.palette.primary.main} />}
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
+                                ),
+                              },
+                            }}
+                          />
+                        </TableCell>
+
+                        <TableCell align="left">
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={line.debit}
+                            onChange={e => handleDebitChange(i, e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                accountRefs.current[i + 1]?.focus()
+                              }
+                            }}
+                            slotProps={{ htmlInput: { min: 0, step: 0.01, autoComplete: 'off', ref: (el: HTMLInputElement | null) => { debitRefs.current[i] = el } } }}
+                            sx={{ width: 110, direction: 'ltr' }}
+                          />
+                        </TableCell>
+
+                        <TableCell align="left">
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={line.credit}
+                            onChange={e => handleCreditChange(i, e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                entryDescriptionRef.current?.focus()
+                              }
+                            }}
+                            slotProps={{ htmlInput: { min: 0, step: 0.01, autoComplete: 'off', ref: (el: HTMLInputElement | null) => { creditRefs.current[i] = el } } }}
+                            sx={{ width: 110, direction: 'ltr' }}
+                          />
+                        </TableCell>
+
+                        <TableCell>
+                          <Tooltip title="حذف السطر">
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => removeLine(i)}
+                                disabled={lines.length <= 2}
+                              >
+                                <Trash2 size={15} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <Box sx={{ p: 2 }}>
+              <Button startIcon={<Plus size={14} />} onClick={addLine} size="small">
+                إضافة سطر
+              </Button>
+            </Box>
+          </Paper>
+
+          {/* Balance summary */}
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Stack direction="row" spacing={4} sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+              <Stack sx={{ alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary">إجمالي المدين</Typography>
+                <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Typography>
+              </Stack>
+              <Divider orientation="vertical" flexItem />
+              <Stack sx={{ alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary">إجمالي الدائن</Typography>
+                <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Typography>
+              </Stack>
+              <Divider orientation="vertical" flexItem />
+              <Stack sx={{ alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary">الفرق</Typography>
+                <Typography sx={{ fontWeight: 700, direction: 'ltr' }} color={isBalanced ? 'success.main' : 'error.main'}>
+                  {numFmt(Math.abs(totalDebit - totalCredit))}
+                </Typography>
+              </Stack>
+              <Box
+                sx={{
+                  fontWeight: 700, px: 2, py: 0.5, borderRadius: 1.5,
+                  bgcolor: isBalanced ? '#dcfce7' : '#fee2e2',
+                  color: isBalanced ? '#16a34a' : '#dc2626',
+                }}
+              >
+                {isBalanced ? 'متوازن' : 'غير متوازن'}
+              </Box>
+            </Stack>
+          </Paper>
+        </Box>
+      </ThemeProvider>
+    </CacheProvider>
   )
 }

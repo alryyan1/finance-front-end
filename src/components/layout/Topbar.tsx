@@ -152,7 +152,6 @@ export default function Topbar() {
             </Avatar>
             <div className="topbar-username" style={{ textAlign: 'right' }}>
               <Text style={{ fontWeight: 600, lineHeight: 1.3, display: 'block', fontSize: 13 }}>{user?.name}</Text>
-              <Text type="secondary" style={{ fontSize: 11.5 }}>@{user?.username}</Text>
             </div>
             <ChevronDown size={14} className="topbar-username" style={{ opacity: 0.45, flexShrink: 0 }} />
           </Flex>

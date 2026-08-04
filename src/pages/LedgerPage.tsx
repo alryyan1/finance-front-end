@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Button, Flex, Segmented, Select, Spin, Tag, Tooltip, Typography,
+  Button, Flex, Segmented, Select, Spin, Table, Tag, Tooltip, Typography,
 } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
 import { useToast } from '@/lib/toast'
@@ -170,6 +171,51 @@ function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick:
   )
 }
 
+const ledgerColumns: ColumnsType<LedgerRow> = [
+  {
+    title: 'التاريخ', dataIndex: 'date', width: 110, align: 'center',
+    render: (v: string) => <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)' }}>{v}</span>,
+  },
+  {
+    title: 'مرجع', dataIndex: 'reference', width: 90, align: 'center',
+    render: (v: string | null) => <Text type="secondary">{v || '—'}</Text>,
+  },
+  {
+    title: 'البيان', dataIndex: 'entry_description',
+    render: (_: string, row) => (
+      <div>
+        <div>{row.entry_description}</div>
+        {row.line_description && <Text type="secondary" style={{ fontSize: 12 }}>{row.line_description}</Text>}
+      </div>
+    ),
+  },
+  {
+    title: 'الطرف', dataIndex: 'party_name', width: 150, align: 'center',
+    render: (v: string | null) => <Text type="secondary">{v || '—'}</Text>,
+  },
+  {
+    title: 'مدين', dataIndex: 'debit', width: 130, align: 'right',
+    render: (v: string) => Number(v) > 0
+      ? <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{numFmt(v)}</span>
+      : <span style={{ color: 'var(--ant-color-text-disabled)' }}>—</span>,
+  },
+  {
+    title: 'دائن', dataIndex: 'credit', width: 130, align: 'right',
+    render: (v: string) => Number(v) > 0
+      ? <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{numFmt(v)}</span>
+      : <span style={{ color: 'var(--ant-color-text-disabled)' }}>—</span>,
+  },
+  {
+    title: 'الرصيد', dataIndex: 'balance', width: 150, align: 'right',
+    render: (v: string, row) => (
+      <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+        {numFmt(v)}
+        <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(row.balance_side)}</span>
+      </span>
+    ),
+  },
+]
+
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
 
@@ -182,14 +228,15 @@ export default function LedgerPage() {
   const [party, setParty]             = useState<Party | null>(null)
   const [from, setFrom]               = useState(yearStart())
   const [to, setTo]                   = useState(today())
+  const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
   const [data, setData]               = useState<LedgerData | null>(null)
   const [loading, setLoading]         = useState(false)
   const [pdfLoading, setPdfLoading]   = useState(false)
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [view, setView]               = useState<'arabic' | 'gl'>('arabic')
 
-  const handlePeriodChange = (_fyId: number | null, f: string, t: string) => {
-    setFrom(f); setTo(t); setData(null)
+  const handlePeriodChange = (fyId: number | null, f: string, t: string) => {
+    setFiscalYearId(fyId); setFrom(f); setTo(t); setData(null)
   }
 
   const handlePdf = async () => {
@@ -201,6 +248,7 @@ export default function LedgerPage() {
         from,
         to,
         ...(party ? { party_id: party.id } : {}),
+        ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : {}),
       })
     } finally { setPdfLoading(false) }
   }
@@ -220,6 +268,7 @@ export default function LedgerPage() {
         from,
         to,
         ...(party ? { party_id: party.id } : {}),
+        ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : {}),
       },
     })
       .then(r => setData(r.data))
@@ -273,8 +322,8 @@ export default function LedgerPage() {
             filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
             options={parties.map(p => ({ value: p.id, label: p.name }))}
           />
-          <DateInput value={from} onChange={e => setFrom(e.target.value)} />
-          <DateInput value={to} onChange={e => setTo(e.target.value)} />
+          <DateInput value={from} onChange={e => { setFrom(e.target.value); setFiscalYearId(null) }} />
+          <DateInput value={to} onChange={e => { setTo(e.target.value); setFiscalYearId(null) }} />
           <Button type="primary" onClick={load} disabled={!account || loading}>
             {loading ? <Spin size="small" /> : 'عرض'}
           </Button>
@@ -321,72 +370,63 @@ export default function LedgerPage() {
             <Tag color="blue">رصيد ختامي: {numFmt(data.closing_balance)} {sideLbl(data.closing_side)}</Tag>
           </Flex>
 
-          <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
-                  <th style={{ ...ledgerTh, width: 180 }}>التاريخ</th>
-                  <th style={{ ...ledgerTh, width: 80 }}>مرجع</th>
-                  <th style={ledgerTh}>البيان</th>
-                  <th style={ledgerTh}>الطرف</th>
-                  <th style={{ ...ledgerTh, width: 130 }}>مدين</th>
-                  <th style={{ ...ledgerTh, width: 130 }}>دائن</th>
-                  <th style={{ ...ledgerTh, width: 140 }}>الرصيد</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style={{ background: 'var(--ant-color-fill-alter)' }}>
-                  <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)', direction: 'ltr' }}>{data.from}</td>
-                  <td style={ledgerTd} />
-                  <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)', fontStyle: 'italic' }}>رصيد افتتاحي</td>
-                  <td style={ledgerTd} />
-                  <td style={ledgerTd} />
-                  <td style={ledgerTd} />
-                  <td style={{ ...ledgerTd, direction: 'ltr', fontWeight: 600 }}>
-                    {numFmt(data.opening_balance)}
-                    <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.opening_side)}</span>
-                  </td>
-                </tr>
-
-                {data.rows.length === 0 && (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32, color: 'var(--ant-color-text-secondary)' }}>لا توجد حركات في هذه الفترة</td></tr>
-                )}
-                {data.rows.map((row, i) => (
-                  <tr key={i} onClick={() => navigate(`/transactions/${row.entry_id}/edit`)} style={{ cursor: 'pointer', borderTop: '1px solid var(--ant-color-border-secondary)' }}>
-                    <td style={{ ...ledgerTd, direction: 'ltr', color: 'var(--ant-color-text-secondary)' }}>{row.date}</td>
-                    <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)' }}>{row.reference || '—'}</td>
-                    <td style={ledgerTd}>
-                      <div>{row.entry_description}</div>
-                      {row.line_description && <Text type="secondary" style={{ fontSize: 12 }}>{row.line_description}</Text>}
-                    </td>
-                    <td style={{ ...ledgerTd, color: 'var(--ant-color-text-secondary)' }}>{row.party_name || '—'}</td>
-                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: Number(row.debit) > 0 ? 'var(--ant-color-text)' : 'var(--ant-color-text-disabled)' }}>
-                      {Number(row.debit) > 0 ? numFmt(row.debit) : '—'}
-                    </td>
-                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', color: Number(row.credit) > 0 ? 'var(--ant-color-text)' : 'var(--ant-color-text-disabled)' }}>
-                      {Number(row.credit) > 0 ? numFmt(row.credit) : '—'}
-                    </td>
-                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                      {numFmt(row.balance)}
-                      <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(row.balance_side)}</span>
-                    </td>
-                  </tr>
-                ))}
-
+          <Table<LedgerRow>
+            size="small"
+            bordered
+            sticky
+            columns={ledgerColumns}
+            dataSource={data.rows}
+            rowKey={(_, i) => String(i)}
+            pagination={false}
+            locale={{ emptyText: 'لا توجد حركات في هذه الفترة' }}
+            onRow={row => ({
+              style: { cursor: 'pointer' },
+              onClick: () => navigate(`/transactions/${row.entry_id}/edit`),
+            })}
+            summary={() => (
+              <>
+                <Table.Summary fixed="top">
+                  <Table.Summary.Row style={{ background: 'var(--ant-color-fill-alter)' }}>
+                    <Table.Summary.Cell index={0}>
+                      <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)' }}>{data.from}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} />
+                    <Table.Summary.Cell index={2}>
+                      <Text type="secondary" italic>رصيد افتتاحي</Text>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} />
+                    <Table.Summary.Cell index={4} />
+                    <Table.Summary.Cell index={5} />
+                    <Table.Summary.Cell index={6} align="right">
+                      <span style={{ direction: 'ltr', fontWeight: 600 }}>
+                        {numFmt(data.opening_balance)}
+                        <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.opening_side)}</span>
+                      </span>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
                 {data.rows.length > 0 && (
-                  <tr style={{ background: 'var(--ant-color-fill-alter)', borderTop: '2px solid var(--ant-color-border-secondary)', fontWeight: 700 }}>
-                    <td colSpan={4} style={{ ...ledgerTd, textAlign: 'center', fontWeight: 700 }}>الإجمالي</td>
-                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{numFmt(data.totals.debit)}</td>
-                    <td style={{ ...ledgerTd, direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{numFmt(data.totals.credit)}</td>
-                    <td style={{ ...ledgerTd, direction: 'ltr', fontWeight: 700, color: 'var(--ant-color-primary)' }}>
-                      {numFmt(data.closing_balance)}
-                      <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.closing_side)}</span>
-                    </td>
-                  </tr>
+                  <Table.Summary fixed="bottom">
+                    <Table.Summary.Row style={{ background: 'var(--ant-color-fill-alter)', fontWeight: 700 }}>
+                      <Table.Summary.Cell index={0} colSpan={4} align="center">الإجمالي</Table.Summary.Cell>
+                      <Table.Summary.Cell index={1} align="right">
+                        <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{numFmt(data.totals.debit)}</span>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={2} align="right">
+                        <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{numFmt(data.totals.credit)}</span>
+                      </Table.Summary.Cell>
+                      <Table.Summary.Cell index={3} align="right">
+                        <span style={{ direction: 'ltr', color: 'var(--ant-color-primary)' }}>
+                          {numFmt(data.closing_balance)}
+                          <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.closing_side)}</span>
+                        </span>
+                      </Table.Summary.Cell>
+                    </Table.Summary.Row>
+                  </Table.Summary>
                 )}
-              </tbody>
-            </table>
-          </div>
+              </>
+            )}
+          />
         </>
       )}
 
@@ -398,6 +438,3 @@ export default function LedgerPage() {
     </div>
   )
 }
-
-const ledgerTh: React.CSSProperties = { padding: '8px 12px', textAlign: 'center', fontWeight: 600, fontSize: 12 }
-const ledgerTd: React.CSSProperties = { padding: '8px 12px', textAlign: 'center' }

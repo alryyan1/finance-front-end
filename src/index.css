@@ -7,23 +7,6 @@ body {
   font-family: "Tajawal", sans-serif;
 }
 
-/* LoginPage: branding panel hidden below MUI's old "md" breakpoint (900px), mobile logo shown only below it.
-   !important is needed here because antd's Flex sets its own inline display:flex via CSS-in-JS. */
-.login-branding-panel {
-  display: none !important;
-}
-.login-mobile-logo {
-  display: flex !important;
-}
-@media (min-width: 900px) {
-  .login-branding-panel {
-    display: flex !important;
-  }
-  .login-mobile-logo {
-    display: none !important;
-  }
-}
-
 /* Topbar: responsive show/hide, matching the old MUI xs(0)/sm(600)/md(900) breakpoints */
 .topbar-username,
 .topbar-fiscal-period,

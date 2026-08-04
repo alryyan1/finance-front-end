@@ -42,6 +42,8 @@ interface NavItem {
   icon: LucideIcon
   end?: boolean
   children?: NavChild[]
+  /** Section always stays expanded — not collapsible. */
+  alwaysOpen?: boolean
 }
 
 interface NavGroup {
@@ -73,6 +75,7 @@ const navGroups: NavGroup[] = [
     items: [
       {
         to: '/reports', label: 'التقارير', icon: BarChart3Icon,
+        alwaysOpen: true,
         children: [
           { to: '/reports/trial-balance',    label: 'ميزان المراجعة',     icon: ScaleIcon },
           { to: '/reports/ledger',           label: 'كشف حساب',           icon: BookOpenIcon },
@@ -163,19 +166,19 @@ function NavRow({
   const location = useLocation()
   const hasChildren = !!item.children
   const sectionActive = hasChildren && location.pathname.startsWith(item.to)
-  const isExpanded = hasChildren && sectionOpen
+  const isExpanded = hasChildren && (item.alwaysOpen || sectionOpen)
 
   return (
     <div>
       {hasChildren ? (
         // Collapsible parent — no NavLink, just a toggle button
         <div
-          onClick={onToggle}
+          onClick={item.alwaysOpen ? undefined : onToggle}
           className={`sidebar-nav-item${sectionActive ? ' is-active' : ''}`}
           style={{
             position: 'relative',
             display: 'flex', alignItems: 'center', gap: 12,
-            padding: '9px 12px', margin: '0 4px 2px', borderRadius: 6, cursor: 'pointer',
+            padding: '9px 12px', margin: '0 4px 2px', borderRadius: 6, cursor: item.alwaysOpen ? 'default' : 'pointer',
             color: sectionActive ? TEXT_FULL : TEXT_MID,
             background: sectionActive ? ACTIVE_BG : 'transparent',
             transition: 'background 0.15s, color 0.15s',
@@ -186,9 +189,11 @@ function NavRow({
           <span style={{ flex: 1, fontWeight: sectionActive ? 600 : 400, color: 'inherit', fontSize: 13.5 }}>
             {item.label}
           </span>
-          {isExpanded
-            ? <ChevronUpIcon size={16} style={{ opacity: 0.6 }} />
-            : <ChevronDownIcon size={16} style={{ opacity: 0.4 }} />}
+          {!item.alwaysOpen && (
+            isExpanded
+              ? <ChevronUpIcon size={16} style={{ opacity: 0.6 }} />
+              : <ChevronDownIcon size={16} style={{ opacity: 0.4 }} />
+          )}
         </div>
       ) : (
         // Regular NavLink
@@ -268,33 +273,7 @@ export default function Sidebar() {
       borderLeft: `1px solid ${DIVIDER}`,
     }}>
       {/* ── Logo ── */}
-      <div style={{
-        height: 64,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '0 20px',
-        borderBottom: `1px solid ${DIVIDER}`,
-        flexShrink: 0,
-      }}>
-        <div style={{
-          width: 34, height: 34,
-          background: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DEEP} 100%)`,
-          borderRadius: 6,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: `0 0 12px rgba(201,162,39,0.35)`,
-        }}>
-          <span style={{ color: BG, fontWeight: 800, fontSize: 15, lineHeight: 1 }}>م</span>
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 15, color: TEXT_FULL, lineHeight: 1.2, letterSpacing: '0.02em' }}>
-            المالية
-          </div>
-          <div style={{ fontSize: 10, color: ACCENT, lineHeight: 1, letterSpacing: '0.04em' }}>
-            نظام المحاسبة
-          </div>
-        </div>
-      </div>
+   
 
       {/* ── Nav ── */}
       <div className="sidebar-nav-scroll" style={{ flex: 1, overflow: 'auto', padding: '12px 4px' }}>

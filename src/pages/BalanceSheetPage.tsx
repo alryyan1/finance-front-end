@@ -172,8 +172,10 @@ export default function BalanceSheetPage() {
 
   const handlePdf = async () => {
     setPdfLoading(true)
-    try { await openPdf('/api/reports/balance-sheet/pdf', { as_of: asOf }) }
-    finally { setPdfLoading(false) }
+    try {
+      const params = fiscalYearId ? { fiscal_year_id: fiscalYearId } : { as_of: asOf }
+      await openPdf('/api/reports/balance-sheet/pdf', params)
+    } finally { setPdfLoading(false) }
   }
 
   const load = (aof = asOf, fyId = fiscalYearId) => {

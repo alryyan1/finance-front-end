@@ -8,10 +8,10 @@ import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
 import FirebaseImportDialog from '@/components/FirebaseImportDialog'
 import {
-  ArrowUpDown, Ban, CircleCheck, CloudDownload, FileDown, FilterX, Pencil, Search, Sheet, Trash2,
+  ArrowUpDown, Ban, CircleCheck, CloudDownload, FileDown, FilterX, FileSpreadsheet, Pencil, Search, Sheet, Trash2,
 } from 'lucide-react'
 import { journalApi } from '@/api/journal'
-import { openPdf } from '@/api/pdf'
+import { openPdf, downloadExcel } from '@/api/pdf'
 import type { JournalEntry, JournalEntryLine } from '@/types/journal'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
 
@@ -74,6 +74,7 @@ export default function TransactionsPage() {
   const [togglingId,   setTogglingId]   = useState<number | null>(null)
   const [confirmEntry, setConfirmEntry] = useState<JournalEntry | null>(null)
   const [pdfLoading,   setPdfLoading]   = useState(false)
+  const [excelLoading, setExcelLoading] = useState(false)
   const [importOpen,   setImportOpen]   = useState(false)
 
   const [search, setSearch] = useState('')
@@ -143,6 +144,20 @@ export default function TransactionsPage() {
       })
     } finally {
       setPdfLoading(false)
+    }
+  }
+
+  const handleExcel = async () => {
+    setExcelLoading(true)
+    try {
+      await downloadExcel('/api/journal-entries/excel', {
+        from:   from   || undefined,
+        to:     to     || undefined,
+        search: search || undefined,
+        status: status !== 'all' ? status : undefined,
+      }, 'journal-entries.xlsx')
+    } finally {
+      setExcelLoading(false)
     }
   }
 
@@ -300,6 +315,11 @@ export default function TransactionsPage() {
               icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
           </Tooltip>
           <Tooltip title="تصدير Excel">
+            <Button type="text" shape="circle" size="small" disabled={excelLoading || entries.length === 0}
+              onClick={handleExcel}
+              icon={excelLoading ? <Spin size="small" /> : <FileSpreadsheet size={16} color="var(--ant-color-success)" />} />
+          </Tooltip>
+          <Tooltip title="فتح كجدول بيانات">
             <Button
               type="text" shape="circle" size="small" disabled={entries.length === 0}
               onClick={() => {
@@ -311,7 +331,7 @@ export default function TransactionsPage() {
                 const qs = p.toString()
                 navigate(`/journal-spreadsheet${qs ? `?${qs}` : ''}`)
               }}
-              icon={<Sheet size={16} color="var(--ant-color-success)" />}
+              icon={<Sheet size={16} />}
             />
           </Tooltip>
         </Flex>

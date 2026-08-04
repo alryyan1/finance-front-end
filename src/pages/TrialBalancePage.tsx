@@ -20,6 +20,8 @@ interface TrialBalanceRow {
   code: string
   name: string
   type: string
+  opening_balance: string
+  opening_side: 'debit' | 'credit'
   total_debit: string
   total_credit: string
   balance: string
@@ -33,6 +35,8 @@ interface TrialBalanceData {
   to: string
   rows: TrialBalanceRow[]
   totals: {
+    opening_balance: string
+    opening_side: 'debit' | 'credit'
     debit: string
     credit: string
     balance_debit: string
@@ -63,6 +67,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 const numFmt = (v: string | number) => Math.round(Number(v)).toLocaleString('en-US')
 const fmtCell = (v: string) => (Number(v) > 0 ? numFmt(v) : '—')
+const sideLbl = (s: 'debit' | 'credit') => (s === 'debit' ? 'م' : 'د')
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}` }
 const yearStart = () => `${new Date().getFullYear()}-01-01`
@@ -87,8 +92,10 @@ export default function TrialBalancePage() {
 
   const handlePdf = async () => {
     setPdfLoading(true)
-    try { await openPdf('/api/reports/trial-balance/pdf', { from, to, view_type: viewType }) }
-    finally { setPdfLoading(false) }
+    try {
+      const params = fiscalYearId ? { fiscal_year_id: fiscalYearId, view_type: viewType } : { from, to, view_type: viewType }
+      await openPdf('/api/reports/trial-balance/pdf', params)
+    } finally { setPdfLoading(false) }
   }
 
   const load = (f = from, t = to, fyId = fiscalYearId) => {
@@ -125,7 +132,7 @@ export default function TrialBalancePage() {
     {
       title: 'الرمز', dataIndex: 'code', width: 84,
       render: (v: string, record) => record.isGroupHeader
-        ? { children: <Text style={{ fontWeight: 700, fontSize: 12 }} type="secondary">{TYPE_LABELS[record.type]}</Text>, props: { colSpan: 3 + (showTotals ? 2 : 0) + (showBalances ? 2 : 0) } }
+        ? { children: <Text style={{ fontWeight: 700, fontSize: 12 }} type="secondary">{TYPE_LABELS[record.type]}</Text>, props: { colSpan: 4 + (showTotals ? 2 : 0) + (showBalances ? 2 : 0) } }
         : <Text style={{ fontFamily: 'monospace', fontSize: 12, direction: 'ltr' }} type="secondary">{v}</Text>,
     },
     {
@@ -138,8 +145,17 @@ export default function TrialBalancePage() {
         ? { children: null, props: { colSpan: 0 } }
         : <Tag color={TYPE_COLORS[record.type]} style={{ marginInlineEnd: 0 }}>{TYPE_LABELS[record.type]}</Tag>,
     },
+    {
+      title: 'رصيد أول الفترة', width: 130, align: 'right' as const,
+      render: cell(row => (
+        <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+          {numFmt(row.opening_balance)}
+          <span style={{ marginLeft: 4, fontSize: 11, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(row.opening_side)}</span>
+        </span>
+      )),
+    },
     ...(showTotals ? [{
-      title: 'المجاميع',
+      title: 'حركة الفترة',
       children: [
         {
           title: 'مدين', dataIndex: 'total_debit', width: 110, align: 'right' as const,
@@ -256,12 +272,19 @@ export default function TrialBalancePage() {
         locale={{ emptyText: 'لا توجد بيانات في هذه الفترة' }}
         summary={() => {
           if (!data || data.rows.length === 0) return null
-          const totalsStart   = 3
+          const openingStart  = 3
+          const totalsStart   = openingStart + 1
           const balancesStart = totalsStart + (showTotals ? 2 : 0)
           return (
             <Table.Summary fixed>
               <Table.Summary.Row style={{ fontWeight: 700, background: 'var(--ant-color-fill-alter)' }}>
                 <Table.Summary.Cell index={0} colSpan={3} align="center">الإجمالي</Table.Summary.Cell>
+                <Table.Summary.Cell index={openingStart} align="right">
+                  <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+                    {numFmt(data.totals.opening_balance)}
+                    <span style={{ marginLeft: 4, fontSize: 11, fontWeight: 400, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.totals.opening_side)}</span>
+                  </span>
+                </Table.Summary.Cell>
                 {showTotals && (
                   <>
                     <Table.Summary.Cell index={totalsStart} align="right">

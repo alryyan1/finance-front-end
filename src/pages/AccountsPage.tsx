@@ -173,6 +173,7 @@ function AccountTreeNode({ node, depth, expandedIds, newlyAddedId, onToggle, onA
             borderBottom: '1px solid var(--ant-color-border-secondary)',
             opacity: node.is_active ? 1 : 0.45,
             cursor: 'pointer',
+            
           }}
         >
           <div style={{ width: 26, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
@@ -193,7 +194,7 @@ function AccountTreeNode({ node, depth, expandedIds, newlyAddedId, onToggle, onA
             {node.code}
           </Text>
 
-          <div style={{ flex: 1, fontWeight: depth === 0 ? 700 : 400, fontSize: depth === 0 ? 14 : 13, color: depth === 0 ? 'var(--ant-color-text)' : 'var(--ant-color-text-secondary)' }}>
+          <div style={{ flex: 1, fontWeight: depth === 0 ? 700 : 400, fontSize: depth === 0 ? 17 : 15, color: depth === 0 ? 'var(--ant-color-text)' : '' }}>
             {node.name}
             {hasChildren && (
               <span style={{
@@ -308,8 +309,8 @@ export default function AccountsPage() {
         setAccounts(prev => prev.map(a => a.id === editing.id ? { ...a, ...updated } : a))
         toast.success('تم حفظ الحساب')
       } else {
-        setDialogOpen(false)
         const created = await accountsApi.create(form)
+        setDialogOpen(false)
         setAccounts(prev => [...prev, created])
         if (highlightTimer.current) clearTimeout(highlightTimer.current)
         setNewlyAddedId(created.id)
@@ -351,12 +352,12 @@ export default function AccountsPage() {
   const hasChildrenOfDeleteTarget = !!deleteTarget && accounts.some(a => a.parent_id === deleteTarget.id)
 
   const columns: ColumnsType<AccountNode> = [
-    { title: 'الكود', dataIndex: 'code', width: 90, render: (v: string) => <Text style={{ fontFamily: 'monospace', fontSize: 13 }} type="secondary">{v}</Text> },
+    { title: 'الكود', dataIndex: 'code', width: 90, render: (v: string) => <Text style={{ fontFamily: 'monospace', fontSize: 13 }} >{v}</Text> },
     {
       title: 'الاسم',
       render: (_: unknown, node) => (
         <Flex align="center" gap={4} style={{ paddingInlineStart: node.level * 20 }}>
-          {node.level > 0 && <Text type="secondary" style={{ lineHeight: 1 }}>└</Text>}
+          {node.level > 0 && <Text  style={{ lineHeight: 1 }}>└</Text>}
           <Text style={{ fontWeight: node.level === 0 ? 600 : 400 }}>{node.name}</Text>
         </Flex>
       ),
@@ -387,7 +388,7 @@ export default function AccountsPage() {
       <Flex align="center" justify="space-between" style={{ marginBottom: 24 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>شجرة الحسابات</Title>
-          <Text type="secondary">دليل الحسابات المحاسبي</Text>
+          <Text >دليل الحسابات المحاسبي</Text>
         </div>
 
         <Flex gap={12} align="center">
@@ -430,10 +431,10 @@ export default function AccountsPage() {
         <div style={{ border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
           <Flex align="center" gap={4} style={{ padding: '8px 16px', background: 'var(--ant-color-fill-alter)', borderBottom: '1px solid var(--ant-color-border-secondary)' }}>
             <div style={{ width: 26 }} />
-            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 64 }} type="secondary">الكود</Text>
-            <Text style={{ flex: 1, fontWeight: 700, fontSize: 12 }} type="secondary">اسم الحساب</Text>
-            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 100, textAlign: 'center' }} type="secondary">النوع</Text>
-            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'center' }} type="secondary">الحالة</Text>
+            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 64 }} >الكود</Text>
+            <Text style={{ flex: 1, fontWeight: 900, fontSize: 16 }} >اسم الحساب</Text>
+            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 100, textAlign: 'center' }} >النوع</Text>
+            <Text style={{ fontWeight: 700, fontSize: 12, minWidth: 40, textAlign: 'center' }} >الحالة</Text>
             <div style={{ width: 68 }} />
           </Flex>
 
@@ -441,7 +442,7 @@ export default function AccountsPage() {
             <Flex justify="center" style={{ padding: '64px 0' }}><Spin size="large" /></Flex>
           ) : treeData.length === 0 ? (
             <div style={{ padding: '48px 0', textAlign: 'center' }}>
-              <Text type="secondary">لا توجد حسابات. أضف حساباً للبدء.</Text>
+              <Text >لا توجد حسابات. أضف حساباً للبدء.</Text>
             </div>
           ) : (
             treeData.map(node => (
@@ -487,11 +488,11 @@ export default function AccountsPage() {
           <Flex vertical gap={16} style={{ paddingTop: 8 }}>
             <Flex gap={16}>
               <div style={{ flex: 5 }}>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الكود</Text>
+                <Text  style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الكود</Text>
                 <Input dir="ltr" value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))} required />
               </div>
               <div style={{ flex: 7 }}>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>النوع</Text>
+                <Text  style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>النوع</Text>
                 <Select
                   style={{ width: '100%' }}
                   value={form.type}
@@ -503,7 +504,7 @@ export default function AccountsPage() {
 
             {SUB_TYPE_OPTIONS[form.type].length > 0 && (
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>التصنيف الفرعي</Text>
+                <Text  style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>التصنيف الفرعي</Text>
                 <Select
                   style={{ width: '100%' }}
                   value={form.sub_type ?? ''}
@@ -517,12 +518,12 @@ export default function AccountsPage() {
             )}
 
             <div>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الاسم</Text>
+              <Text  style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الاسم</Text>
               <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required />
             </div>
 
             <div>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الحساب الأب</Text>
+              <Text  style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الحساب الأب</Text>
               <Select
                 showSearch
                 style={{ width: '100%' }}
@@ -574,7 +575,7 @@ export default function AccountsPage() {
         }
       >
         <Flex vertical gap={12} style={{ paddingTop: 8 }}>
-          <Text type="secondary">
+          <Text >
             هل أنت متأكد من حذف الحساب{' '}
             <span style={{ fontWeight: 600, color: 'var(--ant-color-text)' }}>{deleteTarget?.code} — {deleteTarget?.name}</span>؟
           </Text>
