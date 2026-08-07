@@ -8,11 +8,10 @@ import {
   IconButton, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Tooltip, Typography, createTheme, ThemeProvider,
 } from '@mui/material'
-import { ArrowLeft, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
 import { useToast } from '@/lib/toast'
 import api from '@/lib/axios'
-import { aiApi } from '@/api/ai'
 import { journalApi } from '@/api/journal'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
@@ -111,23 +110,6 @@ export default function JournalEntryFormPage() {
   const entryDescriptionRef = useRef<HTMLInputElement | null>(null)
   const debitRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const creditRefs = useRef<Record<number, HTMLInputElement | null>>({})
-
-  const [suggestingLine, setSuggestingLine] = useState<number | null>(null)
-
-  const suggestLineDescription = async (i: number) => {
-    const line = lines[i]
-    setSuggestingLine(i)
-    try {
-      const suggestion = await aiApi.suggestDescription({
-        debit_account: line.debit && line.account ? `${line.account.code} ${line.account.name}` : undefined,
-        credit_account: line.credit && line.account ? `${line.account.code} ${line.account.name}` : undefined,
-        amount: line.debit ? Number(line.debit) : line.credit ? Number(line.credit) : undefined,
-      })
-      updateLine(i, { description: suggestion })
-    } finally {
-      setSuggestingLine(null)
-    }
-  }
 
   const parentIds = new Set(accounts.map(a => a.parent_id).filter(id => id !== null))
 
@@ -329,8 +311,7 @@ export default function JournalEntryFormPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ width: '38%' }}>الحساب</TableCell>
-                    <TableCell sx={{ width: '16%' }}>الجهة</TableCell>
-                    <TableCell>البيان</TableCell>
+                    <TableCell sx={{ width: '32%' }}>الجهة</TableCell>
                     <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
                     <TableCell align="left" sx={{ width: '12%' }}>دائن</TableCell>
                     <TableCell sx={{ width: 48 }} />
@@ -440,35 +421,6 @@ export default function JournalEntryFormPage() {
                                 }}
                               />
                             )}
-                          />
-                        </TableCell>
-
-                        <TableCell>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            value={line.description}
-                            onChange={e => updateLine(i, { description: e.target.value })}
-                            placeholder="بيان السطر"
-                            slotProps={{
-                              input: {
-                                endAdornment: (
-                                  <Tooltip title="اقتراح بيان بالذكاء الاصطناعي">
-                                    <span>
-                                      <IconButton
-                                        size="small"
-                                        disabled={suggestingLine === i}
-                                        onClick={() => suggestLineDescription(i)}
-                                      >
-                                        {suggestingLine === i
-                                          ? <CircularProgress size={15} />
-                                          : <Sparkles size={15} color={theme.palette.primary.main} />}
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
-                                ),
-                              },
-                            }}
                           />
                         </TableCell>
 

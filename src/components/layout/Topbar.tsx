@@ -6,7 +6,8 @@ import { useAuth } from '@/context/AuthContext'
 import { useFiscalYears } from '@/context/FiscalYearsContext'
 import { Avatar, Button, Dropdown, Flex, Tooltip, Typography, type MenuProps } from 'antd'
 import {
-  Calendar, CalendarClock, ChevronDown, LockOpen, Lock, LogOut, MessageCircle, Moon, Plus, Sun, TriangleAlert,
+  Calendar, CalendarClock, CalendarDays, ChevronDown, ListPlus, LockOpen, Lock, LogOut, MessageCircle, Moon,
+  Plus, Settings, SlidersHorizontal, Sun, TriangleAlert, UserCog,
 } from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
 
@@ -86,6 +87,12 @@ export default function Topbar() {
     await logout()
     navigate('/login')
   }
+
+  const settingsMenuItems: MenuProps['items'] = [
+    { key: '/settings', label: 'إعدادات العامه', icon: <SlidersHorizontal size={16} />, onClick: () => navigate('/settings') },
+    { key: '/settings/opening-balances', label: 'الأرصدة الافتتاحية', icon: <ListPlus size={16} />, onClick: () => navigate('/settings/opening-balances') },
+    { key: '/settings/fiscal-years', label: 'السنوات المالية', icon: <CalendarDays size={16} />, onClick: () => navigate('/settings/fiscal-years') },
+  ]
 
   const menuItems: MenuProps['items'] = [
     {
@@ -204,6 +211,27 @@ export default function Topbar() {
 
         {/* ── Actions ── */}
         <Flex align="center" gap={8}>
+          {/* Users */}
+          <Tooltip title="المستخدمون">
+            <Button
+              type="text" shape="circle" size="middle"
+              onClick={() => navigate('/users')}
+              icon={<UserCog size={18} />}
+            />
+          </Tooltip>
+
+          {/* Settings */}
+          <Dropdown menu={{ items: settingsMenuItems }} trigger={['click']} placement="bottomLeft">
+            <Tooltip title="الإعدادات">
+              <Button
+                type="text" shape="circle" size="middle"
+                icon={<Settings size={18} />}
+              />
+            </Tooltip>
+          </Dropdown>
+
+          <VDivider />
+
           {/* Theme toggle */}
           <Tooltip title={mode === 'light' ? 'الوضع الداكن' : 'الوضع الفاتح'}>
             <Button

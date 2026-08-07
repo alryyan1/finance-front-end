@@ -13,12 +13,7 @@ import {
   TrendingUp as TrendingUpIcon,
   Landmark as LandmarkIcon,
   Coins as CoinsIcon,
-  UserCog as UserCogIcon,
   DatabaseBackup as DatabaseBackupIcon,
-  Settings as SettingsIcon,
-  SlidersHorizontal as SlidersHorizontalIcon,
-  ListPlus as ListPlusIcon,
-  CalendarDays as CalendarDaysIcon,
   ChevronUp as ChevronUpIcon,
   ChevronDown as ChevronDownIcon,
   Building2 as Building2Icon,
@@ -89,21 +84,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'الإدارة',
     items: [
-      { to: '/users',  label: 'المستخدمون',      icon: UserCogIcon },
       { to: '/backup', label: 'النسخ الاحتياطية', icon: DatabaseBackupIcon },
-    ],
-  },
-  {
-    label: 'الإعدادات',
-    items: [
-      {
-        to: '/settings', label: 'الإعدادات', icon: SettingsIcon,
-        children: [
-          { to: '/settings',                  label: 'إعدادات الشركة',     icon: SlidersHorizontalIcon },
-          { to: '/settings/opening-balances', label: 'الأرصدة الافتتاحية', icon: ListPlusIcon },
-          { to: '/settings/fiscal-years',     label: 'السنوات المالية',    icon: CalendarDaysIcon },
-        ],
-      },
     ],
   },
 ]
@@ -117,7 +98,6 @@ const ACCENT_DEEP = '#8B6914'          // deep gold, for gradients
 const ACTIVE_BG   = 'rgba(201,162,39,0.14)'
 const HOVER_BG    = 'rgba(255,255,255,0.05)'
 const TEXT_DIM    = 'rgba(255,255,255,0.42)'
-const TEXT_MID    = 'rgba(255,255,255,0.72)'
 const TEXT_FULL   = '#ffffff'
 const DIVIDER     = 'rgba(201,162,39,0.10)'
 
@@ -133,7 +113,7 @@ function SubItem({ to, label, icon: Icon }: NavChild) {
             position: 'relative',
             display: 'flex', alignItems: 'center', gap: 12,
             padding: '7px 16px', margin: '0 8px 2px', paddingRight: 32, borderRadius: 6, cursor: 'pointer',
-            color: isActive ? TEXT_FULL : TEXT_DIM,
+            color: TEXT_FULL,
             background: isActive ? ACTIVE_BG : 'transparent',
             transition: 'background 0.15s, color 0.15s',
           }}>
@@ -179,7 +159,7 @@ function NavRow({
             position: 'relative',
             display: 'flex', alignItems: 'center', gap: 12,
             padding: '9px 12px', margin: '0 4px 2px', borderRadius: 6, cursor: item.alwaysOpen ? 'default' : 'pointer',
-            color: sectionActive ? TEXT_FULL : TEXT_MID,
+            color: TEXT_FULL,
             background: sectionActive ? ACTIVE_BG : 'transparent',
             transition: 'background 0.15s, color 0.15s',
             userSelect: 'none',
@@ -205,7 +185,7 @@ function NavRow({
                 position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '9px 12px', margin: '0 4px 2px', borderRadius: 6, cursor: 'pointer',
-                color: isActive ? TEXT_FULL : TEXT_MID,
+                color: TEXT_FULL,
                 background: isActive ? ACTIVE_BG : 'transparent',
                 transition: 'background 0.15s, color 0.15s',
               }}>
