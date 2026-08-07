@@ -8,11 +8,12 @@ import { useToast } from '@/lib/toast'
 import {
   AlignLeft, AlignRight, Building2, Copy, Image as ImageIcon, KeyRound, Link as LinkIcon,
   LayoutTemplate, MessageCircle, Plus, Save, Settings, Trash2, User, PiggyBank, ClipboardCheck,
+  ShoppingCart,
 } from 'lucide-react'
 import api from '@/lib/axios'
 import {
-  settingsApi, pettyCashSettingsApi, pettyCashAccountSettingsApi,
-  type CompanySettings, type LogoPosition, type PettyCashApprovalSettings,
+  settingsApi, pettyCashSettingsApi, pettyCashAccountSettingsApi, salesBridgeSettingsApi,
+  type CompanySettings, type LogoPosition, type PettyCashApprovalSettings, type SalesBridgeAccountSettings,
 } from '@/api/settings'
 import { accountsApi } from '@/api/accounts'
 import type { Account } from '@/types/account'
@@ -37,11 +38,12 @@ const POSITION_OPTIONS: { value: LogoPosition; label: string; icon: React.ReactN
 ]
 
 const TABS = [
-  { key: 'company',    label: 'معلومات الشركة',   icon: <Building2 size={15} /> },
-  { key: 'logo',       label: 'الشعار والتقارير', icon: <ImageIcon size={15} /> },
-  { key: 'petty-cash', label: 'صندوق النثريات',   icon: <PiggyBank size={15} /> },
-  { key: 'approval',   label: 'اعتماد النثريات',  icon: <ClipboardCheck size={15} /> },
-  { key: 'tokens',     label: 'رموز API',         icon: <KeyRound size={15} /> },
+  { key: 'company',     label: 'معلومات الشركة',   icon: <Building2 size={15} /> },
+  { key: 'logo',        label: 'الشعار والتقارير', icon: <ImageIcon size={15} /> },
+  { key: 'petty-cash',  label: 'صندوق النثريات',   icon: <PiggyBank size={15} /> },
+  { key: 'approval',    label: 'اعتماد النثريات',  icon: <ClipboardCheck size={15} /> },
+  { key: 'sales-bridge', label: 'ربط المبيعات',     icon: <ShoppingCart size={15} /> },
+  { key: 'tokens',      label: 'رموز API',         icon: <KeyRound size={15} /> },
 ] as const
 
 /** Accent color per settings section — mirrors the palette used on the dashboard stat cards. */
@@ -50,6 +52,7 @@ const SECTION_COLOR = {
   logo:     '#7c3aed',
   pettyFund: '#16a34a',
   approval: '#0891b2',
+  salesBridge: '#be185d',
   tokens:   '#d97706',
 } as const
 
@@ -108,6 +111,16 @@ export default function SettingsPage() {
   const [pettyCashAccountsLoading, setPettyCashAccountsLoading] = useState(true)
   const [pettyCashAccountsSaving, setPettyCashAccountsSaving]   = useState(false)
 
+  // Sales bridge account settings state (which accounts a sales-api journal entry posts to)
+  const [receivableAccount, setReceivableAccount] = useState<Account | null>(null)
+  const [revenueAccount,    setRevenueAccount]    = useState<Account | null>(null)
+  const [cogsAccount,       setCogsAccount]       = useState<Account | null>(null)
+  const [inventoryAccount,  setInventoryAccount]  = useState<Account | null>(null)
+  const [salesCashAccount,  setSalesCashAccount]  = useState<Account | null>(null)
+  const [salesBankAccount,  setSalesBankAccount]  = useState<Account | null>(null)
+  const [salesBridgeLoading, setSalesBridgeLoading] = useState(true)
+  const [salesBridgeSaving,  setSalesBridgeSaving]  = useState(false)
+
   useEffect(() => {
     settingsApi.get()
       .then(setForm)
@@ -124,6 +137,17 @@ export default function SettingsPage() {
         setBankAccount(a.find(acc => acc.id === s.petty_cash_bank_account_id) ?? null)
       })
       .finally(() => setPettyCashAccountsLoading(false))
+
+    Promise.all([accountsApi.list(), salesBridgeSettingsApi.get()])
+      .then(([a, s]) => {
+        setReceivableAccount(a.find(acc => acc.id === s.sales_receivable_account_id) ?? null)
+        setRevenueAccount(a.find(acc => acc.id === s.sales_revenue_account_id) ?? null)
+        setCogsAccount(a.find(acc => acc.id === s.sales_cogs_account_id) ?? null)
+        setInventoryAccount(a.find(acc => acc.id === s.sales_inventory_account_id) ?? null)
+        setSalesCashAccount(a.find(acc => acc.id === s.sales_cash_account_id) ?? null)
+        setSalesBankAccount(a.find(acc => acc.id === s.sales_bank_account_id) ?? null)
+      })
+      .finally(() => setSalesBridgeLoading(false))
   }, [])
 
   const handlePettyCashApprovalSave = async () => {
@@ -156,7 +180,35 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSalesBridgeSave = async () => {
+    setSalesBridgeSaving(true)
+    try {
+      const payload: SalesBridgeAccountSettings = {
+        sales_receivable_account_id: receivableAccount?.id ?? null,
+        sales_revenue_account_id: revenueAccount?.id ?? null,
+        sales_cogs_account_id: cogsAccount?.id ?? null,
+        sales_inventory_account_id: inventoryAccount?.id ?? null,
+        sales_cash_account_id: salesCashAccount?.id ?? null,
+        sales_bank_account_id: salesBankAccount?.id ?? null,
+      }
+      const r = await salesBridgeSettingsApi.update(payload)
+      setReceivableAccount(accounts.find(acc => acc.id === r.sales_receivable_account_id) ?? null)
+      setRevenueAccount(accounts.find(acc => acc.id === r.sales_revenue_account_id) ?? null)
+      setCogsAccount(accounts.find(acc => acc.id === r.sales_cogs_account_id) ?? null)
+      setInventoryAccount(accounts.find(acc => acc.id === r.sales_inventory_account_id) ?? null)
+      setSalesCashAccount(accounts.find(acc => acc.id === r.sales_cash_account_id) ?? null)
+      setSalesBankAccount(accounts.find(acc => acc.id === r.sales_bank_account_id) ?? null)
+      toast.success('تم حفظ حسابات ربط المبيعات')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ حسابات ربط المبيعات')
+    } finally {
+      setSalesBridgeSaving(false)
+    }
+  }
+
   const assetAccounts = accounts.filter(a => a.type === 'asset')
+  const revenueAccounts = accounts.filter(a => a.type === 'revenue')
+  const expenseAccounts = accounts.filter(a => a.type === 'expense')
 
   const set = (key: keyof CompanySettings) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -547,6 +599,123 @@ export default function SettingsPage() {
                   disabled={pettyCashSaving}
                 >
                   حفظ إعدادات الاعتماد
+                </Button>
+              </Flex>
+            </Flex>
+          )}
+        </div>
+      )}
+
+      {/* Sales bridge account settings */}
+      {activeTab === 'sales-bridge' && (
+        <div style={cardStyle}>
+          <SectionHeader
+            icon={<ShoppingCart size={20} />}
+            color={SECTION_COLOR.salesBridge}
+            title="حسابات ربط المبيعات"
+            subtitle="الحسابات التي تُنشأ عليها قيود المبيعات المستوردة من نظام المبيعات (sales-api) حسب طريقة الدفع — يرسل النظام الخارجي دور كل حساب فقط (مثل sales_revenue)، ولا يحتاج معرفة أرقام أو رموز الحسابات هنا"
+          />
+
+          {salesBridgeLoading ? <Spin /> : (
+            <Flex vertical gap={20} style={{ maxWidth: 520 }}>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>ذمم العملاء (مدين) — sales_receivable</Text>
+                <Select
+                  showSearch
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={receivableAccount?.id}
+                  onChange={v => setReceivableAccount(assetAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات أصول"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={assetAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>إيراد المبيعات (دائن) — sales_revenue</Text>
+                <Select
+                  showSearch
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={revenueAccount?.id}
+                  onChange={v => setRevenueAccount(revenueAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات إيرادات"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={revenueAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>تكلفة المبيعات (مدين) — sales_cogs</Text>
+                <Select
+                  showSearch
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={cogsAccount?.id}
+                  onChange={v => setCogsAccount(expenseAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات مصروفات"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>مخزون البضاعة (دائن) — sales_inventory</Text>
+                <Select
+                  showSearch
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={inventoryAccount?.id}
+                  onChange={v => setInventoryAccount(assetAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات أصول"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={assetAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+              </div>
+
+              <Divider style={{ margin: '4px 0' }}>مبيعات فورية (بدل ذمم العملاء)</Divider>
+
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حساب النقدية (مدين) — sales_cash</Text>
+                <Select
+                  showSearch
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={salesCashAccount?.id}
+                  onChange={v => setSalesCashAccount(assetAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات أصول"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={assetAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                  يُستخدم بدل حساب ذمم العملاء عند بيع نقدي فوري بدون آجل
+                </Text>
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>حساب البنك (مدين) — sales_bank</Text>
+                <Select
+                  showSearch
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={salesBankAccount?.id}
+                  onChange={v => setSalesBankAccount(assetAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات أصول"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={assetAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                  يُستخدم بدل حساب ذمم العملاء عند دفع فوري عبر البنك أو بطاقة
+                </Text>
+              </div>
+
+              <Divider style={{ margin: 0 }} />
+
+              <Flex justify="flex-end">
+                <Button
+                  type="primary"
+                  icon={salesBridgeSaving ? <Spin size="small" /> : <Save size={16} />}
+                  onClick={handleSalesBridgeSave}
+                  disabled={salesBridgeSaving}
+                >
+                  حفظ حسابات ربط المبيعات
                 </Button>
               </Flex>
             </Flex>

@@ -137,3 +137,33 @@ export const pettyCashAccountSettingsApi = {
   update: (data: PettyCashAccountSettings): Promise<PettyCashAccountSettings> =>
     api.put<Record<string, unknown>>('/api/settings', data).then(r => toPettyCashAccountSettings(r.data)),
 }
+
+// ── Sales bridge account settings (which accounts a sales-api journal entry posts to) ──
+
+export interface SalesBridgeAccountSettings {
+  sales_receivable_account_id: number | null
+  sales_revenue_account_id: number | null
+  sales_cogs_account_id: number | null
+  sales_inventory_account_id: number | null
+  sales_cash_account_id: number | null
+  sales_bank_account_id: number | null
+}
+
+function toSalesBridgeAccountSettings(data: Record<string, unknown>): SalesBridgeAccountSettings {
+  return {
+    sales_receivable_account_id: toIntOrNull(data.sales_receivable_account_id),
+    sales_revenue_account_id: toIntOrNull(data.sales_revenue_account_id),
+    sales_cogs_account_id: toIntOrNull(data.sales_cogs_account_id),
+    sales_inventory_account_id: toIntOrNull(data.sales_inventory_account_id),
+    sales_cash_account_id: toIntOrNull(data.sales_cash_account_id),
+    sales_bank_account_id: toIntOrNull(data.sales_bank_account_id),
+  }
+}
+
+export const salesBridgeSettingsApi = {
+  get: (): Promise<SalesBridgeAccountSettings> =>
+    api.get<Record<string, unknown>>('/api/settings').then(r => toSalesBridgeAccountSettings(r.data)),
+
+  update: (data: SalesBridgeAccountSettings): Promise<SalesBridgeAccountSettings> =>
+    api.put<Record<string, unknown>>('/api/settings', data).then(r => toSalesBridgeAccountSettings(r.data)),
+}

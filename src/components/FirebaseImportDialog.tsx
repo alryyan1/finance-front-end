@@ -8,7 +8,8 @@ import {
   type FirebaseJournalEntry,
 } from '@/lib/firebaseImport'
 import { journalApi } from '@/api/journal'
-import { pettyCashSettingsApi } from '@/api/settings'
+import { pettyCashSettingsApi, salesBridgeSettingsApi } from '@/api/settings'
+import { accountsApi } from '@/api/accounts'
 import { useToast } from '@/lib/toast'
 
 const { Text } = Typography
@@ -24,6 +25,8 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
   const [loading,        setLoading]        = useState(false)
   const [entries,        setEntries]        = useState<FirebaseJournalEntry[]>([])
   const [doctorMappings, setDoctorMappings] = useState<Record<string, string>>({})
+  const [accountCodeMap, setAccountCodeMap] = useState<Map<string, number>>(new Map())
+  const [roleAccountMap, setRoleAccountMap] = useState<Map<string, number>>(new Map())
 
   const [importing, setImporting] = useState(false)
   const [progress,  setProgress]  = useState(0)        // 0-100
@@ -43,9 +46,26 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
       .then(s => {
         const name = s.firebase_collection_name || 'jawda'
         setStorageName(name)
-        return Promise.all([fetchPendingEntries(name), fetchDoctorMappings(name)])
+        return Promise.all([
+          fetchPendingEntries(name),
+          fetchDoctorMappings(name),
+          accountsApi.list(),
+          salesBridgeSettingsApi.get(),
+        ])
       })
-      .then(([e, m]) => { setEntries(e); setDoctorMappings(m) })
+      .then(([e, m, accounts, salesBridge]) => {
+        setEntries(e)
+        setDoctorMappings(m)
+        setAccountCodeMap(new Map(accounts.map(a => [a.code, a.id])))
+        setRoleAccountMap(new Map(Object.entries({
+          sales_receivable: salesBridge.sales_receivable_account_id,
+          sales_revenue: salesBridge.sales_revenue_account_id,
+          sales_cogs: salesBridge.sales_cogs_account_id,
+          sales_inventory: salesBridge.sales_inventory_account_id,
+          sales_cash: salesBridge.sales_cash_account_id,
+          sales_bank: salesBridge.sales_bank_account_id,
+        }).filter((entry): entry is [string, number] => entry[1] != null)))
+      })
       .catch(e => toast.error((e as Error).message ?? 'فشل التحميل'))
       .finally(() => setLoading(false))
   }, [open])
@@ -54,11 +74,12 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
     if (!storageName) return
     setImporting(true); setProgress(0); setFailed([])
     const errors: string[] = []
+    const externalPartyCache = new Map<string, number>()
 
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i]
       try {
-        const payload = toJournalPayload(entry, doctorMappings)
+        const payload = await toJournalPayload(entry, doctorMappings, externalPartyCache, accountCodeMap, roleAccountMap)
         // Skip lines where account_id couldn't be resolved
         const validLines = payload.lines.filter(l => l.account_id != null)
         if (validLines.length < 2) {

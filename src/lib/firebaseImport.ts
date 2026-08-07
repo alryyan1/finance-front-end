@@ -1,11 +1,31 @@
 import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore'
 import { getFirestoreDb as getDb } from '@/lib/firestore'
+import { partiesApi } from '@/api/parties'
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
 export interface FirebaseJournalLine {
+  /** Raw finance-api account id. Ignored when account_code or account_role is present. */
   account_id:   string
+  /** Stable account code (e.g. "11031") — preferred over account_id since ids are
+   *  auto-increment and not guaranteed stable across environments. Resolved via
+   *  the account list already loaded by the dialog. */
+  account_code?: string | null
+  /**
+   * Semantic role instead of any finance-api-specific identifier — one of
+   * "sales_receivable" (credit/deferred sale), "sales_cash" (paid in cash),
+   * "sales_bank" (paid by bank/card), "sales_revenue", "sales_cogs",
+   * "sales_inventory". Resolved via the finance-api admin's own Settings
+   * mapping (Settings → ربط المبيعات), so an external system like sales-api
+   * never needs to know finance-api's account codes or ids at all — only its
+   * own fixed set of roles. Takes priority over account_code and account_id.
+   */
+  account_role?: string | null
   party_id?:    string | null
+  /** Only read when party_id is an unresolved external reference (e.g. "sales_client_25"). */
+  party_name?:  string | null
+  party_phone?: string | null
+  party_email?: string | null
   description?: string | null
   debit:        number
   credit:       number
@@ -33,18 +53,57 @@ function toNumericId(id: string | null | undefined): number | null {
 }
 
 /**
+ * Resolve a line's account reference to a finance-api numeric account id, in
+ * order of preference:
+ *  1. account_role  — looked up in roleAccountMap (from finance-api Settings).
+ *     The most decoupled option: the writer needs zero finance-api knowledge.
+ *  2. account_code  — looked up in accountCodeMap (from the chart of accounts).
+ *     Stable across environments, but the writer must know the actual codes.
+ *  3. account_id    — used as-is. Fragile (auto-increment, not portable), kept
+ *     only for backward compatibility with older documents.
+ */
+function resolveAccountId(
+  line: Pick<FirebaseJournalLine, 'account_id' | 'account_code' | 'account_role'>,
+  accountCodeMap: Map<string, number>,
+  roleAccountMap: Map<string, number>,
+): number | null {
+  if (line.account_role) {
+    return roleAccountMap.get(line.account_role) ?? null
+  }
+  if (line.account_code) {
+    return accountCodeMap.get(line.account_code) ?? null
+  }
+  return toNumericId(line.account_id)
+}
+
+/**
+ * Matches an external system's own party reference that finance-api doesn't know
+ * yet, e.g. "sales_client_25" or "sales_supplier_7" — {source_system}_{source_type}_{source_id}.
+ */
+const EXTERNAL_PARTY_PATTERN = /^([a-z0-9-]+)_(client|supplier)_(.+)$/
+
+/**
  * Resolve a Firebase party ID to a finance-api numeric party ID.
  *
- * - Numeric string ("5")  → 5
- * - "doctor_X" format     → look up doctor_mappings[X], then convert that mapped
- *                           partyId to a number (it must be a numeric-string party
- *                           imported from finance-api)
- * - Anything else         → null
+ * - Numeric string ("5")     → 5
+ * - "doctor_X" format        → look up doctor_mappings[X] (pre-synced in Firestore
+ *                              by the external system, resolved to a numeric party id)
+ * - "{system}_client_X" /
+ *   "{system}_supplier_X"    → resolve via POST /parties/resolve-external, which
+ *                              finds the mapped Party or creates it (and the mapping)
+ *                              on first sight. Cached per import run so repeated
+ *                              references to the same external record only call the
+ *                              backend once.
+ * - Anything else            → null
  */
-function resolvePartyId(
+async function resolvePartyId(
   partyId: string | null | undefined,
   doctorMappings: Record<string, string>,
-): number | null {
+  externalPartyCache: Map<string, number>,
+  partyName?: string | null,
+  partyPhone?: string | null,
+  partyEmail?: string | null,
+): Promise<number | null> {
   if (!partyId) return null
 
   // Plain numeric (imported finance-api party)
@@ -52,10 +111,30 @@ function resolvePartyId(
   if (direct != null) return direct
 
   // doctor_X format — look up the doctor's configured mapping
-  const m = partyId.match(/^doctor_(\d+)$/)
-  if (m) {
-    const mappedPartyId = doctorMappings[m[1]]   // e.g. "5"
+  const doctorMatch = partyId.match(/^doctor_(\d+)$/)
+  if (doctorMatch) {
+    const mappedPartyId = doctorMappings[doctorMatch[1]]   // e.g. "5"
     return toNumericId(mappedPartyId)
+  }
+
+  // {system}_client_X / {system}_supplier_X — resolve (and auto-create) via finance-api
+  const externalMatch = partyId.match(EXTERNAL_PARTY_PATTERN)
+  if (externalMatch) {
+    const [, sourceSystem, sourceType, sourceId] = externalMatch
+
+    const cached = externalPartyCache.get(partyId)
+    if (cached != null) return cached
+
+    const party = await partiesApi.resolveExternal({
+      source_system: sourceSystem,
+      source_type: sourceType,
+      source_id: sourceId,
+      name: partyName || `${sourceType} #${sourceId}`,
+      phone: partyPhone,
+      email: partyEmail,
+    })
+    externalPartyCache.set(partyId, party.id)
+    return party.id
   }
 
   return null
@@ -111,21 +190,30 @@ export async function markAsImported(firebaseId: string, storageName: string): P
 /**
  * Convert a FirebaseJournalEntry to the payload shape expected by journalApi.create().
  * doctorMappings: map of Jawda doctor ID → Firebase party ID (from fetchDoctorMappings()).
+ * externalPartyCache: shared across a whole import run — pass the same Map for every
+ * entry so a customer/supplier referenced on multiple entries is only resolved once.
+ * accountCodeMap: code → id, built from the full chart of accounts (accountsApi.list()).
+ * roleAccountMap: role → id, built from finance-api's Settings (salesBridgeSettingsApi.get()).
  */
-export function toJournalPayload(
+export async function toJournalPayload(
   entry: FirebaseJournalEntry,
   doctorMappings: Record<string, string> = {},
+  externalPartyCache: Map<string, number> = new Map(),
+  accountCodeMap: Map<string, number> = new Map(),
+  roleAccountMap: Map<string, number> = new Map(),
 ) {
+  const lines = await Promise.all(entry.lines.map(async l => ({
+    account_id:  resolveAccountId(l, accountCodeMap, roleAccountMap),
+    party_id:    await resolvePartyId(l.party_id, doctorMappings, externalPartyCache, l.party_name, l.party_phone, l.party_email),
+    description: l.description ?? '',
+    debit:       l.debit,
+    credit:      l.credit,
+  })))
+
   return {
     date:        entry.date,
     reference:   entry.reference ?? null,
     description: entry.description,
-    lines: entry.lines.map(l => ({
-      account_id:  toNumericId(l.account_id),
-      party_id:    resolvePartyId(l.party_id, doctorMappings),
-      description: l.description ?? '',
-      debit:       l.debit,
-      credit:      l.credit,
-    })),
+    lines,
   }
 }

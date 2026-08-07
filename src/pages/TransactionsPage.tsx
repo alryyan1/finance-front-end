@@ -35,16 +35,16 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
     prefix: string; name: string; amount: string; indent: boolean; color: string
   }) => (
     <Flex align="baseline" gap={4} style={{ paddingLeft: indent ? 12 : 0, direction: 'rtl' }}>
-      <Text style={{ color, fontWeight: 700, flexShrink: 0, fontSize: 12 }}>{prefix}</Text>
-      <Text style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{name}</Text>
-      <Text style={{ color, fontWeight: 600, marginLeft: 'auto', paddingLeft: 8, direction: 'ltr', flexShrink: 0, fontSize: 12 }}>{amount}</Text>
+      <Text style={{ color, fontWeight: 700, flexShrink: 0, fontSize: 15 }}>{prefix}</Text>
+      <Text style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15 }}>{name}</Text>
+      <Text style={{ color, fontWeight: 600, marginLeft: 'auto', paddingLeft: 8, direction: 'ltr', flexShrink: 0, fontSize: 15 }}>{amount}</Text>
     </Flex>
   )
 
   return (
     <div style={{ padding: '4px 0' }}>
       {multiDebit && (
-        <Text style={{ color: 'var(--ant-color-primary)', fontWeight: 700, display: 'block', direction: 'rtl', fontSize: 12 }}>
+        <Text style={{ color: 'var(--ant-color-primary)', fontWeight: 700, display: 'block', direction: 'rtl', fontSize: 16 }}>
           من مذكورين · {debitTotal.toLocaleString('en-US')}
         </Text>
       )}
@@ -52,14 +52,14 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
         <Line key={`d-${i}`} prefix="من ح/" name={l.account?.name ?? '—'} amount={fmt(l.debit)} indent={multiDebit} color="var(--ant-color-primary)" />
       ))}
       {multiCredit && (
-        <Text style={{ color: 'var(--ant-color-success)', fontWeight: 700, display: 'block', direction: 'rtl', marginTop: 2, fontSize: 12 }}>
+        <Text style={{ color: 'var(--ant-color-success)', fontWeight: 700, display: 'block', direction: 'rtl', marginTop: 2, fontSize: 16 }}>
           إلى مذكورين · {creditTotal.toLocaleString('en-US')}
         </Text>
       )}
       {credits.map((l, i) => (
         <Line key={`c-${i}`} prefix="إلى ح/" name={l.account?.name ?? '—'} amount={fmt(l.credit)} indent={multiCredit || !multiDebit} color="var(--ant-color-success)" />
       ))}
-      <Text type="secondary" style={{ fontStyle: 'italic', display: 'block', marginTop: 2, fontSize: 11 }}>
+      <Text type="secondary" style={{ fontStyle: 'italic', display: 'block', marginTop: 2, fontSize: 15 }}>
         {entry.description}
       </Text>
     </div>
@@ -173,10 +173,10 @@ export default function TransactionsPage() {
       align: 'center',
       render: (_: unknown, entry) => (
         <div>
-          <Text style={{ fontWeight: 700, direction: 'ltr', display: 'block', fontSize: 12 }}>#{entry.id}</Text>
-          {entry.reference && <Text type="secondary" style={{ direction: 'ltr', display: 'block', fontSize: 11 }}>{entry.reference}</Text>}
-          {entry.reversal_of && <Text style={{ color: 'var(--ant-color-warning)', display: 'block', fontSize: 11 }}>↩ عكسي</Text>}
-          {entry.reversed_by && <Text style={{ color: 'var(--ant-color-error)', display: 'block', fontSize: 11 }}>↩ معكوس</Text>}
+          <Text style={{ fontWeight: 700, direction: 'ltr', display: 'block', fontSize: 16 }}>#{entry.id}</Text>
+          {entry.reference && <Text type="secondary" style={{ direction: 'ltr', display: 'block', fontSize: 15 }}>{entry.reference}</Text>}
+          {entry.reversal_of && <Text style={{ color: 'var(--ant-color-warning)', display: 'block', fontSize: 15 }}>↩ عكسي</Text>}
+          {entry.reversed_by && <Text style={{ color: 'var(--ant-color-error)', display: 'block', fontSize: 15 }}>↩ معكوس</Text>}
         </div>
       ),
     },
@@ -186,14 +186,14 @@ export default function TransactionsPage() {
       align: 'center',
       render: (_: unknown, entry) => (
         <div>
-          <Text style={{ direction: 'ltr', display: 'block', fontWeight: 500, fontSize: 12 }}>{entry.date}</Text>
+          <Text style={{ direction: 'ltr', display: 'block', fontWeight: 500, fontSize: 16 }}>{entry.date}</Text>
           <Flex align="center" gap={4} justify="center" style={{ marginTop: 2 }}>
             <span style={{
               width: 6, height: 6, borderRadius: '50%',
               background: entry.is_posted ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
               flexShrink: 0, display: 'inline-block',
             }} />
-            <Text style={{ color: entry.is_posted ? 'var(--ant-color-success)' : 'var(--ant-color-warning)', fontWeight: 600, fontSize: 11 }}>
+            <Text style={{ color: entry.is_posted ? 'var(--ant-color-success)' : 'var(--ant-color-warning)', fontWeight: 600, fontSize: 15 }}>
               {entry.is_posted ? 'مرحَّل' : 'مسودة'}
             </Text>
           </Flex>
@@ -203,11 +203,11 @@ export default function TransactionsPage() {
     { title: 'البيان', render: (_: unknown, entry) => <BayanCell entry={entry} /> },
     {
       title: 'دائن', width: 115, align: 'center',
-      render: (_: unknown, entry) => <Text style={{ color: 'var(--ant-color-success)', fontWeight: 600, fontSize: 12 }}>{fmt(entry.lines_sum_debit)}</Text>,
+      render: (_: unknown, entry) => <Text style={{ color: 'var(--ant-color-success)', fontWeight: 600, fontSize: 15 }}>{fmt(entry.lines_sum_debit)}</Text>,
     },
     {
       title: 'مدين', width: 115, align: 'center',
-      render: (_: unknown, entry) => <Text style={{ color: 'var(--ant-color-primary)', fontWeight: 600, fontSize: 12 }}>{fmt(entry.lines_sum_debit)}</Text>,
+      render: (_: unknown, entry) => <Text style={{ color: 'var(--ant-color-primary)', fontWeight: 600, fontSize: 15 }}>{fmt(entry.lines_sum_debit)}</Text>,
     },
     {
       title: 'إجراءات', width: 130, align: 'center',
@@ -259,9 +259,9 @@ export default function TransactionsPage() {
           <Text strong style={{ fontSize: 16 }}>القيود المحاسبية</Text>
           {!loading && (
             <Flex gap={6} style={{ marginTop: 2 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>{entries.length} قيد</Text>
-              {postedCount > 0 && <Text style={{ color: 'var(--ant-color-success)', fontSize: 12 }}>· {postedCount} مرحَّل</Text>}
-              {draftCount  > 0 && <Text style={{ color: 'var(--ant-color-warning)', fontSize: 12 }}>· {draftCount} مسودة</Text>}
+              <Text type="secondary" style={{ fontSize: 15 }}>{entries.length} قيد</Text>
+              {postedCount > 0 && <Text style={{ color: 'var(--ant-color-success)', fontSize: 15 }}>· {postedCount} مرحَّل</Text>}
+              {draftCount  > 0 && <Text style={{ color: 'var(--ant-color-warning)', fontSize: 15 }}>· {draftCount} مسودة</Text>}
             </Flex>
           )}
         </div>
@@ -356,15 +356,15 @@ export default function TransactionsPage() {
         summary={() => entries.length > 0 ? (
           <Table.Summary.Row>
             <Table.Summary.Cell index={0} colSpan={3} align="center">
-              <Text strong style={{ fontSize: 12 }}>الإجمالي</Text>
+              <Text strong style={{ fontSize: 15 }}>الإجمالي</Text>
             </Table.Summary.Cell>
             <Table.Summary.Cell index={1} align="center">
-              <Text strong style={{ color: 'var(--ant-color-success)', fontSize: 12, direction: 'ltr', display: 'block' }}>
+              <Text strong style={{ color: 'var(--ant-color-success)', fontSize: 15, direction: 'ltr', display: 'block' }}>
                 {grandTotal.toLocaleString('en-US')}
               </Text>
             </Table.Summary.Cell>
             <Table.Summary.Cell index={2} align="center">
-              <Text strong style={{ color: 'var(--ant-color-primary)', fontSize: 12, direction: 'ltr', display: 'block' }}>
+              <Text strong style={{ color: 'var(--ant-color-primary)', fontSize: 15, direction: 'ltr', display: 'block' }}>
                 {grandTotal.toLocaleString('en-US')}
               </Text>
             </Table.Summary.Cell>
@@ -391,9 +391,9 @@ export default function TransactionsPage() {
         <Text style={{ fontSize: 13 }}>سيتم إنشاء قيد عكسي يلغي أثر:</Text>
         <div style={{ marginTop: 8, padding: 10, background: 'var(--ant-color-fill-alter)', borderRadius: 6, direction: 'rtl' }}>
           <Text style={{ fontWeight: 600, display: 'block' }}>{confirmEntry?.description}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>{confirmEntry?.date}</Text>
+          <Text type="secondary" style={{ fontSize: 15 }}>{confirmEntry?.date}</Text>
         </div>
-        <Text type="secondary" style={{ marginTop: 8, fontSize: 12, display: 'block' }}>
+        <Text type="secondary" style={{ marginTop: 8, fontSize: 15, display: 'block' }}>
           يُرحَّل تلقائياً بتاريخ اليوم — لا يمكن التراجع.
         </Text>
       </Modal>
