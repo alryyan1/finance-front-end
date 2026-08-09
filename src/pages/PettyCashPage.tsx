@@ -19,8 +19,10 @@ import { useAuth } from '@/context/AuthContext'
 import { accountsApi } from '@/api/accounts'
 import { pettyCashSettingsApi, pettyCashAccountSettingsApi } from '@/api/settings'
 import { pettyCashApi, type PettyCashTransaction, type NotificationResult, type PettyCashTotals } from '@/api/pettyCash'
+import { partiesApi } from '@/api/parties'
 import { openPdf, downloadExcel } from '@/api/pdf'
 import type { Account } from '@/types/account'
+import type { Party } from '@/types/party'
 
 const { Title, Text } = Typography
 
@@ -39,6 +41,7 @@ const emptyExpenseForm = () => ({
   date:               today(),
   amount:             '',
   beneficiary_name:   '',
+  party:              null as Party | null,
   contra_account_id:  null as Account | null,
   source_account_id:  null as Account | null,
   description:        '',
@@ -111,6 +114,7 @@ export default function PettyCashPage() {
   const [cashAccount, setCashAccount] = useState<Account | null>(null)
   const [bankAccount, setBankAccount] = useState<Account | null>(null)
   const [accounts, setAccounts]       = useState<Account[]>([])
+  const [parties, setParties]         = useState<Party[]>([])
   // Guards the "accounts not configured" empty-state from flashing briefly on
   // every visit while cashAccount/bankAccount are still their initial null —
   // that state is indistinguishable from "genuinely not configured" until this
@@ -239,6 +243,7 @@ export default function PettyCashPage() {
       setCashAccount(a.find(acc => acc.id === s.petty_cash_cash_account_id) ?? null)
       setBankAccount(a.find(acc => acc.id === s.petty_cash_bank_account_id) ?? null)
     }).finally(() => setAccountSettingsLoading(false))
+    partiesApi.list().then(setParties)
     pettyCashSettingsApi.get().then(s => {
       setApprovalSettings({
         managerUserId: s.petty_cash_manager_user_id,
@@ -369,6 +374,7 @@ export default function PettyCashPage() {
       const created = await pettyCashApi.createExpense({
         date: expenseForm.date,
         beneficiary_name: expenseForm.beneficiary_name || undefined,
+        party_id: expenseForm.party?.id,
         description: expenseForm.description || undefined,
         document: expenseForm.document,
         ...(expenseForm.compound
@@ -559,6 +565,7 @@ export default function PettyCashPage() {
               {t.description || (t.type === 'expense' ? 'مصروف نثرية' : 'تغذية الصندوق')}
             </div>
             {t.beneficiary_name && <Text style={{ fontSize: 11, display: 'block', fontWeight: 700, color: '#000' }}>{t.beneficiary_name}</Text>}
+            {t.party && <Text style={{ fontSize: 11, display: 'block', fontStyle: 'italic', color: '#666' }}>{t.party.name}</Text>}
           </div>
         )
         return t.journal_entry_id ? (
@@ -892,6 +899,19 @@ export default function PettyCashPage() {
             <Col span={24}>
               <FieldLabel icon={UserRound}>اسم المستفيد</FieldLabel>
               <Input value={expenseForm.beneficiary_name} onChange={e => setExpenseForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={UserRound}>الطرف (اختياري)</FieldLabel>
+              <Select
+                allowClear
+                showSearch
+                style={{ width: '100%' }}
+                placeholder="اختر عميل / مورد"
+                value={expenseForm.party?.id}
+                onChange={v => setExpenseForm(f => ({ ...f, party: parties.find(p => p.id === v) ?? null }))}
+                options={parties.map(p => ({ value: p.id, label: p.name }))}
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              />
             </Col>
             <Col span={24}>
               <Flex align="center" justify="space-between">

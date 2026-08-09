@@ -24,6 +24,8 @@ export interface PettyCashTransaction {
   date: string
   amount: string
   beneficiary_name: string | null
+  party_id: number | null
+  party: { id: number; name: string } | null
   contra_account_id: number | null
   contra_account: { id: number; code: string; name: string } | null
   lines: PettyCashTransactionLine[]
@@ -42,6 +44,7 @@ export interface ExpensePayload {
   date: string
   amount?: string
   beneficiary_name?: string
+  party_id?: number
   contra_account_id?: number
   lines?: { contra_account_id: number; amount: string }[]
   source_account_id?: number
