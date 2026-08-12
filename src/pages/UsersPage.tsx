@@ -82,8 +82,8 @@ export default function UsersPage() {
       }
       setOpen(false); load()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      toast.error(msg ?? 'فشل حفظ المستخدم')
+      const res = (e as { response?: { status?: number; data?: { message?: string } } })?.response
+      if (res?.status !== 403) toast.error(res?.data?.message ?? 'فشل حفظ المستخدم')
     } finally { setSaving(false) }
   }
 
@@ -94,8 +94,9 @@ export default function UsersPage() {
       await usersApi.remove(delTarget.id)
       toast.success('تم حذف المستخدم'); setDelTarget(null); load()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      toast.error(msg ?? 'فشل حذف المستخدم'); setDelTarget(null)
+      const res = (e as { response?: { status?: number; data?: { message?: string } } })?.response
+      if (res?.status !== 403) toast.error(res?.data?.message ?? 'فشل حذف المستخدم')
+      setDelTarget(null)
     } finally { setDeleting(false) }
   }
 

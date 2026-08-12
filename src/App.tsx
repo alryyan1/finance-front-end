@@ -18,6 +18,7 @@ import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
 import FiscalYearsPage from '@/pages/FiscalYearsPage'
 import PettyCashPage from '@/pages/PettyCashPage'
 import UsersPage from '@/pages/UsersPage'
+import RolesPage from '@/pages/RolesPage'
 import BackupPage from '@/pages/BackupPage'
 import JournalSpreadsheetPage from '@/pages/JournalSpreadsheetPage'
 import PettyCashSpreadsheetPage from '@/pages/PettyCashSpreadsheetPage'
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/transactions/:id/edit" element={<JournalEntryFormPage />} />
             <Route path="/petty-cash" element={<PettyCashPage />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/roles" element={<RolesPage />} />
             <Route path="/backup" element={<BackupPage />} />
             <Route path="/parties" element={<PartiesPage />} />
             <Route path="/reports" element={<TrialBalancePage />} />

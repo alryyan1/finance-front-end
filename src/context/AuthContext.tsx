@@ -6,6 +6,8 @@ export interface User {
   name: string
   username: string
   email: string
+  roles: string[]
+  permissions: string[]
 }
 
 interface AuthContextValue {
@@ -13,6 +15,7 @@ interface AuthContextValue {
   loading: boolean
   login: (username: string, password: string) => Promise<User>
   logout: () => Promise<void>
+  can: (permission: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -41,8 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
   }, [])
 
+  const can = useCallback(
+    (permission: string) => user?.permissions?.includes(permission) ?? false,
+    [user],
+  )
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, can }}>
       {children}
     </AuthContext.Provider>
   )

@@ -14,6 +14,10 @@ import { useToast } from '@/lib/toast'
 
 const { Text } = Typography
 
+function extractErrorMessage(e: unknown): string | undefined {
+  return (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+}
+
 interface Props {
   open:    boolean
   onClose: () => void
@@ -66,7 +70,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
           sales_bank: salesBridge.sales_bank_account_id,
         }).filter((entry): entry is [string, number] => entry[1] != null)))
       })
-      .catch(e => toast.error((e as Error).message ?? 'فشل التحميل'))
+      .catch(e => toast.error(extractErrorMessage(e) ?? 'فشل التحميل'))
       .finally(() => setLoading(false))
   }, [open])
 
@@ -89,7 +93,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
           await markAsImported(entry.firebaseId, storageName)
         }
       } catch (e) {
-        errors.push(`${entry.description} — ${(e as Error).message}`)
+        errors.push(`${entry.description} — ${extractErrorMessage(e) ?? (e as Error).message}`)
       }
       setProgress(Math.round(((i + 1) / entries.length) * 100))
     }
@@ -108,7 +112,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
       await deleteEntry(entry.firebaseId, storageName)
       setEntries(prev => prev.filter(e => e.firebaseId !== entry.firebaseId))
     } catch (e) {
-      toast.error((e as Error).message ?? 'فشل الحذف')
+      toast.error(extractErrorMessage(e) ?? 'فشل الحذف')
     } finally {
       setDeleting(null)
     }
@@ -122,7 +126,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
       await Promise.all(entries.map(e => deleteEntry(e.firebaseId, storageName)))
       setEntries([])
     } catch (e) {
-      toast.error((e as Error).message ?? 'فشل الحذف')
+      toast.error(extractErrorMessage(e) ?? 'فشل الحذف')
     } finally {
       setDeleting(null)
     }
@@ -147,6 +151,11 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
         <Flex align="center" gap={8}>
           <CloudDownload size={18} color="var(--ant-color-primary)" />
           استيراد القيود من Firebase
+          {storageName && (
+            <Tag color="default" style={{ fontWeight: 400, fontFamily: 'monospace' }}>
+              finance/{storageName}/journal_entries
+            </Tag>
+          )}
         </Flex>
       }
       footer={

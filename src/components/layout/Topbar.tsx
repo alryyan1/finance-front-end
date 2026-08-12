@@ -7,7 +7,7 @@ import { useFiscalYears } from '@/context/FiscalYearsContext'
 import { Avatar, Button, Dropdown, Flex, Tooltip, Typography, type MenuProps } from 'antd'
 import {
   Calendar, CalendarClock, CalendarDays, ChevronDown, ListPlus, LockOpen, Lock, LogOut, MessageCircle, Moon,
-  Plus, Settings, SlidersHorizontal, Sun, TriangleAlert, UserCog,
+  Plus, Settings, ShieldCheck, SlidersHorizontal, Sun, TriangleAlert, UserCog,
 } from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
 
@@ -56,7 +56,7 @@ function VDivider({ className }: { className?: string }) {
 }
 
 export default function Topbar() {
-  const { user, logout } = useAuth()
+  const { user, logout, can } = useAuth()
   const { mode, toggleMode } = useThemeMode()
   const navigate = useNavigate()
   const { years } = useFiscalYears()
@@ -219,6 +219,17 @@ export default function Topbar() {
               icon={<UserCog size={18} />}
             />
           </Tooltip>
+
+          {/* Roles & permissions */}
+          {can('roles.view') && (
+            <Tooltip title="الأدوار والصلاحيات">
+              <Button
+                type="text" shape="circle" size="middle"
+                onClick={() => navigate('/roles')}
+                icon={<ShieldCheck size={18} />}
+              />
+            </Tooltip>
+          )}
 
           {/* Settings */}
           <Dropdown menu={{ items: settingsMenuItems }} trigger={['click']} placement="bottomLeft">

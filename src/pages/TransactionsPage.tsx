@@ -107,8 +107,12 @@ export default function TransactionsPage() {
 
   const handleDelete = async (entry: JournalEntry) => {
     if (!confirm(`حذف القيد: ${entry.description}؟`)) return
-    await journalApi.remove(entry.id)
-    setEntries(prev => prev.filter(e => e.id !== entry.id))
+    try {
+      await journalApi.remove(entry.id)
+      setEntries(prev => prev.filter(e => e.id !== entry.id))
+    } catch {
+      // error toast is shown globally by the axios response interceptor
+    }
   }
 
   const handleTogglePost = async (entry: JournalEntry) => {
@@ -116,6 +120,8 @@ export default function TransactionsPage() {
     try {
       const updated = await journalApi.togglePost(entry.id)
       setEntries(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e))
+    } catch {
+      // error toast is shown globally by the axios response interceptor
     } finally {
       setTogglingId(null)
     }
@@ -128,6 +134,8 @@ export default function TransactionsPage() {
     try {
       await journalApi.reverse(confirmEntry.id)
       load()
+    } catch {
+      // error toast is shown globally by the axios response interceptor
     } finally {
       setReversing(null)
     }
