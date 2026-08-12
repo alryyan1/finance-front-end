@@ -36,7 +36,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'transactions.delete': 'حذف', 'transactions.post': 'ترحيل', 'transactions.reverse': 'عكس القيد',
   'transactions.export': 'تصدير',
   'petty-cash.view': 'عرض', 'petty-cash.create': 'إنشاء', 'petty-cash.edit': 'تعديل', 'petty-cash.delete': 'حذف',
-  'petty-cash.approve': 'موافقة المدير', 'petty-cash.reconcile': 'تسوية',
+  'petty-cash.approve': 'موافقة المدير', 'petty-cash.approve.auditor': 'موافقة المدقق', 'petty-cash.reconcile': 'تسوية',
   'petty-cash.import-whatsapp': 'استيراد من واتساب', 'petty-cash.document.upload': 'رفع مستند',
   'petty-cash.document.delete': 'حذف مستند', 'petty-cash.export': 'تصدير',
   'parties.view': 'عرض', 'parties.create': 'إنشاء', 'parties.edit': 'تعديل', 'parties.delete': 'حذف',

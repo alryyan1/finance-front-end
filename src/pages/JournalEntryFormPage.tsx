@@ -189,6 +189,12 @@ export default function JournalEntryFormPage() {
     if (!isBalanced) { toast.error('مجموع المدين يجب أن يساوي مجموع الدائن'); return }
     if (lines.some(l => !l.account)) { toast.error('يجب اختيار الحساب لكل سطر'); return }
 
+    const usedAccountIds = lines.map(l => l.account!.id)
+    if (new Set(usedAccountIds).size !== usedAccountIds.length) {
+      toast.error('لا يمكن اختيار نفس الحساب أكثر من مرة في القيد')
+      return
+    }
+
     const payload = {
       date,
       reference: reference.trim() || null,
@@ -326,6 +332,9 @@ export default function JournalEntryFormPage() {
                       ? partyOptions.find(o => o.value === line.party!.id) ?? null
                       : null
                     const lineBalance = line.account ? balances[line.account.id] : undefined
+                    const usedAccountIdsElsewhere = new Set(
+                      lines.filter((l, idx) => idx !== i && l.account).map(l => l.account!.id)
+                    )
 
                     return (
                       <TableRow key={i}>
@@ -337,10 +346,14 @@ export default function JournalEntryFormPage() {
                             filterOptions={accountFilterOptions}
                             getOptionLabel={o => o.label}
                             isOptionEqualToValue={(o, v) => o.value === v.value}
-                            getOptionDisabled={o => o.isParent}
+                            getOptionDisabled={o => o.isParent || usedAccountIdsElsewhere.has(o.value)}
                             noOptionsText="لا توجد نتائج"
                             onChange={(_, v) => {
                               const account = v ? accounts.find(a => a.id === v.value) ?? null : null
+                              if (account && usedAccountIdsElsewhere.has(account.id)) {
+                                toast.error('لا يمكن اختيار نفس الحساب أكثر من مرة في القيد')
+                                return
+                              }
                               updateLine(i, { account })
                               if (account) {
                                 const target = i === 0 ? debitRefs : creditRefs

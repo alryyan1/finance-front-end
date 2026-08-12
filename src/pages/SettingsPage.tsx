@@ -98,6 +98,7 @@ export default function SettingsPage() {
   const [pettyCashApproval, setPettyCashApproval]  = useState<PettyCashApprovalSettings>({
     petty_cash_manager_user_id: null,
     petty_cash_manager_whatsapp_phone: '',
+    petty_cash_auditor_user_id: null,
     petty_cash_notify_on_create: true,
     firebase_collection_name: '',
   })
@@ -552,6 +553,24 @@ export default function SettingsPage() {
                     onChange={e => setPettyCashApproval(p => ({ ...p, petty_cash_manager_whatsapp_phone: e.target.value }))}
                   />
                 </Flex>
+              </div>
+
+              {/* Auditor */}
+              <div style={{ maxWidth: 420, padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
+                <Flex align="center" gap={8} style={{ marginBottom: 16 }}>
+                  <ClipboardCheck size={15} color={SECTION_COLOR.approval} />
+                  <Text style={{ fontWeight: 700 }}>المدقق المعتمِد</Text>
+                </Flex>
+                <Select
+                  showSearch
+                  placeholder="المستخدم"
+                  style={{ width: '100%' }}
+                  value={pettyCashApproval.petty_cash_auditor_user_id ?? undefined}
+                  onChange={v => setPettyCashApproval(p => ({ ...p, petty_cash_auditor_user_id: v ?? null }))}
+                  allowClear
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={users.map(u => ({ value: u.id, label: u.name }))}
+                />
               </div>
 
               {/* WhatsApp auto-notify on creation */}

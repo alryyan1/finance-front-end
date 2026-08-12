@@ -12,6 +12,7 @@ import TrialBalancePage from '@/pages/TrialBalancePage'
 import LedgerPage from '@/pages/LedgerPage'
 import IncomeStatementPage from '@/pages/IncomeStatementPage'
 import BalanceSheetPage from '@/pages/BalanceSheetPage'
+import BalanceSheetHorizontalPage from '@/pages/BalanceSheetHorizontalPage'
 import StatementOfEquityPage from '@/pages/StatementOfEquityPage'
 import SettingsPage from '@/pages/SettingsPage'
 import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/reports/ledger" element={<LedgerPage />} />
             <Route path="/reports/income-statement" element={<IncomeStatementPage />} />
             <Route path="/reports/balance-sheet" element={<BalanceSheetPage />} />
+            <Route path="/reports/balance-sheet/horizontal" element={<BalanceSheetHorizontalPage />} />
             <Route path="/reports/statement-of-equity" element={<StatementOfEquityPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/opening-balances" element={<OpeningBalancesPage />} />

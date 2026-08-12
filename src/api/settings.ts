@@ -95,6 +95,7 @@ export const journalSettingsApi = {
 export interface PettyCashApprovalSettings {
   petty_cash_manager_user_id: number | null
   petty_cash_manager_whatsapp_phone: string
+  petty_cash_auditor_user_id: number | null
   petty_cash_notify_on_create: boolean
   firebase_collection_name: string
 }
@@ -103,6 +104,7 @@ function toPettyCashApprovalSettings(data: Record<string, unknown>): PettyCashAp
   return {
     petty_cash_manager_user_id: toIntOrNull(data.petty_cash_manager_user_id),
     petty_cash_manager_whatsapp_phone: String(data.petty_cash_manager_whatsapp_phone ?? ''),
+    petty_cash_auditor_user_id: toIntOrNull(data.petty_cash_auditor_user_id),
     petty_cash_notify_on_create: Boolean(data.petty_cash_notify_on_create ?? true),
     firebase_collection_name: String(data.firebase_collection_name ?? ''),
   }

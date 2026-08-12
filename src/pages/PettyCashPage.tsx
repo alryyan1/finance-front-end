@@ -124,16 +124,19 @@ export default function PettyCashPage() {
   const [loading, setLoading]         = useState(true)
 
   // Approval designation (who is allowed to approve)
-  const [approvalSettings, setApprovalSettings] = useState<{ managerUserId: number | null }>({
+  const [approvalSettings, setApprovalSettings] = useState<{ managerUserId: number | null; auditorUserId: number | null }>({
     managerUserId: null,
+    auditorUserId: null,
   })
   // Firestore tenant collection petty cash approvals are mirrored under — falls back to
   // the same default ("jawda") the backend uses when the setting hasn't been configured.
   const [firestoreCollectionName, setFirestoreCollectionName] = useState<string | null>(null)
   const isManager = !!user && user.id === approvalSettings.managerUserId
+  const isAuditor = !!user && user.id === approvalSettings.auditorUserId
 
   // Approve / upload-document in-flight state
   const [approving, setApproving]           = useState<number | null>(null)
+  const [approvingAuditor, setApprovingAuditor] = useState<number | null>(null)
   const [uploadingDocFor, setUploadingDocFor] = useState<number | null>(null)
   const [deletingDocFor, setDeletingDocFor]   = useState<number | null>(null)
   const [uploadTarget, setUploadTarget]       = useState<PettyCashTransaction | null>(null)
@@ -247,6 +250,7 @@ export default function PettyCashPage() {
     pettyCashSettingsApi.get().then(s => {
       setApprovalSettings({
         managerUserId: s.petty_cash_manager_user_id,
+        auditorUserId: s.petty_cash_auditor_user_id,
       })
       setFirestoreCollectionName(s.firebase_collection_name || 'jawda')
     })
@@ -547,6 +551,19 @@ export default function PettyCashPage() {
     }
   }
 
+  const handleApproveAuditor = async (t: PettyCashTransaction) => {
+    setApprovingAuditor(t.id)
+    try {
+      await pettyCashApi.approveByAuditor(t.id)
+      loadTransactions()
+      toast.success('تم تدقيق المصروف')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر تدقيق المصروف')
+    } finally {
+      setApprovingAuditor(null)
+    }
+  }
+
   const columns: ColumnsType<PettyCashTransaction> = [
     {
       title: '#', width: 60, align: 'center',
@@ -644,6 +661,29 @@ export default function PettyCashPage() {
                 disabled={approving === t.id || !!t.manager_approved_at}
               >
                 {approving === t.id ? <Spin size="small" /> : 'اعتماد'}
+              </Button>
+            </Tooltip>
+          )}
+        </Flex>
+      ),
+    },
+    {
+      title: 'التدقيق', width: 100, align: 'center',
+      render: (_: unknown, t) => t.type === 'expense' && (
+        <Flex align="center" justify="center" gap={4}>
+          <Tooltip title={t.auditor_approved_at ? 'تم التدقيق' : 'بانتظار تدقيق المصروف'}>
+            <span style={{
+              width: 9, height: 9, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
+              background: t.auditor_approved_at ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
+            }} />
+          </Tooltip>
+          {isAuditor && (
+            <Tooltip title={t.auditor_approved_at ? 'تم التدقيق' : 'تدقيق المصروف'}>
+              <Button size="small"
+                onClick={() => handleApproveAuditor(t)}
+                disabled={approvingAuditor === t.id || !!t.auditor_approved_at}
+              >
+                {approvingAuditor === t.id ? <Spin size="small" /> : 'تدقيق'}
               </Button>
             </Tooltip>
           )}

@@ -6,7 +6,7 @@ import '@univerjs/preset-sheets-core/lib/index.css'
 import { Flex, Spin, Typography } from 'antd'
 import { pettyCashApi, type PettyCashTransaction, type TransactionType } from '@/api/pettyCash'
 
-const HEADERS = ['التاريخ', 'النوع', 'حالة الاعتماد', 'تاريخ اعتماد المدير', 'المستفيد', 'الحساب المقابل', 'المبلغ', 'البيان']
+const HEADERS = ['التاريخ', 'النوع', 'حالة الاعتماد', 'تاريخ اعتماد المدير', 'تاريخ التدقيق', 'المستفيد', 'الحساب المقابل', 'المبلغ', 'البيان']
 
 const fmtDateTime = (v: string | null | undefined) =>
   v ? new Date(v).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : ''
@@ -27,6 +27,7 @@ function buildSheetData(transactions: PettyCashTransaction[]) {
       typeLabel(t),
       statusLabel(t),
       fmtDateTime(t.manager_approved_at),
+      fmtDateTime(t.auditor_approved_at),
       t.beneficiary_name ?? '',
       t.contra_account.name,
       Number(t.amount),

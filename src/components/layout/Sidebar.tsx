@@ -18,6 +18,7 @@ import {
   ChevronDown as ChevronDownIcon,
   Building2 as Building2Icon,
   Sparkles as SparklesIcon,
+  GitCompareArrows as GitCompareArrowsIcon,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -76,6 +77,7 @@ const navGroups: NavGroup[] = [
           { to: '/reports/ledger',           label: 'كشف حساب',           icon: BookOpenIcon },
           { to: '/reports/income-statement', label: 'قائمة الدخل',        icon: TrendingUpIcon },
           { to: '/reports/balance-sheet',    label: 'الميزانية العمومية', icon: LandmarkIcon },
+          { to: '/reports/balance-sheet/horizontal', label: 'التحليل الأفقي', icon: GitCompareArrowsIcon },
           { to: '/reports/statement-of-equity', label: 'قائمة حقوق الملكية', icon: CoinsIcon },
         ],
       },
