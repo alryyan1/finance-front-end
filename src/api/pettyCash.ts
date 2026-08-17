@@ -39,6 +39,7 @@ export interface PettyCashTransaction {
   journal_entry_id: number | null
   manager_approved_at: string | null
   auditor_approved_at: string | null
+  auditor_comment: string | null
 }
 
 export interface ExpensePayload {
@@ -140,6 +141,9 @@ export const pettyCashApi = {
 
   approveByAuditor: (id: number): Promise<PettyCashTransaction> =>
     api.post<PettyCashTransaction>(`/api/petty-cash/transactions/${id}/approve/auditor`).then(r => r.data),
+
+  updateAuditorComment: (id: number, comment: string | null): Promise<PettyCashTransaction> =>
+    api.post<PettyCashTransaction>(`/api/petty-cash/transactions/${id}/auditor-comment`, { auditor_comment: comment }).then(r => r.data),
 
   reconcileTransaction: (id: number): Promise<PettyCashTransaction> =>
     api.post<PettyCashTransaction>(`/api/petty-cash/transactions/${id}/reconcile`).then(r => r.data),

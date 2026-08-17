@@ -12,7 +12,7 @@ import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
   Banknote, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
-  Landmark, MessageCircle, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
+  Landmark, MessageCircle, MessageSquareText, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
@@ -137,6 +137,11 @@ export default function PettyCashPage() {
   // Approve / upload-document in-flight state
   const [approving, setApproving]           = useState<number | null>(null)
   const [approvingAuditor, setApprovingAuditor] = useState<number | null>(null)
+
+  // Auditor comment dialog
+  const [auditorCommentTarget, setAuditorCommentTarget] = useState<PettyCashTransaction | null>(null)
+  const [auditorCommentValue, setAuditorCommentValue]   = useState('')
+  const [savingAuditorComment, setSavingAuditorComment] = useState(false)
   const [uploadingDocFor, setUploadingDocFor] = useState<number | null>(null)
   const [deletingDocFor, setDeletingDocFor]   = useState<number | null>(null)
   const [uploadTarget, setUploadTarget]       = useState<PettyCashTransaction | null>(null)
@@ -564,6 +569,26 @@ export default function PettyCashPage() {
     }
   }
 
+  const handleOpenAuditorComment = (t: PettyCashTransaction) => {
+    setAuditorCommentTarget(t)
+    setAuditorCommentValue(t.auditor_comment ?? '')
+  }
+
+  const handleSaveAuditorComment = async () => {
+    if (!auditorCommentTarget) return
+    setSavingAuditorComment(true)
+    try {
+      await pettyCashApi.updateAuditorComment(auditorCommentTarget.id, auditorCommentValue.trim() || null)
+      loadTransactions()
+      toast.success('تم حفظ ملاحظة التدقيق')
+      setAuditorCommentTarget(null)
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ ملاحظة التدقيق')
+    } finally {
+      setSavingAuditorComment(false)
+    }
+  }
+
   const columns: ColumnsType<PettyCashTransaction> = [
     {
       title: '#', width: 60, align: 'center',
@@ -668,7 +693,7 @@ export default function PettyCashPage() {
       ),
     },
     {
-      title: 'التدقيق', width: 100, align: 'center',
+      title: 'التدقيق', width: 140, align: 'center',
       render: (_: unknown, t) => t.type === 'expense' && (
         <Flex align="center" justify="center" gap={4}>
           <Tooltip title={t.auditor_approved_at ? 'تم التدقيق' : 'بانتظار تدقيق المصروف'}>
@@ -685,6 +710,19 @@ export default function PettyCashPage() {
               >
                 {approvingAuditor === t.id ? <Spin size="small" /> : 'تدقيق'}
               </Button>
+            </Tooltip>
+          )}
+          {isAuditor ? (
+            <Tooltip title={t.auditor_comment ? `ملاحظة التدقيق: ${t.auditor_comment}` : 'إضافة ملاحظة تدقيق'}>
+              <Button
+                type="text" shape="circle" size="small"
+                icon={<MessageSquareText size={14} color={t.auditor_comment ? 'var(--ant-color-primary)' : '#999'} />}
+                onClick={() => handleOpenAuditorComment(t)}
+              />
+            </Tooltip>
+          ) : t.auditor_comment && (
+            <Tooltip title={`ملاحظة التدقيق: ${t.auditor_comment}`}>
+              <MessageSquareText size={14} color="var(--ant-color-primary)" />
             </Tooltip>
           )}
         </Flex>
@@ -1149,6 +1187,37 @@ export default function PettyCashPage() {
             </Flex>
           ))}
         </Flex>
+      </Modal>
+
+      {/* ── Auditor Comment Dialog ── */}
+      <Modal
+        open={!!auditorCommentTarget}
+        onCancel={() => setAuditorCommentTarget(null)}
+        width={420}
+        title={<Flex align="center" gap={8}><MessageSquareText size={18} color="var(--ant-color-primary)" /> ملاحظة التدقيق</Flex>}
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setAuditorCommentTarget(null)}>إلغاء</Button>
+            <Button type="primary" onClick={handleSaveAuditorComment} disabled={savingAuditorComment} icon={savingAuditorComment ? <Spin size="small" /> : undefined}>
+              حفظ
+            </Button>
+          </Flex>
+        }
+      >
+        {auditorCommentTarget && (
+          <div style={{ marginBottom: 12, padding: 12, background: 'var(--ant-color-fill-alter)', borderRadius: 6 }}>
+            <Text style={{ fontWeight: 600 }}>
+              {auditorCommentTarget.type === 'expense' ? 'مصروف' : 'تغذية'} #{auditorCommentTarget.id} — {numFmt(auditorCommentTarget.amount)}
+            </Text>
+          </div>
+        )}
+        <Input.TextArea
+          rows={4}
+          placeholder="أضف ملاحظة حول تدقيق هذا المصروف..."
+          value={auditorCommentValue}
+          onChange={e => setAuditorCommentValue(e.target.value)}
+          maxLength={1000}
+        />
       </Modal>
     </div>
   )

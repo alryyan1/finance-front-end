@@ -16,7 +16,7 @@ const { Title, Text } = Typography
 const ROLE_LABELS: Record<string, string> = {
   admin:      'مدير النظام',
   accountant: 'محاسب',
-  viewer:     'مشاهد',
+  viewer:     'مراجع خارجي',
 }
 const ROLE_COLORS: Record<string, string> = {
   admin:      'error',
