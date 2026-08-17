@@ -169,3 +169,16 @@ export const salesBridgeSettingsApi = {
   update: (data: SalesBridgeAccountSettings): Promise<SalesBridgeAccountSettings> =>
     api.put<Record<string, unknown>>('/api/settings', data).then(r => toSalesBridgeAccountSettings(r.data)),
 }
+
+// ── Change own password ─────────────────────────────────────────────────────
+
+export interface ChangePasswordPayload {
+  current_password: string
+  password: string
+  password_confirmation: string
+}
+
+export const userPasswordApi = {
+  update: (data: ChangePasswordPayload): Promise<{ message: string }> =>
+    api.put<{ message: string }>('/api/user/password', data).then(d),
+}

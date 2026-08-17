@@ -6,13 +6,13 @@ import {
 import HelpButton from '@/components/common/HelpButton'
 import { useToast } from '@/lib/toast'
 import {
-  AlignLeft, AlignRight, Building2, Copy, Image as ImageIcon, KeyRound, Link as LinkIcon,
-  LayoutTemplate, MessageCircle, Plus, Save, Settings, Trash2, User, PiggyBank, ClipboardCheck,
+  AlignLeft, AlignRight, Building2, Copy, Eye, EyeOff, Image as ImageIcon, KeyRound, Link as LinkIcon,
+  LayoutTemplate, Lock, MessageCircle, Plus, Save, Settings, Trash2, User, PiggyBank, ClipboardCheck,
   ShoppingCart,
 } from 'lucide-react'
 import api from '@/lib/axios'
 import {
-  settingsApi, pettyCashSettingsApi, pettyCashAccountSettingsApi, salesBridgeSettingsApi,
+  settingsApi, pettyCashSettingsApi, pettyCashAccountSettingsApi, salesBridgeSettingsApi, userPasswordApi,
   type CompanySettings, type LogoPosition, type PettyCashApprovalSettings, type SalesBridgeAccountSettings,
 } from '@/api/settings'
 import { accountsApi } from '@/api/accounts'
@@ -44,6 +44,7 @@ const TABS = [
   { key: 'approval',    label: 'اعتماد النثريات',  icon: <ClipboardCheck size={15} /> },
   { key: 'sales-bridge', label: 'ربط المبيعات',     icon: <ShoppingCart size={15} /> },
   { key: 'tokens',      label: 'رموز API',         icon: <KeyRound size={15} /> },
+  { key: 'password',    label: 'كلمة المرور',      icon: <Lock size={15} /> },
 ] as const
 
 /** Accent color per settings section — mirrors the palette used on the dashboard stat cards. */
@@ -54,6 +55,7 @@ const SECTION_COLOR = {
   approval: '#0891b2',
   salesBridge: '#be185d',
   tokens:   '#d97706',
+  password: '#dc2626',
 } as const
 
 interface SectionHeaderProps {
@@ -744,6 +746,9 @@ export default function SettingsPage() {
 
       {/* API Tokens */}
       {activeTab === 'tokens' && <ApiTokensSection />}
+
+      {/* Change password */}
+      {activeTab === 'password' && <ChangePasswordSection />}
     </div>
   )
 }
@@ -879,6 +884,97 @@ function ApiTokensSection() {
         />
       </Modal>
     </>
+  )
+}
+
+// ── Change password section ────────────────────────────────────────────────
+
+function ChangePasswordSection() {
+  const toast = useToast()
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [password, setPassword]               = useState('')
+  const [passwordConfirmation, setPasswordConfirmation] = useState('')
+  const [showPwd, setShowPwd]     = useState(false)
+  const [saving, setSaving]       = useState(false)
+
+  const isFormValid = currentPassword.trim() && password.length >= 8 && password === passwordConfirmation
+
+  const handleSubmit = async () => {
+    if (!isFormValid) return
+    setSaving(true)
+    try {
+      await userPasswordApi.update({
+        current_password: currentPassword,
+        password,
+        password_confirmation: passwordConfirmation,
+      })
+      toast.success('تم تغيير كلمة المرور بنجاح')
+      setCurrentPassword(''); setPassword(''); setPasswordConfirmation('')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.errors?.current_password?.[0] ?? e?.response?.data?.message ?? 'تعذّر تغيير كلمة المرور')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ padding: 24, borderRadius: 12, border: '1px solid var(--ant-color-border-secondary)' }}>
+      <SectionHeader
+        icon={<Lock size={20} />}
+        color={SECTION_COLOR.password}
+        title="تغيير كلمة المرور"
+        subtitle="أدخل كلمة المرور الحالية ثم كلمة المرور الجديدة"
+      />
+
+      <Flex vertical gap={20} style={{ maxWidth: 420 }}>
+        <div>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>كلمة المرور الحالية</Text>
+          <Input
+            type={showPwd ? 'text' : 'password'}
+            value={currentPassword}
+            onChange={e => setCurrentPassword(e.target.value)}
+            suffix={
+              <Button type="text" size="small" icon={showPwd ? <EyeOff size={16} /> : <Eye size={16} />} onClick={() => setShowPwd(v => !v)} />
+            }
+          />
+        </div>
+        <div>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>كلمة المرور الجديدة</Text>
+          <Input
+            type={showPwd ? 'text' : 'password'}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="8 أحرف على الأقل"
+          />
+        </div>
+        <div>
+          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>تأكيد كلمة المرور الجديدة</Text>
+          <Input
+            type={showPwd ? 'text' : 'password'}
+            value={passwordConfirmation}
+            onChange={e => setPasswordConfirmation(e.target.value)}
+            status={passwordConfirmation && password !== passwordConfirmation ? 'error' : undefined}
+            onPressEnter={handleSubmit}
+          />
+          {passwordConfirmation && password !== passwordConfirmation && (
+            <Text type="danger" style={{ fontSize: 12 }}>كلمتا المرور غير متطابقتين</Text>
+          )}
+        </div>
+
+        <Divider style={{ margin: 0 }} />
+
+        <Flex justify="flex-end">
+          <Button
+            type="primary"
+            icon={saving ? <Spin size="small" /> : <Save size={16} />}
+            onClick={handleSubmit}
+            disabled={!isFormValid || saving}
+          >
+            حفظ كلمة المرور
+          </Button>
+        </Flex>
+      </Flex>
+    </div>
   )
 }
 
