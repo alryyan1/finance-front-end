@@ -556,17 +556,24 @@ export default function PettyCashPage() {
     }
   }
 
-  const handleApproveAuditor = async (t: PettyCashTransaction) => {
-    setApprovingAuditor(t.id)
-    try {
-      await pettyCashApi.approveByAuditor(t.id)
-      loadTransactions()
-      toast.success('تم تدقيق المصروف')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? 'تعذّر تدقيق المصروف')
-    } finally {
-      setApprovingAuditor(null)
-    }
+  const handleApproveAuditor = (t: PettyCashTransaction) => {
+    Modal.confirm({
+      title: 'تدقيق المصروف',
+      content: `سيتم تسجيل تدقيقك لهذا المصروف بمبلغ ${numFmt(t.amount)}. هل أنت متأكد؟`,
+      okText: 'تدقيق', cancelText: 'إلغاء',
+      onOk: async () => {
+        setApprovingAuditor(t.id)
+        try {
+          await pettyCashApi.approveByAuditor(t.id)
+          loadTransactions()
+          toast.success('تم تدقيق المصروف')
+        } catch (e: any) {
+          toast.error(e?.response?.data?.message ?? 'تعذّر تدقيق المصروف')
+        } finally {
+          setApprovingAuditor(null)
+        }
+      },
+    })
   }
 
   const handleOpenAuditorComment = (t: PettyCashTransaction) => {
