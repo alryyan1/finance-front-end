@@ -11,7 +11,7 @@ import DateInput from '@/components/common/DateInput'
 import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
-  Banknote, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
+  ArrowDownToLine, Banknote, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
   Landmark, MessageCircle, MessageSquareText, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -49,6 +49,17 @@ const emptyExpenseForm = () => ({
   compound:           false,
   lines:              [emptyCompoundLine(), emptyCompoundLine()],
   creditLines:        [emptyCreditLine()],
+})
+
+const emptyReceiptForm = () => ({
+  date:               today(),
+  amount:             '',
+  beneficiary_name:   '',
+  party:              null as Party | null,
+  contra_account_id:  null as Account | null,
+  source_account_id:  null as Account | null,
+  description:        '',
+  document:           null as File | null,
 })
 
 const ROLE_LABEL: Record<NotificationResult['role'], string> = { manager: 'المدير' }
@@ -173,6 +184,14 @@ export default function PettyCashPage() {
   const expenseDocInputRef = useRef<HTMLInputElement>(null)
   const expenseAmountRef = useRef<GetRef<typeof InputNumber>>(null)
   const expenseDescriptionRef = useRef<GetRef<typeof Input.TextArea>>(null)
+
+  // Receipt (قبض) dialog
+  const [receiptOpen, setReceiptOpen]     = useState(false)
+  const [receiptForm, setReceiptForm]     = useState(emptyReceiptForm())
+  const [creatingReceipt, setCreatingReceipt] = useState(false)
+  const receiptDocInputRef = useRef<HTMLInputElement>(null)
+  const receiptAmountRef = useRef<GetRef<typeof InputNumber>>(null)
+  const receiptDescriptionRef = useRef<GetRef<typeof Input.TextArea>>(null)
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<PettyCashTransaction | null>(null)
@@ -338,7 +357,7 @@ export default function PettyCashPage() {
     return () => unsubscribe()
   }, [firestoreCollectionName])
 
-  const expenseAccounts  = accounts.filter(a => a.type === 'expense')
+  const contraAccounts  = accounts
   const hasSourceAccount = !!bankAccount || !!cashAccount
 
   const openExpenseDialog = () => {
@@ -348,6 +367,11 @@ export default function PettyCashPage() {
       creditLines: [{ source_account: bankAccount ?? cashAccount, amount: '' }],
     })
     setExpenseOpen(true)
+  }
+
+  const openReceiptDialog = () => {
+    setReceiptForm({ ...emptyReceiptForm(), source_account_id: bankAccount ?? cashAccount })
+    setReceiptOpen(true)
   }
 
   // "+" opens the new-expense dialog, unless the user is already typing somewhere
@@ -403,6 +427,34 @@ export default function PettyCashPage() {
       toast.error(e?.response?.data?.message ?? 'تعذّر حفظ المصروف')
     } finally {
       setCreatingExpense(false)
+    }
+  }
+
+  const receiptFormValid = !!receiptForm.amount && !!receiptForm.contra_account_id && !!receiptForm.source_account_id
+
+  const handleCreateReceipt = async () => {
+    if (!receiptFormValid) return
+    setCreatingReceipt(true)
+    try {
+      await pettyCashApi.createReceipt({
+        date: receiptForm.date,
+        amount: receiptForm.amount,
+        beneficiary_name: receiptForm.beneficiary_name || undefined,
+        party_id: receiptForm.party?.id,
+        description: receiptForm.description || undefined,
+        document: receiptForm.document,
+        contra_account_id: receiptForm.contra_account_id!.id,
+        source_account_id: receiptForm.source_account_id!.id,
+      })
+      setReceiptOpen(false)
+      setReceiptForm(emptyReceiptForm())
+      if (page === 1) loadTransactions()
+      else setPage(1)
+      toast.success('تم حفظ إذن القبض')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ إذن القبض')
+    } finally {
+      setCreatingReceipt(false)
     }
   }
 
@@ -809,7 +861,10 @@ export default function PettyCashPage() {
             </div>
           )}
           <Button type="primary" danger size="small" icon={<Banknote size={15} />} onClick={openExpenseDialog}>
-                مصروف جديد
+                إذن صرف جديد
+              </Button>
+          <Button type="primary" size="small" style={{ background: 'var(--ant-color-success)' }} icon={<ArrowDownToLine size={15} />} onClick={openReceiptDialog}>
+                إذن قبض جديد
               </Button>
           <Badge count={pendingWhatsAppCount} size="small" offset={[-4, 4]}>
             <Button
@@ -1019,11 +1074,11 @@ export default function PettyCashPage() {
                         value={line.contra_account?.id}
                         onChange={v => setExpenseForm(f => ({
                           ...f,
-                          lines: f.lines.map((l, idx) => idx === i ? { ...l, contra_account: expenseAccounts.find(a => a.id === v) ?? null } : l),
+                          lines: f.lines.map((l, idx) => idx === i ? { ...l, contra_account: contraAccounts.find(a => a.id === v) ?? null } : l),
                         }))}
                         notFoundContent="لا توجد حسابات"
                         filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-                        options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                        options={contraAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
                       />
                       <InputNumber
                         controls={false}
@@ -1056,12 +1111,12 @@ export default function PettyCashPage() {
                   style={{ width: '100%' }}
                   value={expenseForm.contra_account_id?.id}
                   onChange={v => {
-                    setExpenseForm(f => ({ ...f, contra_account_id: expenseAccounts.find(a => a.id === v) ?? null }))
+                    setExpenseForm(f => ({ ...f, contra_account_id: contraAccounts.find(a => a.id === v) ?? null }))
                     setTimeout(() => expenseDescriptionRef.current?.focus(), 0)
                   }}
                   notFoundContent="لا توجد حسابات"
                   filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-                  options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                  options={contraAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
                 />
               )}
             </Col>
@@ -1132,6 +1187,134 @@ export default function PettyCashPage() {
                 </Text>
                 <input ref={expenseDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
                   onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
+              </div>
+            </Col>
+          </Row>
+        </div>
+      </Modal>
+
+      {/* ── Receipt Dialog ── */}
+      <Modal
+        open={receiptOpen}
+        onCancel={() => setReceiptOpen(false)}
+        width={640}
+        centered
+        styles={{ content: { borderRadius: 16, padding: 0, overflow: 'hidden' }, header: { padding: '14px 18px 0', margin: 0 }, body: { padding: '10px 18px 0' }, footer: { padding: '10px 18px 14px', margin: 0 } }}
+        title={
+          <Flex align="center" justify="space-between" gap={10} style={{ paddingInlineEnd: 28 }}>
+            <Flex align="center" gap={8}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                background: 'var(--ant-color-success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <ArrowDownToLine size={16} color="var(--ant-color-success)" />
+              </div>
+              <Text strong style={{ fontSize: 14 }}>إذن قبض جديد</Text>
+            </Flex>
+            <DateInput
+              value={receiptForm.date}
+              onChange={e => setReceiptForm(f => ({ ...f, date: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); receiptAmountRef.current?.focus() } }}
+              style={{ width: 130 }}
+            />
+          </Flex>
+        }
+        footer={
+          <Flex justify="flex-end" gap={8}>
+            <Button onClick={() => setReceiptOpen(false)}>إلغاء</Button>
+            <Button type="primary" style={{ background: 'var(--ant-color-success)' }} onClick={handleCreateReceipt}
+              disabled={creatingReceipt || !receiptFormValid}
+              icon={creatingReceipt ? <Spin size="small" /> : <Plus size={16} />}>
+              حفظ إذن القبض
+            </Button>
+          </Flex>
+        }
+      >
+        <div onKeyDown={focusNextField}>
+          {/* Amount hero */}
+          <div style={{
+            background: 'linear-gradient(180deg, var(--ant-color-success-bg) 0%, var(--ant-color-bg-container) 100%)',
+            borderRadius: 12,
+            padding: '12px 16px',
+            marginBottom: 12,
+            textAlign: 'center',
+          }}>
+            <Text style={{ fontSize: 11, letterSpacing: 0.3, fontWeight: 700, color: '#000' }}>المبلغ</Text>
+            <div style={{
+              margin: '2px 0 8px', direction: 'ltr', lineHeight: 1,
+              fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+              color: receiptForm.amount ? 'var(--ant-color-success)' : '#000',
+            }}>
+              {numFmt(receiptForm.amount || 0)}
+            </div>
+            <div>
+              <InputNumber
+                ref={receiptAmountRef}
+                autoFocus controls={false}
+                value={receiptForm.amount === '' ? null : Number(receiptForm.amount)}
+                onChange={val => setReceiptForm(f => ({ ...f, amount: val == null ? '' : String(val) }))}
+              />
+            </div>
+          </div>
+
+          <Row gutter={[12, 10]}>
+            <Col span={24}>
+              <FieldLabel icon={UserRound}>استلمت من</FieldLabel>
+              <Input value={receiptForm.beneficiary_name} onChange={e => setReceiptForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={UserRound}>الطرف (اختياري)</FieldLabel>
+              <Select
+                allowClear
+                showSearch
+                style={{ width: '100%' }}
+                placeholder="اختر عميل / مورد"
+                value={receiptForm.party?.id}
+                onChange={v => setReceiptForm(f => ({ ...f, party: parties.find(p => p.id === v) ?? null }))}
+                options={parties.map(p => ({ value: p.id, label: p.name }))}
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={Landmark}>من حساب</FieldLabel>
+              <Select
+                showSearch
+                style={{ width: '100%' }}
+                value={receiptForm.contra_account_id?.id}
+                onChange={v => {
+                  setReceiptForm(f => ({ ...f, contra_account_id: contraAccounts.find(a => a.id === v) ?? null }))
+                  setTimeout(() => receiptDescriptionRef.current?.focus(), 0)
+                }}
+                notFoundContent="لا توجد حسابات"
+                filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                options={contraAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+              />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={Landmark}>الى حساب</FieldLabel>
+              <Segmented
+                block
+                value={receiptForm.source_account_id?.id}
+                onChange={v => setReceiptForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
+                options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+              />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={FileText}>البيان</FieldLabel>
+              <Input.TextArea ref={receiptDescriptionRef} rows={2} placeholder="مثال: تغذية الصندوق من البنك" value={receiptForm.description} onChange={e => setReceiptForm(f => ({ ...f, description: e.target.value }))} />
+            </Col>
+            <Col span={24}>
+              <div
+                className="petty-upload-zone"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', marginBottom: 10 }}
+                onClick={() => receiptDocInputRef.current?.click()}
+              >
+                <Paperclip size={14} color="#000" />
+                <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>
+                  {receiptForm.document ? receiptForm.document.name : 'إرفاق إيصال (اختياري)'}
+                </Text>
+                <input ref={receiptDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
+                  onChange={e => setReceiptForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
               </div>
             </Col>
           </Row>

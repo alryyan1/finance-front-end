@@ -61,7 +61,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/accounts',     label: 'الحسابات',              icon: ListTreeIcon },
       { to: '/transactions', label: 'القيود المحاسبية',      icon: ArrowLeftRightIcon },
-      { to: '/petty-cash',   label: 'صندوق النثريات',        icon: PiggyBankIcon },
+      { to: '/petty-cash',   label: 'اذونات الصرف والقبض',   icon: PiggyBankIcon },
       { to: '/parties',      label: 'الأطراف',               icon: UsersIcon },
       { to: '/prepaid-rent', label: 'الإيجار المقدم',        icon: Building2Icon },
     ],

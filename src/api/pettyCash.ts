@@ -55,6 +55,17 @@ export interface ExpensePayload {
   document?: File | null
 }
 
+export interface ReceiptPayload {
+  date: string
+  amount: string
+  beneficiary_name?: string
+  party_id?: number
+  contra_account_id: number
+  source_account_id: number
+  description?: string
+  document?: File | null
+}
+
 export type NotificationStatus = 'sent' | 'failed' | 'skipped'
 
 export interface NotificationResult {
@@ -115,6 +126,21 @@ export const pettyCashApi = {
       fd.append('source_account_id', String(data.source_account_id))
     }
     return api.post<PettyCashTransaction & Partial<NotificationsResponse>>('/api/petty-cash/expenses', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+
+  createReceipt: (data: ReceiptPayload): Promise<PettyCashTransaction> => {
+    const fd = new FormData()
+    fd.append('date', data.date)
+    fd.append('amount', data.amount)
+    fd.append('contra_account_id', String(data.contra_account_id))
+    fd.append('source_account_id', String(data.source_account_id))
+    if (data.beneficiary_name) fd.append('beneficiary_name', data.beneficiary_name)
+    if (data.party_id) fd.append('party_id', String(data.party_id))
+    if (data.description) fd.append('description', data.description)
+    if (data.document) fd.append('document', data.document)
+    return api.post<PettyCashTransaction>('/api/petty-cash/receipts', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
