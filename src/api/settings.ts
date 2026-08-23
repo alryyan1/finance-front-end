@@ -149,6 +149,7 @@ export interface SalesBridgeAccountSettings {
   sales_inventory_account_id: number | null
   sales_cash_account_id: number | null
   sales_bank_account_id: number | null
+  sales_discount_account_id: number | null
 }
 
 function toSalesBridgeAccountSettings(data: Record<string, unknown>): SalesBridgeAccountSettings {
@@ -159,6 +160,7 @@ function toSalesBridgeAccountSettings(data: Record<string, unknown>): SalesBridg
     sales_inventory_account_id: toIntOrNull(data.sales_inventory_account_id),
     sales_cash_account_id: toIntOrNull(data.sales_cash_account_id),
     sales_bank_account_id: toIntOrNull(data.sales_bank_account_id),
+    sales_discount_account_id: toIntOrNull(data.sales_discount_account_id),
   }
 }
 

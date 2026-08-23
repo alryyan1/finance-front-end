@@ -68,6 +68,7 @@ export default function FirebaseImportDialog({ open, onClose, onDone }: Props) {
           sales_inventory: salesBridge.sales_inventory_account_id,
           sales_cash: salesBridge.sales_cash_account_id,
           sales_bank: salesBridge.sales_bank_account_id,
+          sales_discount: salesBridge.sales_discount_account_id,
         }).filter((entry): entry is [string, number] => entry[1] != null)))
       })
       .catch(e => toast.error(extractErrorMessage(e) ?? 'فشل التحميل'))

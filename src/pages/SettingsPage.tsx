@@ -121,6 +121,7 @@ export default function SettingsPage() {
   const [inventoryAccount,  setInventoryAccount]  = useState<Account | null>(null)
   const [salesCashAccount,  setSalesCashAccount]  = useState<Account | null>(null)
   const [salesBankAccount,  setSalesBankAccount]  = useState<Account | null>(null)
+  const [salesDiscountAccount, setSalesDiscountAccount] = useState<Account | null>(null)
   const [salesBridgeLoading, setSalesBridgeLoading] = useState(true)
   const [salesBridgeSaving,  setSalesBridgeSaving]  = useState(false)
 
@@ -149,6 +150,7 @@ export default function SettingsPage() {
         setInventoryAccount(a.find(acc => acc.id === s.sales_inventory_account_id) ?? null)
         setSalesCashAccount(a.find(acc => acc.id === s.sales_cash_account_id) ?? null)
         setSalesBankAccount(a.find(acc => acc.id === s.sales_bank_account_id) ?? null)
+        setSalesDiscountAccount(a.find(acc => acc.id === s.sales_discount_account_id) ?? null)
       })
       .finally(() => setSalesBridgeLoading(false))
   }, [])
@@ -193,6 +195,7 @@ export default function SettingsPage() {
         sales_inventory_account_id: inventoryAccount?.id ?? null,
         sales_cash_account_id: salesCashAccount?.id ?? null,
         sales_bank_account_id: salesBankAccount?.id ?? null,
+        sales_discount_account_id: salesDiscountAccount?.id ?? null,
       }
       const r = await salesBridgeSettingsApi.update(payload)
       setReceivableAccount(accounts.find(acc => acc.id === r.sales_receivable_account_id) ?? null)
@@ -201,6 +204,7 @@ export default function SettingsPage() {
       setInventoryAccount(accounts.find(acc => acc.id === r.sales_inventory_account_id) ?? null)
       setSalesCashAccount(accounts.find(acc => acc.id === r.sales_cash_account_id) ?? null)
       setSalesBankAccount(accounts.find(acc => acc.id === r.sales_bank_account_id) ?? null)
+      setSalesDiscountAccount(accounts.find(acc => acc.id === r.sales_discount_account_id) ?? null)
       toast.success('تم حفظ حسابات ربط المبيعات')
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? 'تعذّر حفظ حسابات ربط المبيعات')
@@ -664,6 +668,22 @@ export default function SettingsPage() {
                   filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
                   options={revenueAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
                 />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>الخصم الممنوح (مدين) — sales_discount</Text>
+                <Select
+                  showSearch
+                  allowClear
+                  style={{ width: '100%' }}
+                  value={salesDiscountAccount?.id}
+                  onChange={v => setSalesDiscountAccount(expenseAccounts.find(a => a.id === v) ?? null)}
+                  notFoundContent="لا توجد حسابات مصروفات"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={expenseAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+                />
+                <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                  يُسجَّل عليه الخصم الممنوح على الفاتورة، بينما يُسجَّل الإيراد بكامل قيمته قبل الخصم
+                </Text>
               </div>
               <div>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>تكلفة المبيعات (مدين) — sales_cogs</Text>
