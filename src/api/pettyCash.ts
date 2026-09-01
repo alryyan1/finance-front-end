@@ -106,6 +106,7 @@ export const pettyCashApi = {
     const fd = new FormData()
     fd.append('date', data.date)
     if (data.beneficiary_name) fd.append('beneficiary_name', data.beneficiary_name)
+    if (data.party_id) fd.append('party_id', String(data.party_id))
     if (data.description) fd.append('description', data.description)
     if (data.document) fd.append('document', data.document)
     if (data.lines) {
