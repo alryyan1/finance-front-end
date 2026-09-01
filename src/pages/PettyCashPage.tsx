@@ -679,7 +679,6 @@ export default function PettyCashPage() {
               {t.description || (t.type === 'expense' ? 'مصروف نثرية' : 'تغذية الصندوق')}
             </div>
             {t.beneficiary_name && <Text style={{ fontSize: 11, display: 'block', fontWeight: 700, color: '#000' }}>{t.beneficiary_name}</Text>}
-            {t.party && <Text style={{ fontSize: 11, display: 'block', fontStyle: 'italic', color: '#666' }}>{t.party.name}</Text>}
           </div>
         )
         return t.journal_entry_id ? (
@@ -697,12 +696,21 @@ export default function PettyCashPage() {
         // (cash/bank) is credited; for a receipt it's the opposite — the source
         // account is debited since it's receiving money, and the contra account
         // (where the money came from) is credited. See PettyCashApprovalService::postJournalEntry.
+        const partyTag = t.party
+          ? <Text style={{ fontSize: 11, fontStyle: 'italic', color: '#666' }}>({t.party.name})</Text>
+          : null
         const contraLine = t.contra_account ? (
-          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.contra_account.name}</Text>
+          <Flex gap={4} align="center" wrap="wrap">
+            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.contra_account.name}</Text>
+            {partyTag}
+          </Flex>
         ) : (
-          <Tooltip title={t.lines.map(l => `${l.contra_account.name} — ${numFmt(l.amount)}`).join(' | ')}>
-            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>متعدد ({t.lines.length})</Text>
-          </Tooltip>
+          <Flex gap={4} align="center" wrap="wrap">
+            <Tooltip title={t.lines.map(l => `${l.contra_account.name} — ${numFmt(l.amount)}`).join(' | ')}>
+              <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>متعدد ({t.lines.length})</Text>
+            </Tooltip>
+            {partyTag}
+          </Flex>
         )
         const sourceLine = t.source_account ? (
           <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.source_account.name}</Text>
