@@ -5,9 +5,9 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
-import { FileDown, Scale } from 'lucide-react'
+import { FileDown, Scale, Sheet } from 'lucide-react'
 import api from '@/lib/axios'
-import { openPdf } from '@/api/pdf'
+import { openPdf, downloadExcel } from '@/api/pdf'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
 import { useToast } from '@/lib/toast'
 
@@ -89,6 +89,7 @@ export default function TrialBalancePage() {
   const [data, setData]             = useState<TrialBalanceData | null>(null)
   const [loading, setLoading]       = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [xlsLoading, setXlsLoading] = useState(false)
 
   const handlePdf = async () => {
     setPdfLoading(true)
@@ -96,6 +97,15 @@ export default function TrialBalancePage() {
       const params = fiscalYearId ? { fiscal_year_id: fiscalYearId, view_type: viewType } : { from, to, view_type: viewType }
       await openPdf('/api/reports/trial-balance/pdf', params)
     } finally { setPdfLoading(false) }
+  }
+
+  const handleExcel = async () => {
+    setXlsLoading(true)
+    try {
+      const params = fiscalYearId ? { fiscal_year_id: fiscalYearId } : { from, to }
+      await downloadExcel('/api/reports/trial-balance/excel', params, 'trial-balance.xlsx')
+    } catch { toast.error('تعذّر إنشاء ملف Excel') }
+    finally { setXlsLoading(false) }
   }
 
   const load = (f = from, t = to, fyId = fiscalYearId) => {
@@ -136,7 +146,7 @@ export default function TrialBalancePage() {
         : <Text style={{ fontFamily: 'monospace', fontSize: 12, direction: 'ltr' }} type="secondary">{v}</Text>,
     },
     {
-      title: 'اسم الحساب', dataIndex: 'name',
+      title: 'اسم الحساب', dataIndex: 'name', width: 200,
       render: (v: string, record) => record.isGroupHeader ? { children: null, props: { colSpan: 0 } } : v,
     },
     {
@@ -241,6 +251,13 @@ export default function TrialBalancePage() {
             >
               طباعة PDF
             </Button>
+            <Button
+              icon={xlsLoading ? <Spin size="small" /> : <Sheet size={16} />}
+              onClick={handleExcel}
+              disabled={xlsLoading || !data}
+            >
+              تصدير Excel
+            </Button>
           </Flex>
 
           <Flex vertical gap={4}>
@@ -267,6 +284,7 @@ export default function TrialBalancePage() {
         dataSource={dataSource}
         rowKey="key"
         pagination={false}
+        scroll={{ x: 'max-content' }}
         sticky
         rowClassName={record => record.isGroupHeader ? 'tb-group-row' : ''}
         locale={{ emptyText: 'لا توجد بيانات في هذه الفترة' }}

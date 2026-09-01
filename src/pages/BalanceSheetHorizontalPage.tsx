@@ -3,9 +3,9 @@ import { Button, Divider, Flex, Spin, Typography } from 'antd'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
-import { ArrowDown, ArrowUp, FileDown, Minus } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileDown, Minus, Sheet } from 'lucide-react'
 import api from '@/lib/axios'
-import { openPdf } from '@/api/pdf'
+import { openPdf, downloadExcel } from '@/api/pdf'
 import { useToast } from '@/lib/toast'
 
 const { Title, Text } = Typography
@@ -135,6 +135,7 @@ export default function BalanceSheetHorizontalPage() {
   const [data, setData] = useState<HorizontalData | null>(null)
   const [loading, setLoading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [xlsLoading, setXlsLoading] = useState(false)
 
   const buildParams = (overrides: Partial<{ fromAsOf: string; fromFyId: number | null; toAsOf: string; toFyId: number | null }> = {}) => {
     const f = { fromAsOf, fromFyId, toAsOf, toFyId, ...overrides }
@@ -157,6 +158,14 @@ export default function BalanceSheetHorizontalPage() {
     try {
       await openPdf('/api/reports/balance-sheet/horizontal/pdf', buildParams())
     } finally { setPdfLoading(false) }
+  }
+
+  const handleExcel = async () => {
+    setXlsLoading(true)
+    try {
+      await downloadExcel('/api/reports/balance-sheet/horizontal/excel', buildParams(), 'balance-sheet-horizontal.xlsx')
+    } catch { toast.error('تعذّر إنشاء ملف Excel') }
+    finally { setXlsLoading(false) }
   }
 
   const handleFromPeriodChange = (fyId: number | null, _from: string, to: string) => {
@@ -228,6 +237,13 @@ export default function BalanceSheetHorizontalPage() {
             disabled={pdfLoading || !data}
           >
             طباعة PDF
+          </Button>
+          <Button
+            icon={xlsLoading ? <Spin size="small" /> : <Sheet size={16} />}
+            onClick={handleExcel}
+            disabled={xlsLoading || !data}
+          >
+            تصدير Excel
           </Button>
         </Flex>
       </div>

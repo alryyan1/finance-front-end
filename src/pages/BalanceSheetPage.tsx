@@ -4,9 +4,9 @@ import {
 } from 'antd'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
-import { Landmark, FileDown } from 'lucide-react'
+import { Landmark, FileDown, Sheet } from 'lucide-react'
 import api from '@/lib/axios'
-import { openPdf } from '@/api/pdf'
+import { openPdf, downloadExcel } from '@/api/pdf'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
 import { useToast } from '@/lib/toast'
 
@@ -168,6 +168,7 @@ export default function BalanceSheetPage() {
   const [data, setData]             = useState<BalanceSheetData | null>(null)
   const [loading, setLoading]       = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [xlsLoading, setXlsLoading] = useState(false)
   const [viewForm, setViewForm]     = useState<'1' | '2'>('1')
 
   const handlePdf = async () => {
@@ -176,6 +177,15 @@ export default function BalanceSheetPage() {
       const params = fiscalYearId ? { fiscal_year_id: fiscalYearId } : { as_of: asOf }
       await openPdf('/api/reports/balance-sheet/pdf', params)
     } finally { setPdfLoading(false) }
+  }
+
+  const handleExcel = async () => {
+    setXlsLoading(true)
+    try {
+      const params = fiscalYearId ? { fiscal_year_id: fiscalYearId } : { as_of: asOf }
+      await downloadExcel('/api/reports/balance-sheet/excel', params, 'balance-sheet.xlsx')
+    } catch { toast.error('تعذّر إنشاء ملف Excel') }
+    finally { setXlsLoading(false) }
   }
 
   const load = (aof = asOf, fyId = fiscalYearId) => {
@@ -250,6 +260,13 @@ export default function BalanceSheetPage() {
             disabled={pdfLoading || !data}
           >
             طباعة PDF
+          </Button>
+          <Button
+            icon={xlsLoading ? <Spin size="small" /> : <Sheet size={16} />}
+            onClick={handleExcel}
+            disabled={xlsLoading || !data}
+          >
+            تصدير Excel
           </Button>
         </Flex>
       </div>

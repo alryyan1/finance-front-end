@@ -101,7 +101,7 @@ function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick:
 
       {/* Table */}
       <div style={{ border: `2px solid ${GL_BLUE}`, borderTop: 'none', borderRadius: '0 0 6px 6px', overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13 }}>
+        <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13 }}>
           <thead>
             <tr>
               {['Date', 'Trx. No.', 'Description', 'Debit', 'Credit', 'Balance'].map((h, i) => (
@@ -181,7 +181,7 @@ const ledgerColumns: ColumnsType<LedgerRow> = [
     render: (v: string | null) => <Text type="secondary">{v || '—'}</Text>,
   },
   {
-    title: 'البيان', dataIndex: 'entry_description',
+    title: 'البيان', dataIndex: 'entry_description', width: 240,
     render: (_: string, row) => (
       <div>
         <div>{row.entry_description}</div>
@@ -247,6 +247,7 @@ export default function LedgerPage() {
         account_id: account.id,
         from,
         to,
+        view,
         ...(party ? { party_id: party.id } : {}),
         ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : {}),
       })
@@ -378,6 +379,7 @@ export default function LedgerPage() {
             dataSource={data.rows}
             rowKey={(_, i) => String(i)}
             pagination={false}
+            scroll={{ x: 'max-content' }}
             locale={{ emptyText: 'لا توجد حركات في هذه الفترة' }}
             onRow={row => ({
               style: { cursor: 'pointer' },

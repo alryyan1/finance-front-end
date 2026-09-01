@@ -4,9 +4,9 @@ import {
 } from 'antd'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
-import { CheckCircle2, FileDown, Landmark } from 'lucide-react'
+import { CheckCircle2, FileDown, Landmark, Sheet } from 'lucide-react'
 import api from '@/lib/axios'
-import { openPdf } from '@/api/pdf'
+import { openPdf, downloadExcel } from '@/api/pdf'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
 import { useToast } from '@/lib/toast'
 
@@ -48,11 +48,21 @@ export default function StatementOfEquityPage() {
   const [data, setData]                 = useState<StatementOfEquityData | null>(null)
   const [loading, setLoading]           = useState(false)
   const [pdfLoading, setPdfLoading]     = useState(false)
+  const [xlsLoading, setXlsLoading]     = useState(false)
 
   const handlePdf = async () => {
     setPdfLoading(true)
     try { await openPdf('/api/reports/statement-of-equity/pdf', { from, to }) }
     finally { setPdfLoading(false) }
+  }
+
+  const handleExcel = async () => {
+    setXlsLoading(true)
+    try {
+      const params = fiscalYearId ? { fiscal_year_id: fiscalYearId } : { from, to }
+      await downloadExcel('/api/reports/statement-of-equity/excel', params, 'statement-of-equity.xlsx')
+    } catch { toast.error('تعذّر إنشاء ملف Excel') }
+    finally { setXlsLoading(false) }
   }
 
   const load = (f = from, t = to, fyId = fiscalYearId) => {
@@ -118,6 +128,13 @@ export default function StatementOfEquityPage() {
             disabled={pdfLoading || !data}
           >
             طباعة PDF
+          </Button>
+          <Button
+            icon={xlsLoading ? <Spin size="small" /> : <Sheet size={16} />}
+            onClick={handleExcel}
+            disabled={xlsLoading || !data}
+          >
+            تصدير Excel
           </Button>
         </Flex>
       </div>
