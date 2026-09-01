@@ -6,10 +6,11 @@ import { useAuth } from '@/context/AuthContext'
 import { useFiscalYears } from '@/context/FiscalYearsContext'
 import { Avatar, Button, Dropdown, Flex, Tooltip, Typography, type MenuProps } from 'antd'
 import {
-  Calendar, CalendarClock, CalendarDays, ChevronDown, ListPlus, LockOpen, Lock, LogOut, MessageCircle, Moon,
+  Calendar, CalendarClock, CalendarDays, ChevronDown, ListPlus, LockOpen, Lock, LogOut, Menu, MessageCircle, Moon,
   Plus, Settings, ShieldCheck, SlidersHorizontal, Sun, TriangleAlert, UserCog,
 } from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
+import { usePageTitle } from './navConfig'
 
 const { Text } = Typography
 
@@ -55,11 +56,18 @@ function VDivider({ className }: { className?: string }) {
   return <div className={className} style={{ width: 1, height: 26, background: 'var(--ant-color-border-secondary)', flexShrink: 0 }} />
 }
 
-export default function Topbar() {
+interface TopbarProps {
+  /** Render the compact mobile bar (hamburger + title + quick actions). */
+  mobile?: boolean
+  onMenu?: () => void
+}
+
+export default function Topbar({ mobile = false, onMenu }: TopbarProps) {
   const { user, logout, can } = useAuth()
   const { mode, toggleMode } = useThemeMode()
   const navigate = useNavigate()
   const { years } = useFiscalYears()
+  const pageTitle = usePageTitle()
   const [whatsappNumber, setWhatsappNumber] = useState<WhatsAppBusinessPhoneNumber | null>(null)
 
   useEffect(() => {
@@ -121,6 +129,43 @@ export default function Topbar() {
       onClick: handleLogout,
     },
   ]
+
+  if (mobile) {
+    return (
+      <header
+        style={{
+          background: 'var(--ant-color-bg-container)',
+          borderBottom: '1px solid rgba(201,162,39,0.25)',
+          color: 'var(--ant-color-text)',
+          height: 56,
+          direction: 'rtl',
+          flexShrink: 0,
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+        }}
+      >
+        <Flex align="center" gap={8} style={{ height: '100%', padding: '0 8px' }}>
+          <Button type="text" shape="circle" onClick={onMenu} icon={<Menu size={20} />} />
+          <Text strong style={{ flex: 1, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {pageTitle}
+          </Text>
+          <Tooltip title={mode === 'light' ? 'الوضع الداكن' : 'الوضع الفاتح'}>
+            <Button
+              type="text" shape="circle"
+              onClick={toggleMode}
+              icon={mode === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            />
+          </Tooltip>
+          <Button
+            type="primary" shape="circle"
+            onClick={() => navigate('/transactions/new')}
+            icon={<Plus size={18} />}
+          />
+        </Flex>
+      </header>
+    )
+  }
 
   return (
     <header

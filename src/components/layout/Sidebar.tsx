@@ -2,94 +2,12 @@ import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 
 import {
-  LayoutDashboard as LayoutDashboardIcon,
-  ListTree as ListTreeIcon,
-  ArrowLeftRight as ArrowLeftRightIcon,
-  PiggyBank as PiggyBankIcon,
-  Users as UsersIcon,
-  BarChart3 as BarChart3Icon,
-  Scale as ScaleIcon,
-  BookOpen as BookOpenIcon,
-  TrendingUp as TrendingUpIcon,
-  Landmark as LandmarkIcon,
-  Coins as CoinsIcon,
-  DatabaseBackup as DatabaseBackupIcon,
   ChevronUp as ChevronUpIcon,
   ChevronDown as ChevronDownIcon,
-  Building2 as Building2Icon,
-  Sparkles as SparklesIcon,
-  GitCompareArrows as GitCompareArrowsIcon,
-  type LucideIcon,
 } from 'lucide-react'
+import { navGroups, type NavChild, type NavItem } from './navConfig'
 
 export const SIDEBAR_WIDTH = 260
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface NavChild {
-  to: string
-  label: string
-  icon: LucideIcon
-}
-
-interface NavItem {
-  to: string
-  label: string
-  icon: LucideIcon
-  end?: boolean
-  children?: NavChild[]
-  /** Section always stays expanded — not collapsible. */
-  alwaysOpen?: boolean
-}
-
-interface NavGroup {
-  label?: string
-  items: NavItem[]
-}
-
-// ── Navigation structure ──────────────────────────────────────────────────────
-
-const navGroups: NavGroup[] = [
-  {
-    items: [
-      { to: '/', label: 'لوحة التحكم', icon: LayoutDashboardIcon, end: true },
-      { to: '/ai-assistant', label: 'المساعد الذكي', icon: SparklesIcon },
-    ],
-  },
-  {
-    label: 'المحاسبة',
-    items: [
-      { to: '/accounts',     label: 'الحسابات',              icon: ListTreeIcon },
-      { to: '/transactions', label: 'القيود المحاسبية',      icon: ArrowLeftRightIcon },
-      { to: '/petty-cash',   label: 'اذونات الصرف والقبض',   icon: PiggyBankIcon },
-      { to: '/parties',      label: 'الأطراف',               icon: UsersIcon },
-      { to: '/prepaid-rent', label: 'الإيجار المقدم',        icon: Building2Icon },
-    ],
-  },
-  {
-    label: 'التقارير',
-    items: [
-      {
-        to: '/reports', label: 'التقارير', icon: BarChart3Icon,
-        alwaysOpen: true,
-        children: [
-          { to: '/reports/trial-balance',    label: 'ميزان المراجعة',     icon: ScaleIcon },
-          { to: '/reports/ledger',           label: 'كشف حساب',           icon: BookOpenIcon },
-          { to: '/reports/income-statement', label: 'قائمة الدخل',        icon: TrendingUpIcon },
-          { to: '/reports/balance-sheet',    label: 'الميزانية العمومية', icon: LandmarkIcon },
-          { to: '/reports/balance-sheet/horizontal', label: 'التحليل الأفقي', icon: GitCompareArrowsIcon },
-          { to: '/reports/statement-of-equity', label: 'قائمة حقوق الملكية', icon: CoinsIcon },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'الإدارة',
-    items: [
-      { to: '/backup', label: 'النسخ الاحتياطية', icon: DatabaseBackupIcon },
-    ],
-  },
-]
 
 // ── Colours (always dark navy-and-gold sidebar) ─────────────────────────────
 

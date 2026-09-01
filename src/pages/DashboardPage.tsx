@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Card, Col, Flex, Row, Skeleton, Table, Tag, Typography,
+  Card, Col, Flex, Row, Skeleton, Tag, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
+import ResponsiveTable from '@/components/common/ResponsiveTable'
+import { useResponsive } from '@/hooks/useResponsive'
 import MonthlyTrendChart, { type MonthlyTrendPoint } from '@/components/dashboard/MonthlyTrendChart'
 import TopExpenseAccountsChart, { type TopExpenseAccount } from '@/components/dashboard/TopExpenseAccountsChart'
 import { AlertTriangle, ArrowLeftRight, CalendarClock, ClipboardCheck, TrendingUp, Users, Wallet } from 'lucide-react'
@@ -87,8 +89,10 @@ function StatCard({ label, value, sub, icon: Icon, color, loading }: StatCardPro
 export default function DashboardPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { isMobile } = useResponsive()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const blockGap = isMobile ? 16 : 32
 
   useEffect(() => {
     api.get<DashboardData>('/api/dashboard')
@@ -175,7 +179,7 @@ export default function DashboardPage() {
   return (
     <div>
       <Flex justify="space-between" align="flex-start" style={{ marginBottom: 4 }}>
-        <Title level={4} style={{ margin: 0 }}>
+        <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
           مرحباً، {user?.name}
         </Title>
         <HelpButton title="دليل استخدام لوحة التحكم">
@@ -193,22 +197,22 @@ export default function DashboardPage() {
           </Flex>
         </HelpButton>
       </Flex>
-      <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
+      <Text type="secondary" style={{ display: 'block', marginBottom: blockGap }}>
         ملخص النشاط المالي لشهر {new Date().toLocaleDateString('ar-SA-u-nu-latn', { month: 'long', year: 'numeric' })}
       </Text>
 
       {/* Stat cards */}
-      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: blockGap }}>
         {stats.map(s => (
-          <Col key={s.label} xs={24} sm={12} xl={6}>
+          <Col key={s.label} xs={24} sm={12} lg={6}>
             <StatCard {...s} />
           </Col>
         ))}
       </Row>
 
       {/* Fiscal year status */}
-      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
-        <Col xs={24} xl={24}>
+      <Row gutter={[16, 16]} style={{ marginBottom: blockGap }}>
+        <Col xs={24}>
           <Card title="السنة المالية الحالية" styles={{ body: { padding: 20 } }}>
             {loading ? (
               <Skeleton active paragraph={{ rows: 2 }} />
@@ -236,13 +240,13 @@ export default function DashboardPage() {
       </Row>
 
       {/* Trend & top expense accounts */}
-      <Row gutter={[24, 24]} style={{ marginBottom: 32 }}>
-        <Col xs={24} xl={16}>
+      <Row gutter={[16, 16]} style={{ marginBottom: blockGap }}>
+        <Col xs={24} lg={16}>
           <Card title="الإيرادات والمصروفات - آخر 6 أشهر" styles={{ body: { padding: 20 } }}>
             <MonthlyTrendChart data={data?.monthly_trend ?? []} loading={loading} />
           </Card>
         </Col>
-        <Col xs={24} xl={8}>
+        <Col xs={24} lg={8}>
           <Card title="أعلى حسابات المصروفات" styles={{ body: { padding: 20 } }}>
             <TopExpenseAccountsChart data={data?.top_expense_accounts ?? []} loading={loading} />
           </Card>
@@ -254,7 +258,7 @@ export default function DashboardPage() {
         آخر القيود
       </Title>
 
-      <Table
+      <ResponsiveTable<RecentEntry>
         size="small"
         columns={columns}
         dataSource={data?.recent_entries ?? []}
@@ -266,6 +270,27 @@ export default function DashboardPage() {
           style: { cursor: 'pointer' },
           onClick: () => navigate(`/transactions/${entry.id}/edit`),
         })}
+        cardKey={e => e.id}
+        renderCard={entry => (
+          <Card
+            size="small"
+            styles={{ body: { padding: 12 } }}
+            onClick={() => navigate(`/transactions/${entry.id}/edit`)}
+          >
+            <Flex justify="space-between" align="flex-start" gap={8}>
+              <div style={{ minWidth: 0 }}>
+                <Text strong style={{ display: 'block' }}>{entry.description}</Text>
+                <Text type="secondary" style={{ fontSize: 12, direction: 'ltr' }}>
+                  {entry.date}{entry.reference ? ` · ${entry.reference}` : ''}
+                </Text>
+              </div>
+              {entry.is_posted ? <Tag color="success">مرحَّل</Tag> : <Tag>مسودة</Tag>}
+            </Flex>
+            <Text strong style={{ display: 'block', marginTop: 6, direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>
+              {entry.lines_sum_debit ? Number(entry.lines_sum_debit).toLocaleString('en-US') : '0'}
+            </Text>
+          </Card>
+        )}
       />
 
       {!loading && (data?.recent_entries?.length ?? 0) > 0 && (

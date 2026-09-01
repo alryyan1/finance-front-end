@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Badge, Button, Col, Flex, Input, InputNumber, Modal, Row, Segmented, Select, Spin, Table, Tooltip, Typography,
+  Badge, Button, Card, Col, Flex, Input, InputNumber, Modal, Row, Segmented, Select, Spin, Tooltip, Typography,
   type GetRef,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { collection, onSnapshot } from 'firebase/firestore'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
+import ResponsiveTable from '@/components/common/ResponsiveTable'
+import FilterBar from '@/components/common/FilterBar'
+import { useResponsive } from '@/hooks/useResponsive'
 import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
@@ -122,6 +125,7 @@ export default function PettyCashPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { isMobile } = useResponsive()
   const [cashAccount, setCashAccount] = useState<Account | null>(null)
   const [bankAccount, setBankAccount] = useState<Account | null>(null)
   const [accounts, setAccounts]       = useState<Account[]>([])
@@ -269,6 +273,11 @@ export default function PettyCashPage() {
       setAccounts(a)
       setCashAccount(a.find(acc => acc.id === s.petty_cash_cash_account_id) ?? null)
       setBankAccount(a.find(acc => acc.id === s.petty_cash_bank_account_id) ?? null)
+    }).catch(() => {
+      // Most commonly: the user lacks accounts.view. Leave accounts/cashAccount/
+      // bankAccount at their empty defaults — the page still shows the
+      // transactions table fine, only the new-expense/receipt account picker
+      // degrades (see the hasSourceAccount banner below).
     }).finally(() => setAccountSettingsLoading(false))
     partiesApi.list().then(setParties)
     pettyCashSettingsApi.get().then(s => {
@@ -679,26 +688,32 @@ export default function PettyCashPage() {
     {
       title: 'الحسابات', width: 280,
       render: (_: unknown, t) => {
-        const debit = t.contra_account ? (
-          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>من ح/ {t.contra_account.name}</Text>
+        // Journal entry debit/credit flips by type: for an expense the contra
+        // account (e.g. an expense account) is debited and the source account
+        // (cash/bank) is credited; for a receipt it's the opposite — the source
+        // account is debited since it's receiving money, and the contra account
+        // (where the money came from) is credited. See PettyCashApprovalService::postJournalEntry.
+        const contraLine = t.contra_account ? (
+          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.contra_account.name}</Text>
         ) : (
           <Tooltip title={t.lines.map(l => `${l.contra_account.name} — ${numFmt(l.amount)}`).join(' | ')}>
-            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>من ح/ متعدد ({t.lines.length})</Text>
+            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>متعدد ({t.lines.length})</Text>
           </Tooltip>
         )
-        const credit = t.source_account ? (
-          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ {t.source_account.name}</Text>
+        const sourceLine = t.source_account ? (
+          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>{t.source_account.name}</Text>
         ) : t.credit_lines.length ? (
           <Tooltip title={t.credit_lines.map(l => `${l.source_account.name} — ${numFmt(l.amount)}`).join(' | ')}>
-            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ متعدد ({t.credit_lines.length})</Text>
+            <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>متعدد ({t.credit_lines.length})</Text>
           </Tooltip>
         ) : (
-          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/ —</Text>
+          <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>—</Text>
         )
+        const [debitLine, creditLine] = t.type === 'expense' ? [contraLine, sourceLine] : [sourceLine, contraLine]
         return (
           <Flex vertical gap={1}>
-            {debit}
-            {credit}
+            <Flex gap={4}><Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>من ح/</Text>{debitLine}</Flex>
+            <Flex gap={4}><Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>الى ح/</Text>{creditLine}</Flex>
           </Flex>
         )
       },
@@ -829,6 +844,47 @@ export default function PettyCashPage() {
     },
   ]
 
+  /** Reuse a column's render fn for the mobile card layout. */
+  const cell = (title: string, t: PettyCashTransaction) => {
+    const c = columns.find(col => 'title' in col && col.title === title)
+    return c && 'render' in c && c.render ? c.render(null, t, 0) as ReactNode : null
+  }
+
+  const renderTxCard = (t: PettyCashTransaction) => (
+    <Card
+      size="small"
+      styles={{ body: { padding: 12 } }}
+      style={{ borderInlineEnd: `3px solid ${t.type === 'expense' ? 'var(--ant-color-error)' : 'var(--ant-color-success)'}` }}
+      className={updatedIds.has(t.id) ? 'highlight-fade' : ''}
+    >
+      <Flex justify="space-between" align="center">
+        <Text style={{ fontWeight: 700, direction: 'ltr', fontSize: 13 }}>#{t.id} · {t.date}</Text>
+        {cell('المبلغ', t)}
+      </Flex>
+      <div style={{ marginTop: 6 }}>{cell('البيان', t)}</div>
+      <div style={{ marginTop: 6 }}>{cell('الحسابات', t)}</div>
+      <Flex align="center" gap={6} style={{ marginTop: 4 }}>
+        <UserRound size={12} color="#000" />
+        <Text style={{ fontSize: 12, fontWeight: 700, color: '#000' }}>{t.created_by?.name ?? '—'}</Text>
+      </Flex>
+      {t.type === 'expense' && (
+        <Flex gap={16} wrap="wrap" style={{ marginTop: 6 }}>
+          <Flex vertical gap={2}>
+            <Text type="secondary" style={{ fontSize: 10.5 }}>الحالة</Text>
+            {cell('الحالة', t)}
+          </Flex>
+          <Flex vertical gap={2}>
+            <Text type="secondary" style={{ fontSize: 10.5 }}>التدقيق</Text>
+            {cell('التدقيق', t)}
+          </Flex>
+        </Flex>
+      )}
+      <Flex justify="flex-end" style={{ marginTop: 4, borderTop: '1px dashed var(--ant-color-border-secondary)', paddingTop: 4 }}>
+        {cell('إجراءات', t)}
+      </Flex>
+    </Card>
+  )
+
   return (
     <div>
       <input ref={rowDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
@@ -838,9 +894,9 @@ export default function PettyCashPage() {
           e.target.value = ''
         }} />
       {/* Header */}
-      <Flex justify="space-between" align="center" style={{ marginBottom: 2 }}>
+      <Flex justify="space-between" align="center" wrap="wrap" gap={8} style={{ marginBottom: 6 }}>
         <Text strong style={{ fontSize: 16 }}>صندوق النثريات</Text>
-        <Flex gap={8} align="center">
+        <Flex gap={8} align="center" wrap="wrap">
           <HelpButton title="دليل استخدام صندوق النثريات">
             <Flex vertical gap={16}>
               <div><Title level={5}>ما هو صندوق النثريات؟</Title>
@@ -885,67 +941,94 @@ export default function PettyCashPage() {
 
       {accountSettingsLoading ? (
         <Flex justify="center" style={{ padding: '64px 0' }}><Spin size="large" /></Flex>
-      ) : !hasSourceAccount ? (
-        <div style={{ padding: 48, textAlign: 'center', border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-          <Text style={{ display: 'block', marginBottom: 16, fontWeight: 700, color: '#000' }}>
-            لم يتم إعداد حسابات صندوق النثريات بعد
-          </Text>
-          <Button type="primary" icon={<Plus size={16} />} onClick={() => navigate('/settings?tab=petty-cash')}>
-            إعداد الحسابات
-          </Button>
-        </div>
       ) : (
         <>
-    
+          {/* Missing cash/bank account resolution only breaks the "new
+              expense/receipt" account picker below — it shouldn't hide the
+              transactions table, since every row already carries its own
+              account objects from the list endpoint (petty-cash.view alone
+              is enough to see/approve/reconcile existing transactions). This
+              banner can mean either the accounts genuinely aren't configured
+              in Settings, or the current user just lacks accounts.view and
+              can't resolve the configured ids to account objects. */}
+          {!hasSourceAccount && (
+            <div style={{ padding: 16, marginBottom: 12, textAlign: 'center', border: '1px solid var(--ant-color-warning)', borderRadius: 8, background: 'var(--ant-color-warning-bg)' }}>
+              <Text style={{ display: 'block', marginBottom: 8, fontWeight: 700, color: '#000' }}>
+                لم يتم إعداد حسابات صندوق النثريات، أو لا تملك صلاحية عرض الحسابات — لا يمكن إنشاء إذن صرف/قبض جديد حتى يُحل ذلك
+              </Text>
+              <Button size="small" type="primary" icon={<Plus size={14} />} onClick={() => navigate('/settings?tab=petty-cash')}>
+                إعداد الحسابات
+              </Button>
+            </div>
+          )}
+
 
           {/* Toolbar */}
-          <div style={{ padding: 3, marginBottom: 3, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-          
-
-            <div style={{ margin: '2px 0', borderTop: '1px solid var(--ant-color-border-secondary)' }} />
-
-            <Flex gap={8} align="center" wrap="wrap">
+          <div style={{ marginBottom: 8 }}>
+            <FilterBar
+              activeCount={[search, from, to, sourceAccountFilter].filter(Boolean).length}
+              onReset={() => { setSearch(''); setFrom(''); setTo(''); setSourceAccountFilter(null); setPage(1) }}
+              desktopExtra={
+                <>
+                  <Tooltip title="تصدير PDF">
+                    <Button type="text" shape="circle" size="small" onClick={handlePdf} disabled={pdfLoading}
+                      icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
+                  </Tooltip>
+                  <Tooltip title="تصدير Excel">
+                    <Button type="text" shape="circle" size="small" onClick={handleExcel} disabled={excelLoading}
+                      icon={excelLoading ? <Spin size="small" /> : <Sheet size={16} />} />
+                  </Tooltip>
+                  <Tooltip title="مزامنة حسابات المصروفات مع واتساب">
+                    <Button type="text" shape="circle" size="small" onClick={handleSyncExpenseAccounts} disabled={syncingAccounts}
+                      icon={syncingAccounts ? <Spin size="small" /> : <RefreshCw size={16} />} />
+                  </Tooltip>
+                  <Tooltip title="التحقق من اعتمادات واتساب المعلّقة">
+                    <Button size="small" onClick={handleReconcilePending} disabled={reconcilingPending}
+                      icon={reconcilingPending ? <Spin size="small" /> : <CheckCheck size={15} />}>
+                      التحقق من الاعتمادات
+                    </Button>
+                  </Tooltip>
+                </>
+              }
+            >
               <Input
                 size="small"
                 placeholder="بحث بالبيان أو المستفيد أو الحساب..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ flex: 1, minWidth: 200 }}
+                style={{ flex: 1, minWidth: 200, width: isMobile ? '100%' : undefined }}
                 prefix={<Search size={14} color="#000" />}
               />
-              <DateInput size="small" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }} style={{ width: 135 }} />
-              <DateInput size="small" value={to} onChange={e => { setTo(e.target.value); setPage(1) }} style={{ width: 135 }} />
+              <DateInput size="small" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }} style={{ width: isMobile ? '100%' : 135 }} />
+              <DateInput size="small" value={to} onChange={e => { setTo(e.target.value); setPage(1) }} style={{ width: isMobile ? '100%' : 135 }} />
               <Select
                 size="small"
                 allowClear
                 placeholder="الحساب الدائن"
-                style={{ width: 150 }}
+                style={{ width: isMobile ? '100%' : 150 }}
                 value={sourceAccountFilter ?? undefined}
                 onChange={v => { setSourceAccountFilter(v ?? null); setPage(1) }}
                 options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
               />
-              <Tooltip title="تصدير PDF">
-                <Button type="text" shape="circle" size="small" onClick={handlePdf} disabled={pdfLoading}
-                  icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
-              </Tooltip>
-              <Tooltip title="تصدير Excel">
-                <Button type="text" shape="circle" size="small" onClick={handleExcel} disabled={excelLoading}
-                  icon={excelLoading ? <Spin size="small" /> : <Sheet size={16} />} />
-              </Tooltip>
-              <Tooltip title="مزامنة حسابات المصروفات مع واتساب">
-                <Button type="text" shape="circle" size="small" onClick={handleSyncExpenseAccounts} disabled={syncingAccounts}
-                  icon={syncingAccounts ? <Spin size="small" /> : <RefreshCw size={16} />} />
-              </Tooltip>
-              <Tooltip title="التحقق من اعتمادات واتساب المعلّقة">
-                <Button size="small" onClick={handleReconcilePending} disabled={reconcilingPending}
-                  icon={reconcilingPending ? <Spin size="small" /> : <CheckCheck size={15} />}>
-                  التحقق من الاعتمادات
-                </Button>
-              </Tooltip>
-            </Flex>
+            </FilterBar>
           </div>
 
-          <Table
+          {isMobile && (
+            <Flex gap={4} justify="flex-end" wrap="wrap" style={{ marginBottom: 8 }}>
+              <Button type="text" shape="circle" size="small" onClick={handlePdf} disabled={pdfLoading}
+                icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
+              <Button type="text" shape="circle" size="small" onClick={handleExcel} disabled={excelLoading}
+                icon={excelLoading ? <Spin size="small" /> : <Sheet size={16} />} />
+              <Button type="text" shape="circle" size="small" onClick={handleSyncExpenseAccounts} disabled={syncingAccounts}
+                icon={syncingAccounts ? <Spin size="small" /> : <RefreshCw size={16} />} />
+              <Button size="small" onClick={handleReconcilePending} disabled={reconcilingPending}
+                icon={reconcilingPending ? <Spin size="small" /> : <CheckCheck size={15} />}>
+                التحقق من الاعتمادات
+              </Button>
+            </Flex>
+          )}
+
+          <ResponsiveTable<PettyCashTransaction>
             size="small"
             loading={loading}
             columns={columns}
@@ -965,6 +1048,8 @@ export default function PettyCashPage() {
             onRow={t => ({
               style: { borderInlineEnd: `3px solid ${t.type === 'expense' ? 'var(--ant-color-error)' : 'var(--ant-color-success)'}` },
             })}
+            cardKey={t => t.id}
+            renderCard={renderTxCard}
           />
         </>
       )}
@@ -1277,6 +1362,15 @@ export default function PettyCashPage() {
             </Col>
             <Col span={24}>
               <FieldLabel icon={Landmark}>من حساب</FieldLabel>
+              <Segmented
+                block
+                value={receiptForm.source_account_id?.id}
+                onChange={v => setReceiptForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
+                options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+              />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={Landmark}>الى حساب</FieldLabel>
               <Select
                 showSearch
                 style={{ width: '100%' }}
@@ -1288,15 +1382,6 @@ export default function PettyCashPage() {
                 notFoundContent="لا توجد حسابات"
                 filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
                 options={contraAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
-              />
-            </Col>
-            <Col span={24}>
-              <FieldLabel icon={Landmark}>الى حساب</FieldLabel>
-              <Segmented
-                block
-                value={receiptForm.source_account_id?.id}
-                onChange={v => setReceiptForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
-                options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
               />
             </Col>
             <Col span={24}>

@@ -11,6 +11,8 @@ interface Props {
   defaultFrom: string
   defaultTo: string
   size?: 'small' | 'middle'
+  /** Stretch to fill the container (mobile filter sheets). */
+  block?: boolean
 }
 
 const today = () => {
@@ -18,7 +20,7 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-export default function FiscalYearSelector({ onChange, defaultFrom, defaultTo, size = 'small' }: Props) {
+export default function FiscalYearSelector({ onChange, defaultFrom, defaultTo, size = 'small', block = false }: Props) {
   const { years } = useFiscalYears()
   const [selected, setSelected] = useState<string>('custom')
   const [initialized, setInitialized] = useState(false)
@@ -52,10 +54,11 @@ export default function FiscalYearSelector({ onChange, defaultFrom, defaultTo, s
   const statusColor = (fy: FiscalYear) => fy.status === 'open' ? '#16a34a' : '#6b7280'
 
   return (
-    <Flex vertical gap={4} style={{ minWidth: 220 }}>
+    <Flex vertical gap={4} style={{ minWidth: block ? undefined : 220, width: block ? '100%' : undefined }}>
       <Text type="secondary" style={{ fontSize: 12 }}>الفترة المحاسبية</Text>
       <Select
         size={size}
+        style={block ? { width: '100%' } : undefined}
         value={selected}
         onChange={handleChange}
         options={[

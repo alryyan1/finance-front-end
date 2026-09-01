@@ -12,6 +12,9 @@
     "build:nova": "vite build --mode nova",
     "build:altohami": "vite build --mode altohami",
     "build:auger": "vite build --mode auger",
+    "build:elsir": "vite build --mode elsir",
+    "build:vital": "vite build --mode vital",
+    "build:manjuluk": "vite build --mode manjuluk",
     "lint": "eslint .",
     "preview": "vite preview"
   },

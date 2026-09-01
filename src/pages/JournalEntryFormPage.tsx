@@ -6,7 +6,7 @@ import rtlPlugin from 'stylis-plugin-rtl'
 import {
   Alert, Autocomplete, Box, Button, CircularProgress, createFilterOptions, Divider,
   IconButton, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TextField, Tooltip, Typography, createTheme, ThemeProvider,
+  TextField, Tooltip, Typography, createTheme, ThemeProvider, useMediaQuery,
 } from '@mui/material'
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
@@ -92,6 +92,8 @@ export default function JournalEntryFormPage() {
     typography: { fontFamily: '"Tajawal", sans-serif' },
     shape: { borderRadius: 10 },
   }), [mode])
+
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [parties, setParties] = useState<Party[]>([])
@@ -250,10 +252,214 @@ export default function JournalEntryFormPage() {
 
   const partyOptions: PartyOption[] = parties.map(p => ({ value: p.id, label: p.name }))
 
+  /** Per-line input nodes, shared by the desktop table and the mobile card layout. */
+  const renderLineFields = (line: LineForm, i: number) => {
+    const selectedAccount = line.account
+      ? accountOptions.find(o => o.value === line.account!.id) ?? null
+      : null
+    const selectedParty = line.party
+      ? partyOptions.find(o => o.value === line.party!.id) ?? null
+      : null
+    const lineBalance = line.account ? balances[line.account.id] : undefined
+    const usedAccountIdsElsewhere = new Set(
+      lines.filter((l, idx) => idx !== i && l.account).map(l => l.account!.id)
+    )
+
+    const account = (
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={accountOptions}
+        value={selectedAccount}
+        filterOptions={accountFilterOptions}
+        getOptionLabel={o => o.label}
+        isOptionEqualToValue={(o, v) => o.value === v.value}
+        getOptionDisabled={o => o.isParent || usedAccountIdsElsewhere.has(o.value)}
+        noOptionsText="لا توجد نتائج"
+        onChange={(_, v) => {
+          const acc = v ? accounts.find(a => a.id === v.value) ?? null : null
+          if (acc && usedAccountIdsElsewhere.has(acc.id)) {
+            toast.error('لا يمكن اختيار نفس الحساب أكثر من مرة في القيد')
+            return
+          }
+          updateLine(i, { account: acc })
+          if (acc) {
+            const target = i === 0 ? debitRefs : creditRefs
+            setTimeout(() => target.current[i]?.focus(), 0)
+          }
+        }}
+        renderOption={(props, option) => {
+          const { key, ...rest } = props
+          return (
+            <Box component="li" key={key} {...rest}>
+              <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                <Typography
+                  sx={{
+                    fontWeight: option.isRoot ? 700 : option.isParent ? 600 : 400,
+                    color: option.isRoot ? '#1565c0' : option.isParent ? '#2e7d32' : 'inherit',
+                    pr: option.isRoot ? 0 : option.isParent ? 1.5 : 3,
+                    fontSize: 13,
+                  }}
+                >
+                  {option.label}
+                </Typography>
+                {option.balanceLabel && (
+                  <Typography variant="caption" color="text.secondary" sx={{ direction: 'ltr' }}>
+                    {option.balanceLabel}
+                  </Typography>
+                )}
+              </Stack>
+            </Box>
+          )
+        }}
+        renderInput={params => (
+          <TextField
+            {...params}
+            label={isMobile ? 'الحساب' : undefined}
+            placeholder="اختر حساباً"
+            slotProps={{
+              ...params.slotProps,
+              htmlInput: {
+                ...params.slotProps.htmlInput,
+                autoComplete: 'off',
+                ref: mergeRefs(params.slotProps.htmlInput.ref, (el: HTMLInputElement | null) => { accountRefs.current[i] = el }),
+              },
+            }}
+          />
+        )}
+      />
+    )
+
+    const balanceHint = line.account && lineBalance && lineBalance.amount > 0
+      ? (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, direction: 'ltr' }}>
+          الرصيد: {numFmt(lineBalance.amount)} {lineBalance.side === 'debit' ? 'مدين' : 'دائن'}
+        </Typography>
+      )
+      : null
+
+    const party = (
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={partyOptions}
+        value={selectedParty}
+        filterOptions={partyFilterOptions}
+        getOptionLabel={o => o.label}
+        isOptionEqualToValue={(o, v) => o.value === v.value}
+        noOptionsText="لا توجد نتائج"
+        onChange={(_, v) => {
+          const pty = v ? parties.find(p => p.id === v.value) ?? null : null
+          const update: Partial<LineForm> = { party: pty }
+          if (pty?.account && !line.account) {
+            const full = accounts.find(a => a.id === pty.account!.id)
+            if (full) update.account = full
+          }
+          updateLine(i, update)
+        }}
+        renderInput={params => (
+          <TextField
+            {...params}
+            label={isMobile ? 'الجهة' : undefined}
+            placeholder="اختياري"
+            slotProps={{
+              ...params.slotProps,
+              htmlInput: { ...params.slotProps.htmlInput, autoComplete: 'off' },
+            }}
+          />
+        )}
+      />
+    )
+
+    const debit = (
+      <TextField
+        size="small"
+        type="number"
+        fullWidth
+        label={isMobile ? 'مدين' : undefined}
+        value={line.debit}
+        onChange={e => handleDebitChange(i, e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            accountRefs.current[i + 1]?.focus()
+          }
+        }}
+        slotProps={{ htmlInput: { min: 0, step: 0.01, autoComplete: 'off', ref: (el: HTMLInputElement | null) => { debitRefs.current[i] = el } } }}
+        sx={{ direction: 'ltr' }}
+      />
+    )
+
+    const credit = (
+      <TextField
+        size="small"
+        type="number"
+        fullWidth
+        label={isMobile ? 'دائن' : undefined}
+        value={line.credit}
+        onChange={e => handleCreditChange(i, e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            entryDescriptionRef.current?.focus()
+          }
+        }}
+        slotProps={{ htmlInput: { min: 0, step: 0.01, autoComplete: 'off', ref: (el: HTMLInputElement | null) => { creditRefs.current[i] = el } } }}
+        sx={{ direction: 'ltr' }}
+      />
+    )
+
+    const deleteBtn = (
+      <Tooltip title="حذف السطر">
+        <span>
+          <IconButton size="small" color="error" onClick={() => removeLine(i)} disabled={lines.length <= 2}>
+            <Trash2 size={15} />
+          </IconButton>
+        </span>
+      </Tooltip>
+    )
+
+    return { account, balanceHint, party, debit, credit, deleteBtn }
+  }
+
+  const balanceSummary = (
+    <Stack
+      direction={{ xs: 'row', sm: 'row' }}
+      spacing={{ xs: 2, sm: 4 }}
+      sx={{ justifyContent: { xs: 'space-around', sm: 'flex-end' }, alignItems: 'center', flexWrap: 'wrap' }}
+    >
+      <Stack sx={{ alignItems: 'center' }}>
+        <Typography variant="caption" color="text.secondary">إجمالي المدين</Typography>
+        <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Typography>
+      </Stack>
+      <Divider orientation="vertical" flexItem />
+      <Stack sx={{ alignItems: 'center' }}>
+        <Typography variant="caption" color="text.secondary">إجمالي الدائن</Typography>
+        <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Typography>
+      </Stack>
+      <Divider orientation="vertical" flexItem />
+      <Stack sx={{ alignItems: 'center' }}>
+        <Typography variant="caption" color="text.secondary">الفرق</Typography>
+        <Typography sx={{ fontWeight: 700, direction: 'ltr' }} color={isBalanced ? 'success.main' : 'error.main'}>
+          {numFmt(Math.abs(totalDebit - totalCredit))}
+        </Typography>
+      </Stack>
+      <Box
+        sx={{
+          fontWeight: 700, px: 2, py: 0.5, borderRadius: 1.5,
+          bgcolor: isBalanced ? '#dcfce7' : '#fee2e2',
+          color: isBalanced ? '#16a34a' : '#dc2626',
+        }}
+      >
+        {isBalanced ? 'متوازن' : 'غير متوازن'}
+      </Box>
+    </Stack>
+  )
+
   return (
     <CacheProvider value={rtlCache}>
       <ThemeProvider theme={theme}>
-        <Box component="form" sx={{ userSelect: 'none' }} onSubmit={handleSubmit}>
+        <Box component="form" sx={{ userSelect: 'none', pb: isMobile ? 14 : 0 }} onSubmit={handleSubmit}>
           {/* Header */}
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center', mb: 3 }}>
             <Tooltip title="رجوع">
@@ -261,17 +467,19 @@ export default function JournalEntryFormPage() {
                 <ArrowLeft size={18} />
               </IconButton>
             </Tooltip>
-            <Typography variant="h5" sx={{ flexGrow: 1, fontWeight: 700 }}>
+            <Typography variant={isMobile ? 'h6' : 'h5'} sx={{ flexGrow: 1, fontWeight: 700 }}>
               {isEdit ? 'تعديل القيد' : 'قيد جديد'}
             </Typography>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={saving || !isBalanced}
-              sx={{ minWidth: 120 }}
-            >
-              {saving ? <CircularProgress size={20} color="inherit" /> : 'حفظ القيد'}
-            </Button>
+            {!isMobile && (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={saving || !isBalanced}
+                sx={{ minWidth: 120 }}
+              >
+                {saving ? <CircularProgress size={20} color="inherit" /> : 'حفظ القيد'}
+              </Button>
+            )}
           </Stack>
 
           {dateWarning && (
@@ -279,8 +487,12 @@ export default function JournalEntryFormPage() {
           )}
 
           {/* Entry header fields */}
-          <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
-            <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, mb: 3 }}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={2}
+              sx={{ alignItems: { xs: 'stretch', sm: 'flex-start' }, flexWrap: 'wrap' }}
+            >
               <TextField
                 label="التاريخ"
                 type="date"
@@ -288,7 +500,7 @@ export default function JournalEntryFormPage() {
                 value={date}
                 onChange={e => setDate(e.target.value)}
                 slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ width: 180 }}
+                sx={{ width: { xs: '100%', sm: 180 } }}
               />
               <TextField
                 label="المرجع"
@@ -296,7 +508,7 @@ export default function JournalEntryFormPage() {
                 placeholder="اختياري"
                 value={reference}
                 onChange={e => setReference(e.target.value)}
-                sx={{ width: 200 }}
+                sx={{ width: { xs: '100%', sm: 200 } }}
               />
               <TextField
                 label="الوصف"
@@ -305,230 +517,108 @@ export default function JournalEntryFormPage() {
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 slotProps={{ htmlInput: { ref: entryDescriptionRef } }}
-                sx={{ flex: 1, minWidth: 240 }}
+                sx={{ flex: 1, minWidth: { xs: '100%', sm: 240 } }}
               />
             </Stack>
           </Paper>
 
-          {/* Lines table */}
-          <Paper variant="outlined" sx={{ mb: 2, overflow: 'hidden' }}>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ width: '38%' }}>الحساب</TableCell>
-                    <TableCell sx={{ width: '32%' }}>الجهة</TableCell>
-                    <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
-                    <TableCell align="left" sx={{ width: '12%' }}>دائن</TableCell>
-                    <TableCell sx={{ width: 48 }} />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {lines.map((line, i) => {
-                    const selectedAccount = line.account
-                      ? accountOptions.find(o => o.value === line.account!.id) ?? null
-                      : null
-                    const selectedParty = line.party
-                      ? partyOptions.find(o => o.value === line.party!.id) ?? null
-                      : null
-                    const lineBalance = line.account ? balances[line.account.id] : undefined
-                    const usedAccountIdsElsewhere = new Set(
-                      lines.filter((l, idx) => idx !== i && l.account).map(l => l.account!.id)
-                    )
-
-                    return (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <Autocomplete
-                            size="small"
-                            options={accountOptions}
-                            value={selectedAccount}
-                            filterOptions={accountFilterOptions}
-                            getOptionLabel={o => o.label}
-                            isOptionEqualToValue={(o, v) => o.value === v.value}
-                            getOptionDisabled={o => o.isParent || usedAccountIdsElsewhere.has(o.value)}
-                            noOptionsText="لا توجد نتائج"
-                            onChange={(_, v) => {
-                              const account = v ? accounts.find(a => a.id === v.value) ?? null : null
-                              if (account && usedAccountIdsElsewhere.has(account.id)) {
-                                toast.error('لا يمكن اختيار نفس الحساب أكثر من مرة في القيد')
-                                return
-                              }
-                              updateLine(i, { account })
-                              if (account) {
-                                const target = i === 0 ? debitRefs : creditRefs
-                                setTimeout(() => target.current[i]?.focus(), 0)
-                              }
-                            }}
-                            renderOption={(props, option) => {
-                              const { key, ...rest } = props
-                              return (
-                                <Box component="li" key={key} {...rest}>
-                                  <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                    <Typography
-                                      sx={{
-                                        fontWeight: option.isRoot ? 700 : option.isParent ? 600 : 400,
-                                        color: option.isRoot ? '#1565c0' : option.isParent ? '#2e7d32' : 'inherit',
-                                        pr: option.isRoot ? 0 : option.isParent ? 1.5 : 3,
-                                        fontSize: 13,
-                                      }}
-                                    >
-                                      {option.label}
-                                    </Typography>
-                                    {option.balanceLabel && (
-                                      <Typography variant="caption" color="text.secondary" sx={{ direction: 'ltr' }}>
-                                        {option.balanceLabel}
-                                      </Typography>
-                                    )}
-                                  </Stack>
-                                </Box>
-                              )
-                            }}
-                            renderInput={params => (
-                              <TextField
-                                {...params}
-                                placeholder="اختر حساباً"
-                                slotProps={{
-                                  ...params.slotProps,
-                                  htmlInput: {
-                                    ...params.slotProps.htmlInput,
-                                    autoComplete: 'off',
-                                    ref: mergeRefs(params.slotProps.htmlInput.ref, (el: HTMLInputElement | null) => { accountRefs.current[i] = el }),
-                                  },
-                                }}
-                              />
-                            )}
-                          />
-                          {line.account && lineBalance && lineBalance.amount > 0 && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, direction: 'ltr' }}>
-                              الرصيد: {numFmt(lineBalance.amount)} {lineBalance.side === 'debit' ? 'مدين' : 'دائن'}
-                            </Typography>
-                          )}
-                        </TableCell>
-
-                        <TableCell>
-                          <Autocomplete
-                            size="small"
-                            options={partyOptions}
-                            value={selectedParty}
-                            filterOptions={partyFilterOptions}
-                            getOptionLabel={o => o.label}
-                            isOptionEqualToValue={(o, v) => o.value === v.value}
-                            noOptionsText="لا توجد نتائج"
-                            onChange={(_, v) => {
-                              const party = v ? parties.find(p => p.id === v.value) ?? null : null
-                              const update: Partial<LineForm> = { party }
-                              if (party?.account && !line.account) {
-                                const full = accounts.find(a => a.id === party.account!.id)
-                                if (full) update.account = full
-                              }
-                              updateLine(i, update)
-                            }}
-                            renderInput={params => (
-                              <TextField
-                                {...params}
-                                placeholder="اختياري"
-                                slotProps={{
-                                  ...params.slotProps,
-                                  htmlInput: { ...params.slotProps.htmlInput, autoComplete: 'off' },
-                                }}
-                              />
-                            )}
-                          />
-                        </TableCell>
-
-                        <TableCell align="left">
-                          <TextField
-                            size="small"
-                            type="number"
-                            value={line.debit}
-                            onChange={e => handleDebitChange(i, e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                accountRefs.current[i + 1]?.focus()
-                              }
-                            }}
-                            slotProps={{ htmlInput: { min: 0, step: 0.01, autoComplete: 'off', ref: (el: HTMLInputElement | null) => { debitRefs.current[i] = el } } }}
-                            sx={{ width: 110, direction: 'ltr' }}
-                          />
-                        </TableCell>
-
-                        <TableCell align="left">
-                          <TextField
-                            size="small"
-                            type="number"
-                            value={line.credit}
-                            onChange={e => handleCreditChange(i, e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                entryDescriptionRef.current?.focus()
-                              }
-                            }}
-                            slotProps={{ htmlInput: { min: 0, step: 0.01, autoComplete: 'off', ref: (el: HTMLInputElement | null) => { creditRefs.current[i] = el } } }}
-                            sx={{ width: 110, direction: 'ltr' }}
-                          />
-                        </TableCell>
-
-                        <TableCell>
-                          <Tooltip title="حذف السطر">
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => removeLine(i)}
-                                disabled={lines.length <= 2}
-                              >
-                                <Trash2 size={15} />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <Box sx={{ p: 2 }}>
-              <Button startIcon={<Plus size={14} />} onClick={addLine} size="small">
+          {/* Lines */}
+          {isMobile ? (
+            <Stack spacing={1.5} sx={{ mb: 2 }}>
+              {lines.map((line, i) => {
+                const f = renderLineFields(line, i)
+                return (
+                  <Paper key={i} variant="outlined" sx={{ p: 1.5 }}>
+                    <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="caption" color="text.secondary">سطر {i + 1}</Typography>
+                      {f.deleteBtn}
+                    </Stack>
+                    <Stack spacing={1.5}>
+                      {f.account}
+                      {f.balanceHint}
+                      {f.party}
+                      <Stack direction="row" spacing={1.5}>
+                        {f.debit}
+                        {f.credit}
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                )
+              })}
+              <Button startIcon={<Plus size={14} />} onClick={addLine} size="small" sx={{ alignSelf: 'flex-start' }}>
                 إضافة سطر
               </Button>
-            </Box>
-          </Paper>
+            </Stack>
+          ) : (
+            <Paper variant="outlined" sx={{ mb: 2, overflow: 'hidden' }}>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ width: '38%' }}>الحساب</TableCell>
+                      <TableCell sx={{ width: '32%' }}>الجهة</TableCell>
+                      <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
+                      <TableCell align="left" sx={{ width: '12%' }}>دائن</TableCell>
+                      <TableCell sx={{ width: 48 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {lines.map((line, i) => {
+                      const f = renderLineFields(line, i)
+                      return (
+                        <TableRow key={i}>
+                          <TableCell>
+                            {f.account}
+                            {f.balanceHint}
+                          </TableCell>
+                          <TableCell>{f.party}</TableCell>
+                          <TableCell align="left" sx={{ width: 110 }}>{f.debit}</TableCell>
+                          <TableCell align="left" sx={{ width: 110 }}>{f.credit}</TableCell>
+                          <TableCell>{f.deleteBtn}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <Box sx={{ p: 2 }}>
+                <Button startIcon={<Plus size={14} />} onClick={addLine} size="small">
+                  إضافة سطر
+                </Button>
+              </Box>
+            </Paper>
+          )}
 
           {/* Balance summary */}
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Stack direction="row" spacing={4} sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>
-              <Stack sx={{ alignItems: 'center' }}>
-                <Typography variant="caption" color="text.secondary">إجمالي المدين</Typography>
-                <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalDebit)}</Typography>
-              </Stack>
-              <Divider orientation="vertical" flexItem />
-              <Stack sx={{ alignItems: 'center' }}>
-                <Typography variant="caption" color="text.secondary">إجمالي الدائن</Typography>
-                <Typography sx={{ fontWeight: 700, direction: 'ltr' }}>{numFmt(totalCredit)}</Typography>
-              </Stack>
-              <Divider orientation="vertical" flexItem />
-              <Stack sx={{ alignItems: 'center' }}>
-                <Typography variant="caption" color="text.secondary">الفرق</Typography>
-                <Typography sx={{ fontWeight: 700, direction: 'ltr' }} color={isBalanced ? 'success.main' : 'error.main'}>
-                  {numFmt(Math.abs(totalDebit - totalCredit))}
-                </Typography>
-              </Stack>
-              <Box
-                sx={{
-                  fontWeight: 700, px: 2, py: 0.5, borderRadius: 1.5,
-                  bgcolor: isBalanced ? '#dcfce7' : '#fee2e2',
-                  color: isBalanced ? '#16a34a' : '#dc2626',
-                }}
-              >
-                {isBalanced ? 'متوازن' : 'غير متوازن'}
-              </Box>
-            </Stack>
-          </Paper>
+          {!isMobile && (
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              {balanceSummary}
+            </Paper>
+          )}
         </Box>
+
+        {/* Mobile: sticky save bar */}
+        {isMobile && (
+          <Box
+            sx={{
+              position: 'fixed', insetInline: 0, bottom: 0, zIndex: 1200,
+              bgcolor: 'background.paper',
+              borderTop: 1, borderColor: 'divider',
+              px: 1.5, pt: 1, pb: 'calc(8px + env(safe-area-inset-bottom))',
+            }}
+          >
+            {balanceSummary}
+            <Button
+              variant="contained"
+              fullWidth
+              disabled={saving || !isBalanced}
+              onClick={handleSubmit}
+              sx={{ mt: 1 }}
+            >
+              {saving ? <CircularProgress size={20} color="inherit" /> : 'حفظ القيد'}
+            </Button>
+          </Box>
+        )}
       </ThemeProvider>
     </CacheProvider>
   )

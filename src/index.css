@@ -5,6 +5,35 @@
 
 body {
   font-family: "Tajawal", sans-serif;
+  overflow-x: hidden;
+}
+
+/* ── Mobile-first layout helpers ─────────────────────────────────────────── */
+
+/* Full-screen antd modals / drawers-as-modals on phones — keeps forms usable
+   and also improves the HelpButton guide dialogs. */
+@media (max-width: 575px) {
+  .ant-modal {
+    max-width: 100vw !important;
+    margin: 0 !important;
+    top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .ant-modal-content {
+    min-height: 100dvh;
+    border-radius: 0 !important;
+  }
+}
+
+/* Sticky action bar used by mobile forms (e.g. journal entry save bar). */
+.mobile-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: var(--ant-color-bg-container);
+  border-top: 1px solid var(--ant-color-border-secondary);
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  margin: 0 -12px -12px;
 }
 
 /* Topbar: responsive show/hide, matching the old MUI xs(0)/sm(600)/md(900) breakpoints */

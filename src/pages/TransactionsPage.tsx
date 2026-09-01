@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Button, Flex, Input, Modal, Select, Spin, Table, Tooltip, Typography,
+  Button, Card, Flex, Input, Modal, Select, Spin, Table, Tooltip, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
+import ResponsiveTable from '@/components/common/ResponsiveTable'
+import FilterBar from '@/components/common/FilterBar'
+import { useResponsive } from '@/hooks/useResponsive'
 import FirebaseImportDialog from '@/components/FirebaseImportDialog'
 import {
-  ArrowUpDown, Ban, CircleCheck, CloudDownload, FileDown, FilterX, FileSpreadsheet, Pencil, Search, Sheet, Trash2,
+  ArrowUpDown, Ban, CircleCheck, CloudDownload, FileDown, FileSpreadsheet, Pencil, Search, Sheet, Trash2,
 } from 'lucide-react'
 import { journalApi } from '@/api/journal'
 import { openPdf, downloadExcel } from '@/api/pdf'
@@ -68,6 +71,7 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
 
 export default function TransactionsPage() {
   const navigate = useNavigate()
+  const { isMobile } = useResponsive()
   const [entries,      setEntries]      = useState<JournalEntry[]>([])
   const [loading,      setLoading]      = useState(true)
   const [reversing,    setReversing]    = useState<number | null>(null)
@@ -172,7 +176,35 @@ export default function TransactionsPage() {
   const grandTotal  = entries.reduce((s, e) => s + Number(e.lines_sum_debit ?? 0), 0)
   const postedCount = entries.filter(e =>  e.is_posted).length
   const draftCount  = entries.filter(e => !e.is_posted).length
-  const hasFilters  = !!(search || from || to || status !== 'all')
+  const activeFilterCount = [search, from, to, status !== 'all'].filter(Boolean).length
+
+  const openSpreadsheet = () => {
+    const p = new URLSearchParams()
+    if (from)             p.set('from',   from)
+    if (to)               p.set('to',     to)
+    if (search)           p.set('search', search)
+    if (status !== 'all') p.set('status', status)
+    const qs = p.toString()
+    navigate(`/journal-spreadsheet${qs ? `?${qs}` : ''}`)
+  }
+
+  const exportActions = (
+    <>
+      <Tooltip title="طباعة PDF">
+        <Button type="text" shape="circle" size="small" danger onClick={handlePdf} disabled={pdfLoading || entries.length === 0}
+          icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
+      </Tooltip>
+      <Tooltip title="تصدير Excel">
+        <Button type="text" shape="circle" size="small" disabled={excelLoading || entries.length === 0}
+          onClick={handleExcel}
+          icon={excelLoading ? <Spin size="small" /> : <FileSpreadsheet size={16} color="var(--ant-color-success)" />} />
+      </Tooltip>
+      <Tooltip title="فتح كجدول بيانات">
+        <Button type="text" shape="circle" size="small" disabled={entries.length === 0}
+          onClick={openSpreadsheet} icon={<Sheet size={16} />} />
+      </Tooltip>
+    </>
+  )
 
   const columns: ColumnsType<JournalEntry> = [
     {
@@ -289,64 +321,40 @@ export default function TransactionsPage() {
       </Flex>
 
       {/* ── Filters ── */}
-      <div style={{ padding: '8px 12px', border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8 }}>
-        <Flex gap={8} wrap="wrap" align="flex-end">
-          <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={from} defaultTo={to} />
-          <Input
-            size="small"
-            placeholder="بحث..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && load()}
-            style={{ width: 180 }}
-            prefix={<Search size={14} color="var(--ant-color-text-disabled)" />}
-          />
-          <DateInput size="small" value={from} onChange={e => setFrom(e.target.value)} style={{ width: 135 }} />
-          <DateInput size="small" value={to} onChange={e => setTo(e.target.value)} style={{ width: 135 }} />
-          <Select
-            size="small" value={status} onChange={setStatus} style={{ minWidth: 95 }}
-            options={[
-              { value: 'all', label: 'الكل' },
-              { value: 'posted', label: 'مرحَّل' },
-              { value: 'draft', label: 'مسودة' },
-            ]}
-          />
-          <Button type="primary" size="small" onClick={() => load()}>بحث</Button>
-          {hasFilters && (
-            <Tooltip title="إلغاء الفلاتر">
-              <Button type="text" shape="circle" size="small" onClick={handleReset} icon={<FilterX size={16} />} />
-            </Tooltip>
-          )}
-          <div style={{ flex: 1 }} />
-          <Tooltip title="طباعة PDF">
-            <Button type="text" shape="circle" size="small" danger onClick={handlePdf} disabled={pdfLoading || entries.length === 0}
-              icon={pdfLoading ? <Spin size="small" /> : <FileDown size={16} />} />
-          </Tooltip>
-          <Tooltip title="تصدير Excel">
-            <Button type="text" shape="circle" size="small" disabled={excelLoading || entries.length === 0}
-              onClick={handleExcel}
-              icon={excelLoading ? <Spin size="small" /> : <FileSpreadsheet size={16} color="var(--ant-color-success)" />} />
-          </Tooltip>
-          <Tooltip title="فتح كجدول بيانات">
-            <Button
-              type="text" shape="circle" size="small" disabled={entries.length === 0}
-              onClick={() => {
-                const p = new URLSearchParams()
-                if (from)             p.set('from',   from)
-                if (to)               p.set('to',     to)
-                if (search)           p.set('search', search)
-                if (status !== 'all') p.set('status', status)
-                const qs = p.toString()
-                navigate(`/journal-spreadsheet${qs ? `?${qs}` : ''}`)
-              }}
-              icon={<Sheet size={16} />}
-            />
-          </Tooltip>
-        </Flex>
-      </div>
+      <FilterBar
+        activeCount={activeFilterCount}
+        onReset={handleReset}
+        desktopExtra={exportActions}
+      >
+        <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={from} defaultTo={to} block={isMobile} />
+        <Input
+          size="small"
+          placeholder="بحث..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && load()}
+          style={{ width: isMobile ? '100%' : 180 }}
+          prefix={<Search size={14} color="var(--ant-color-text-disabled)" />}
+        />
+        <DateInput size="small" value={from} onChange={e => setFrom(e.target.value)} style={{ width: isMobile ? '100%' : 135 }} />
+        <DateInput size="small" value={to} onChange={e => setTo(e.target.value)} style={{ width: isMobile ? '100%' : 135 }} />
+        <Select
+          size="small" value={status} onChange={setStatus} style={{ minWidth: 95, width: isMobile ? '100%' : undefined }}
+          options={[
+            { value: 'all', label: 'الكل' },
+            { value: 'posted', label: 'مرحَّل' },
+            { value: 'draft', label: 'مسودة' },
+          ]}
+        />
+        <Button type="primary" size="small" onClick={() => load()} block={isMobile}>بحث</Button>
+      </FilterBar>
+
+      {isMobile && (
+        <Flex gap={4} justify="flex-end">{exportActions}</Flex>
+      )}
 
       {/* ── Table ── */}
-      <Table
+      <ResponsiveTable<JournalEntry>
         size="small"
         loading={loading}
         columns={columns}
@@ -361,6 +369,61 @@ export default function TransactionsPage() {
           },
           onClick: () => navigate(`/transactions/${entry.id}/edit`),
         })}
+        cardKey={e => e.id}
+        renderCard={entry => (
+          <Card
+            size="small"
+            styles={{ body: { padding: 12 } }}
+            style={{ borderInlineStart: `3px solid ${entry.is_posted ? 'var(--ant-color-success)' : 'var(--ant-color-warning)'}` }}
+            onClick={() => navigate(`/transactions/${entry.id}/edit`)}
+          >
+            <Flex align="center" gap={8} style={{ marginBottom: 4 }}>
+              <Text strong style={{ direction: 'ltr' }}>#{entry.id}</Text>
+              <Text type="secondary" style={{ direction: 'ltr', fontSize: 13 }}>{entry.date}</Text>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%', marginInlineStart: 'auto',
+                background: entry.is_posted ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
+              }} />
+              <Text style={{ color: entry.is_posted ? 'var(--ant-color-success)' : 'var(--ant-color-warning)', fontSize: 13, fontWeight: 600 }}>
+                {entry.is_posted ? 'مرحَّل' : 'مسودة'}
+              </Text>
+            </Flex>
+            <BayanCell entry={entry} />
+            <Flex justify="space-between" style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--ant-color-border-secondary)' }}>
+              <Text style={{ fontSize: 13 }}>الإجمالي</Text>
+              <Text strong style={{ color: 'var(--ant-color-primary)', direction: 'ltr' }}>{fmt(entry.lines_sum_debit)}</Text>
+            </Flex>
+            <Flex justify="flex-end" onClick={e => e.stopPropagation()} style={{ marginTop: 4 }}>
+              <Tooltip title={entry.is_posted ? 'إلغاء الترحيل' : 'ترحيل'}>
+                <Button type="text" shape="circle" size="small" disabled={togglingId === entry.id} onClick={() => handleTogglePost(entry)}
+                  icon={togglingId === entry.id ? <Spin size="small" /> : entry.is_posted ? <Ban size={16} color="var(--ant-color-warning)" /> : <CircleCheck size={16} color="var(--ant-color-success)" />} />
+              </Tooltip>
+              <Tooltip title={entry.reversed_by ? 'تم العكس مسبقاً' : 'عكس القيد'}>
+                <Button type="text" shape="circle" size="small" disabled={!entry.is_posted || !!entry.reversed_by || reversing === entry.id}
+                  onClick={() => setConfirmEntry(entry)}
+                  icon={reversing === entry.id ? <Spin size="small" /> : <ArrowUpDown size={16} />} />
+              </Tooltip>
+              <Tooltip title="تعديل">
+                <Button type="text" shape="circle" size="small" color="primary" variant="text" disabled={entry.is_posted}
+                  onClick={() => navigate(`/transactions/${entry.id}/edit`)} icon={<Pencil size={16} />} />
+              </Tooltip>
+              <Tooltip title="حذف">
+                <Button type="text" shape="circle" size="small" danger disabled={entry.is_posted}
+                  onClick={() => handleDelete(entry)} icon={<Trash2 size={16} />} />
+              </Tooltip>
+            </Flex>
+          </Card>
+        )}
+        mobileSummary={entries.length > 0 ? (
+          <Card size="small" styles={{ body: { padding: 12 } }} style={{ position: 'sticky', bottom: 0 }}>
+            <Flex justify="space-between" align="center">
+              <Text strong>الإجمالي ({entries.length} قيد)</Text>
+              <Text strong style={{ color: 'var(--ant-color-primary)', direction: 'ltr', fontSize: 16 }}>
+                {grandTotal.toLocaleString('en-US')}
+              </Text>
+            </Flex>
+          </Card>
+        ) : null}
         summary={() => entries.length > 0 ? (
           <Table.Summary.Row>
             <Table.Summary.Cell index={0} colSpan={3} align="center">

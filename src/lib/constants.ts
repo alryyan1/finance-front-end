@@ -4,7 +4,7 @@ import 'dayjs/locale/ar'
 dayjs.locale('ar')
 
 
-export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost/finance-api/public'
+export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://backend-finance.elsir-omer.com/finance-api/public'
 
 export function formatCurrency(amount: number): string {
   return Math.round(amount).toLocaleString('en-US')
