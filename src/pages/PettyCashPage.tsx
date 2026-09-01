@@ -522,6 +522,10 @@ export default function PettyCashPage() {
   }
 
   const handleDeleteDocument = (t: PettyCashTransaction) => {
+    if (t.status === 'approved') {
+      toast.error('لا يمكن إزالة مستند حركة معتمدة')
+      return
+    }
     Modal.confirm({
       title: 'إزالة المستند',
       content: `سيتم حذف "${t.document_original_name ?? 'المستند المرفق'}" نهائياً من هذه الحركة.`,
@@ -818,13 +822,13 @@ export default function PettyCashPage() {
                 <Button type="text" shape="circle" size="small" onClick={() => handleViewDocument(t)} disabled={docLoading === t.id}
                   icon={docLoading === t.id ? <Spin size="small" /> : <Eye size={15} color="var(--ant-color-primary)" />} />
               </Tooltip>
-              <Tooltip title="استبدال المستند">
-                <Button type="text" shape="circle" size="small" disabled={uploadingDocFor === t.id}
+              <Tooltip title={t.status === 'approved' ? 'لا يمكن استبدال مستند حركة معتمدة' : 'استبدال المستند'}>
+                <Button type="text" shape="circle" size="small" disabled={uploadingDocFor === t.id || t.status === 'approved'}
                   onClick={() => { setUploadTarget(t); rowDocInputRef.current?.click() }}
                   icon={uploadingDocFor === t.id ? <Spin size="small" /> : <Paperclip size={15} color="#000" />} />
               </Tooltip>
-              <Tooltip title="إزالة المستند">
-                <Button type="text" shape="circle" size="small" danger disabled={deletingDocFor === t.id}
+              <Tooltip title={t.status === 'approved' ? 'لا يمكن إزالة مستند حركة معتمدة' : 'إزالة المستند'}>
+                <Button type="text" shape="circle" size="small" danger disabled={deletingDocFor === t.id || t.status === 'approved'}
                   onClick={() => handleDeleteDocument(t)}
                   icon={deletingDocFor === t.id ? <Spin size="small" /> : <FileX size={15} />} />
               </Tooltip>
@@ -885,6 +889,34 @@ export default function PettyCashPage() {
     </Card>
   )
 
+  const helpButton = (
+    <HelpButton title="دليل استخدام صندوق النثريات">
+      <Flex vertical gap={16}>
+        <div><Title level={5}>ما هو صندوق النثريات؟</Title>
+          <Text>مصروفات صغيرة ومتكررة تُصرف نقداً أو من البنك. كل مصروف يُنشئ قيداً محاسبياً (مدين المصروف، دائن الحساب المُختار).</Text></div>
+        <div><Title level={5}>الاعتماد</Title>
+          <Text>اعتماد المدير هو ما يُنشئ القيد المحاسبي فعلياً.</Text></div>
+        <div><Title level={5}>المرفقات</Title>
+          <Text>يمكن إرفاق صورة أو ملف PDF لإيصال كل مصروف لتوثيقه.</Text></div>
+      </Flex>
+    </HelpButton>
+  )
+  const expenseBtn = (
+    <Button type="primary" danger size="small" block={isMobile} icon={<Banknote size={15} />} onClick={openExpenseDialog}>
+      إذن صرف جديد
+    </Button>
+  )
+  const receiptBtn = (
+    <Button type="primary" size="small" block={isMobile} style={{ background: 'var(--ant-color-success)' }} icon={<ArrowDownToLine size={15} />} onClick={openReceiptDialog}>
+      إذن قبض جديد
+    </Button>
+  )
+  const settingsBtn = (
+    <Button size="small" icon={<Settings size={15} />} onClick={() => navigate('/settings?tab=petty-cash')}>
+      {hasSourceAccount ? 'الإعدادات' : 'إعداد الحسابات'}
+    </Button>
+  )
+
   return (
     <div>
       <input ref={rowDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
@@ -894,50 +926,68 @@ export default function PettyCashPage() {
           e.target.value = ''
         }} />
       {/* Header */}
-      <Flex justify="space-between" align="center" wrap="wrap" gap={8} style={{ marginBottom: 6 }}>
-        <Text strong style={{ fontSize: 16 }}>صندوق النثريات</Text>
-        <Flex gap={8} align="center" wrap="wrap">
-          <HelpButton title="دليل استخدام صندوق النثريات">
-            <Flex vertical gap={16}>
-              <div><Title level={5}>ما هو صندوق النثريات؟</Title>
-                <Text>مصروفات صغيرة ومتكررة تُصرف نقداً أو من البنك. كل مصروف يُنشئ قيداً محاسبياً (مدين المصروف، دائن الحساب المُختار).</Text></div>
-              <div><Title level={5}>الاعتماد</Title>
-                <Text>اعتماد المدير هو ما يُنشئ القيد المحاسبي فعلياً.</Text></div>
-              <div><Title level={5}>المرفقات</Title>
-                <Text>يمكن إرفاق صورة أو ملف PDF لإيصال كل مصروف لتوثيقه.</Text></div>
+      {isMobile ? (
+        <Flex vertical gap={8} style={{ marginBottom: 10 }}>
+          <Flex justify="space-between" align="center" gap={8}>
+            <Text strong style={{ fontSize: 16 }}>صندوق النثريات</Text>
+            <Flex align="center" gap={4}>
+              {totals && (
+                <Flex vertical align="flex-end" style={{ lineHeight: 1.15 }}>
+                  <Text style={{ fontSize: 10, fontWeight: 700, color: '#000' }}>إجمالي المصروفات</Text>
+                  <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 15, color: 'var(--ant-color-error)' }}>
+                    {numFmt(totals.expense)}
+                  </span>
+                </Flex>
+              )}
+              {helpButton}
             </Flex>
-          </HelpButton>
-                {/* Totals summary */}
-          {totals && (
-            <div style={{ padding: '8px 14px', marginBottom: 3, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, textAlign: 'center' }}>
-              <Text style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#000' }}>إجمالي المصروفات</Text>
-              <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 18, color: 'var(--ant-color-error)' }}>
-                {numFmt(totals.expense)}
-              </span>
-            </div>
-          )}
-          <Button type="primary" danger size="small" icon={<Banknote size={15} />} onClick={openExpenseDialog}>
-                إذن صرف جديد
+          </Flex>
+          <Flex gap={6}>{expenseBtn}{receiptBtn}</Flex>
+          <Flex gap={6}>
+            <Badge count={pendingWhatsAppCount} size="small" offset={[-4, 4]} style={{ flex: 1 }}>
+              <Button
+                block
+                size="small"
+                icon={importingWhatsApp ? <Spin size="small" /> : <Download size={14} />}
+                onClick={handleImportWhatsAppRequests}
+                disabled={importingWhatsApp}
+              >
+                استيراد طلبات واتساب
               </Button>
-          <Button type="primary" size="small" style={{ background: 'var(--ant-color-success)' }} icon={<ArrowDownToLine size={15} />} onClick={openReceiptDialog}>
-                إذن قبض جديد
-              </Button>
-          <Badge count={pendingWhatsAppCount} size="small" offset={[-4, 4]}>
-            <Button
-              size="small"
-              icon={importingWhatsApp ? <Spin size="small" /> : <Download size={14} />}
-              onClick={handleImportWhatsAppRequests}
-              disabled={importingWhatsApp}
-            >
-              استيراد طلبات واتساب
-            </Button>
-            
-          </Badge>
-          <Button size="small" icon={<Settings size={15} />} onClick={() => navigate('/settings?tab=petty-cash')}>
-            {hasSourceAccount ? 'الإعدادات' : 'إعداد الحسابات'}
-          </Button>
+            </Badge>
+            {settingsBtn}
+          </Flex>
         </Flex>
-      </Flex>
+      ) : (
+        <Flex justify="space-between" align="center" wrap="wrap" gap={8} style={{ marginBottom: 6 }}>
+          <Text strong style={{ fontSize: 16 }}>صندوق النثريات</Text>
+          <Flex gap={8} align="center" wrap="wrap">
+            {helpButton}
+            {/* Totals summary */}
+            {totals && (
+              <div style={{ padding: '8px 14px', marginBottom: 3, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 8, textAlign: 'center' }}>
+                <Text style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#000' }}>إجمالي المصروفات</Text>
+                <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 18, color: 'var(--ant-color-error)' }}>
+                  {numFmt(totals.expense)}
+                </span>
+              </div>
+            )}
+            {expenseBtn}
+            {receiptBtn}
+            <Badge count={pendingWhatsAppCount} size="small" offset={[-4, 4]}>
+              <Button
+                size="small"
+                icon={importingWhatsApp ? <Spin size="small" /> : <Download size={14} />}
+                onClick={handleImportWhatsAppRequests}
+                disabled={importingWhatsApp}
+              >
+                استيراد طلبات واتساب
+              </Button>
+            </Badge>
+            {settingsBtn}
+          </Flex>
+        </Flex>
+      )}
 
       {accountSettingsLoading ? (
         <Flex justify="center" style={{ padding: '64px 0' }}><Spin size="large" /></Flex>
