@@ -10,10 +10,10 @@ import { useToast } from '@/lib/toast'
 import api from '@/lib/axios'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
-import { openPdf } from '@/api/pdf'
+import { openPdf, downloadExcel } from '@/api/pdf'
 import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
-import { BookOpen, FileDown, Rows3 } from 'lucide-react'
+import { BookOpen, FileDown, Rows3, Sheet } from 'lucide-react'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
 
 const { Title, Text } = Typography
@@ -232,6 +232,7 @@ export default function LedgerPage() {
   const [data, setData]               = useState<LedgerData | null>(null)
   const [loading, setLoading]         = useState(false)
   const [pdfLoading, setPdfLoading]   = useState(false)
+  const [excelLoading, setExcelLoading] = useState(false)
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [view, setView]               = useState<'arabic' | 'gl'>('arabic')
 
@@ -252,6 +253,22 @@ export default function LedgerPage() {
         ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : {}),
       })
     } finally { setPdfLoading(false) }
+  }
+
+  const handleExcel = async () => {
+    if (!account) return
+    setExcelLoading(true)
+    try {
+      await downloadExcel('/api/reports/ledger/excel', {
+        account_id: account.id,
+        from,
+        to,
+        ...(party ? { party_id: party.id } : {}),
+        ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : {}),
+      }, `كشف-حساب-${account.code}.xlsx`)
+    } catch {
+      toast.error('تعذّر إنشاء ملف Excel')
+    } finally { setExcelLoading(false) }
   }
 
   useEffect(() => {
@@ -335,6 +352,13 @@ export default function LedgerPage() {
             disabled={pdfLoading || !data}
           >
             طباعة PDF
+          </Button>
+          <Button
+            icon={excelLoading ? <Spin size="small" /> : <Sheet size={16} color="var(--ant-color-success)" />}
+            onClick={handleExcel}
+            disabled={excelLoading || !data}
+          >
+            تصدير Excel
           </Button>
 
           {data && (
