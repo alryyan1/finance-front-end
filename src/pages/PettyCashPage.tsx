@@ -14,7 +14,7 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
-  ArrowDownToLine, Banknote, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
+  ArrowDownToLine, Banknote, Camera, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
   Landmark, MessageCircle, MessageSquareText, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -186,6 +186,7 @@ export default function PettyCashPage() {
   const [expenseForm, setExpenseForm]     = useState(emptyExpenseForm())
   const [creatingExpense, setCreatingExpense] = useState(false)
   const expenseDocInputRef = useRef<HTMLInputElement>(null)
+  const expenseCameraInputRef = useRef<HTMLInputElement>(null)
   const expenseAmountRef = useRef<GetRef<typeof InputNumber>>(null)
   const expenseDescriptionRef = useRef<GetRef<typeof Input.TextArea>>(null)
 
@@ -1319,18 +1320,31 @@ export default function PettyCashPage() {
               <Input.TextArea ref={expenseDescriptionRef} rows={2} placeholder="مثال: مواصلات توصيل طرد" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} />
             </Col>
             <Col span={24}>
-              <div
-                className="petty-upload-zone"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', marginBottom: 10 }}
-                onClick={() => expenseDocInputRef.current?.click()}
-              >
-                <Paperclip size={14} color="#000" />
-                <Text style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>
-                  {expenseForm.document ? expenseForm.document.name : 'إرفاق إيصال (اختياري)'}
-                </Text>
-                <input ref={expenseDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
-              </div>
+              <Flex gap={8} align="stretch" style={{ marginBottom: 10 }}>
+                <div
+                  className="petty-upload-zone"
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', minWidth: 0 }}
+                  onClick={() => expenseDocInputRef.current?.click()}
+                >
+                  <Paperclip size={14} color="#000" />
+                  <Text ellipsis style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>
+                    {expenseForm.document ? expenseForm.document.name : 'إرفاق إيصال (اختياري)'}
+                  </Text>
+                </div>
+                {isMobile && (
+                  <Button
+                    icon={<Camera size={15} />}
+                    onClick={() => expenseCameraInputRef.current?.click()}
+                    style={{ flexShrink: 0 }}
+                  >
+                    التقاط بالكاميرا
+                  </Button>
+                )}
+              </Flex>
+              <input ref={expenseDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
+                onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
+              <input ref={expenseCameraInputRef} type="file" hidden accept="image/*" capture="environment"
+                onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
             </Col>
           </Row>
         </div>
