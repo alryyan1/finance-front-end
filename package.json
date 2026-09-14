@@ -16,6 +16,7 @@
     "build:vital": "vite build --mode vital",
     "build:manjuluk": "vite build --mode manjuluk",
     "build:jawda": "vite build --mode jawda",
+    "build:alfanar": "vite build --mode alfanar",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -25,6 +25,8 @@ interface LedgerRow {
   entry_description: string
   line_description: string | null
   party_name: string | null
+  account_code: string
+  account_name: string
   debit: string
   credit: string
   balance: string
@@ -33,6 +35,7 @@ interface LedgerRow {
 
 interface LedgerData {
   account: { id: number; code: string; name: string; type: string }
+  is_aggregate: boolean
   from: string
   to: string
   opening_balance: string
@@ -135,6 +138,9 @@ function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick:
                   <div style={{ fontWeight: 600 }}>{row.entry_description}</div>
                   {row.line_description && <div style={{ fontSize: 11, color: '#888' }}>{row.line_description}</div>}
                   {row.party_name && <div style={{ fontSize: 11, color: '#666', fontStyle: 'italic' }}>{row.party_name}</div>}
+                  {data.is_aggregate && (
+                    <div style={{ fontSize: 11, color: GL_HEADER, direction: 'ltr' }}>{row.account_code} — {row.account_name}</div>
+                  )}
                 </td>
                 <td style={{ textAlign: 'right', fontFamily: 'inherit', fontSize: 13, direction: 'ltr', border: '1px solid #cdd6f0', padding: '8px 12px', color: Number(row.debit) > 0 ? '#0d2b6e' : '#bbb' }}>
                   {Number(row.debit) > 0 ? numFmt(row.debit) : '—'}
@@ -171,7 +177,7 @@ function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick:
   )
 }
 
-const ledgerColumns: ColumnsType<LedgerRow> = [
+const ledgerColumns = (isAggregate: boolean): ColumnsType<LedgerRow> => [
   {
     title: 'التاريخ', dataIndex: 'date', width: 110, align: 'center',
     render: (v: string) => <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)' }}>{v}</span>,
@@ -189,6 +195,10 @@ const ledgerColumns: ColumnsType<LedgerRow> = [
       </div>
     ),
   },
+  ...(isAggregate ? [{
+    title: 'الحساب', dataIndex: 'account_code', width: 160, align: 'center' as const,
+    render: (_: string, row: LedgerRow) => <Text type="secondary">{row.account_code} — {row.account_name}</Text>,
+  }] : []),
   {
     title: 'الطرف', dataIndex: 'party_name', width: 150, align: 'center',
     render: (v: string | null) => <Text type="secondary">{v || '—'}</Text>,
@@ -391,6 +401,11 @@ export default function LedgerPage() {
             <Text style={{ fontWeight: 700, fontSize: 17 }}>
               {data.account.code} — {data.account.name}
             </Text>
+            {data.is_aggregate && (
+              <Tooltip title="هذا حساب أب — الكشف يجمع حركات كل الحسابات الفرعية تحته">
+                <Tag color="purple">مجمّع (يشمل الحسابات الفرعية)</Tag>
+              </Tooltip>
+            )}
             <Tag>رصيد افتتاحي: {numFmt(data.opening_balance)} {sideLbl(data.opening_side)}</Tag>
             <Tag color="blue">رصيد ختامي: {numFmt(data.closing_balance)} {sideLbl(data.closing_side)}</Tag>
           </Flex>
@@ -399,7 +414,7 @@ export default function LedgerPage() {
             size="small"
             bordered
             sticky
-            columns={ledgerColumns}
+            columns={ledgerColumns(data.is_aggregate)}
             dataSource={data.rows}
             rowKey={(_, i) => String(i)}
             pagination={false}
@@ -420,10 +435,11 @@ export default function LedgerPage() {
                     <Table.Summary.Cell index={2}>
                       <Text type="secondary" italic>رصيد افتتاحي</Text>
                     </Table.Summary.Cell>
-                    <Table.Summary.Cell index={3} />
-                    <Table.Summary.Cell index={4} />
-                    <Table.Summary.Cell index={5} />
-                    <Table.Summary.Cell index={6} align="right">
+                    {data.is_aggregate && <Table.Summary.Cell index={3} />}
+                    <Table.Summary.Cell index={data.is_aggregate ? 4 : 3} />
+                    <Table.Summary.Cell index={data.is_aggregate ? 5 : 4} />
+                    <Table.Summary.Cell index={data.is_aggregate ? 6 : 5} />
+                    <Table.Summary.Cell index={data.is_aggregate ? 7 : 6} align="right">
                       <span style={{ direction: 'ltr', fontWeight: 600 }}>
                         {numFmt(data.opening_balance)}
                         <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.opening_side)}</span>
@@ -434,7 +450,7 @@ export default function LedgerPage() {
                 {data.rows.length > 0 && (
                   <Table.Summary fixed="bottom">
                     <Table.Summary.Row style={{ background: 'var(--ant-color-fill-alter)', fontWeight: 700 }}>
-                      <Table.Summary.Cell index={0} colSpan={4} align="center">الإجمالي</Table.Summary.Cell>
+                      <Table.Summary.Cell index={0} colSpan={data.is_aggregate ? 5 : 4} align="center">الإجمالي</Table.Summary.Cell>
                       <Table.Summary.Cell index={1} align="right">
                         <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{numFmt(data.totals.debit)}</span>
                       </Table.Summary.Cell>

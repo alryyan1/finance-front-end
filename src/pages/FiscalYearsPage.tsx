@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Alert, Button, Divider, Flex, InputNumber, Modal, Select, Spin, Table, Tag, Tooltip, Typography,
+  Alert, Button, Divider, Flex, InputNumber, Modal, Segmented, Select, Spin, Table, Tag, Tooltip, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
@@ -49,11 +49,15 @@ export default function FiscalYearsPage() {
   const [loading, setLoading]   = useState(true)
 
   // Create dialog
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen]   = useState(false)
+  const [periodMode, setPeriodMode]   = useState<'monthly' | 'yearly'>('monthly')
 
   // Monthly form
   const [monthYear,  setMonthYear]  = useState(currentYear)
   const [monthMonth, setMonthMonth] = useState(new Date().getMonth() + 1)
+
+  // Yearly form
+  const [fullYear, setFullYear] = useState(currentYear)
 
   const [creating, setCreating] = useState(false)
 
@@ -88,16 +92,30 @@ export default function FiscalYearsPage() {
   const monthlyStartDate = monthMonth > 0 ? firstDayOfMonth(monthYear, monthMonth) : ''
   const monthlyEndDate   = monthMonth > 0 ? lastDayOfMonth(monthYear, monthMonth)  : ''
 
+  // Yearly period preview
+  const yearlyName      = `سنة ${fullYear}`
+  const yearlyStartDate = `${fullYear}-01-01`
+  const yearlyEndDate   = `${fullYear}-12-31`
+
   const openCreateDialog = () => {
+    setPeriodMode('monthly')
     setMonthYear(currentYear)
     setMonthMonth(new Date().getMonth() + 1)
+    setFullYear(currentYear)
     setCreateOpen(true)
   }
 
   const handleCreate = async () => {
     setCreating(true)
     try {
-      if (monthMonth === 0) {
+      if (periodMode === 'yearly') {
+        await api.post('/api/fiscal-years', {
+          name:       yearlyName,
+          start_date: yearlyStartDate,
+          end_date:   yearlyEndDate,
+        })
+        toast.success('تم إنشاء الفترة المالية')
+      } else if (monthMonth === 0) {
         // Bulk: create all 12 months
         const res = await api.post('/api/fiscal-years/bulk-months', { year: monthYear })
         const { created, skipped } = res.data
@@ -211,15 +229,15 @@ export default function FiscalYearsPage() {
       <Flex justify="space-between" align="center" style={{ marginBottom: 24 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>الفترات المالية</Title>
-          <Text type="secondary">إدارة الفترات المالية الشهرية</Text>
+          <Text type="secondary">إدارة الفترات المالية الشهرية والسنوية</Text>
         </div>
         <Flex gap={8} align="center">
           <HelpButton title="دليل استخدام الفترات المالية">
             <Flex vertical gap={16}>
               <div><Title level={5}>ما هي الفترة المالية؟</Title>
-                <Text>الفترة المالية هي النطاق الزمني الذي يُسجَّل فيه النشاط المحاسبي، وتكون فترة شهرية واحدة.</Text></div>
+                <Text>الفترة المالية هي النطاق الزمني الذي يُسجَّل فيه النشاط المحاسبي — يمكن أن تكون شهرية أو سنوية.</Text></div>
               <div><Title level={5}>إنشاء فترة جديدة</Title>
-                <Text>اضغط "فترة جديدة"، اختر الشهر والسنة. يمكن أيضاً إنشاء جميع أشهر السنة دفعة واحدة.</Text></div>
+                <Text>اضغط "فترة جديدة"، واختر النوع (شهرية أو سنوية). للفترة الشهرية اختر الشهر والسنة، ويمكن أيضاً إنشاء جميع أشهر السنة دفعة واحدة. للفترة السنوية يكفي اختيار السنة، وستُنشأ فترة واحدة تغطي 1 يناير حتى 31 ديسمبر منها.</Text></div>
               <div><Title level={5}>قفل الفترة</Title>
                 <Text>بعد إغلاق الفترة المالية اضغط أيقونة القفل لمنع إضافة أو تعديل أي قيود فيها. الفترات المقفولة محمية من التغيير.</Text></div>
               <div><Title level={5}>الفترة النشطة</Title>
@@ -263,38 +281,63 @@ export default function FiscalYearsPage() {
           <Flex justify="flex-end" gap={8}>
             <Button onClick={() => setCreateOpen(false)}>إلغاء</Button>
             <Button type="primary" onClick={handleCreate} disabled={createDisabled} icon={creating ? <Spin size="small" /> : <Plus size={16} />}>
-              {monthMonth === 0 ? 'إنشاء 12 شهراً' : 'إنشاء'}
+              {periodMode === 'monthly' && monthMonth === 0 ? 'إنشاء 12 شهراً' : 'إنشاء'}
             </Button>
           </Flex>
         }
       >
         <Flex vertical gap={16} style={{ paddingTop: 8 }}>
-          <Flex gap={12}>
-            <InputNumber min={2000} max={2100} value={monthYear} onChange={v => setMonthYear(Number(v))} style={{ width: 110 }} />
-            <Select
-              value={monthMonth}
-              onChange={setMonthMonth}
-              style={{ flex: 1 }}
-              options={[
-                { value: 0, label: <Flex align="center" gap={8}><Tag color="blue">12</Tag> جميع الأشهر</Flex> },
-                ...ARABIC_MONTHS.map((name, i) => ({ value: i + 1, label: name })),
-              ]}
-            />
-          </Flex>
+          <Segmented
+            block
+            value={periodMode}
+            onChange={v => setPeriodMode(v as 'monthly' | 'yearly')}
+            options={[
+              { value: 'monthly', label: 'شهرية' },
+              { value: 'yearly', label: 'سنوية' },
+            ]}
+          />
+
+          {periodMode === 'monthly' ? (
+            <Flex gap={12}>
+              <InputNumber min={2000} max={2100} value={monthYear} onChange={v => setMonthYear(Number(v))} style={{ width: 110 }} />
+              <Select
+                value={monthMonth}
+                onChange={setMonthMonth}
+                style={{ flex: 1 }}
+                options={[
+                  { value: 0, label: <Flex align="center" gap={8}><Tag color="blue">12</Tag> جميع الأشهر</Flex> },
+                  ...ARABIC_MONTHS.map((name, i) => ({ value: i + 1, label: name })),
+                ]}
+              />
+            </Flex>
+          ) : (
+            <InputNumber min={2000} max={2100} value={fullYear} onChange={v => setFullYear(Number(v))} style={{ width: 110 }} />
+          )}
 
           {/* Preview box */}
           <div style={{ padding: 12, background: 'var(--ant-color-fill-alter)', borderRadius: 6, border: '1px solid var(--ant-color-border-secondary)' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>معاينة:</Text>
-            <div style={{ fontWeight: 600, marginTop: 2 }}>{monthlyName}</div>
-            {monthMonth > 0 && (
-              <Text type="secondary" style={{ direction: 'ltr', display: 'block', fontSize: 12 }}>
-                {monthlyStartDate} — {monthlyEndDate}
-              </Text>
-            )}
-            {monthMonth === 0 && (
-              <Text style={{ color: 'var(--ant-color-primary)', display: 'block', fontSize: 12 }}>
-                سيتم إنشاء 12 فترة شهرية — الأشهر الموجودة مسبقاً ستُتخطى تلقائياً
-              </Text>
+            {periodMode === 'monthly' ? (
+              <>
+                <div style={{ fontWeight: 600, marginTop: 2 }}>{monthlyName}</div>
+                {monthMonth > 0 && (
+                  <Text type="secondary" style={{ direction: 'ltr', display: 'block', fontSize: 12 }}>
+                    {monthlyStartDate} — {monthlyEndDate}
+                  </Text>
+                )}
+                {monthMonth === 0 && (
+                  <Text style={{ color: 'var(--ant-color-primary)', display: 'block', fontSize: 12 }}>
+                    سيتم إنشاء 12 فترة شهرية — الأشهر الموجودة مسبقاً ستُتخطى تلقائياً
+                  </Text>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ fontWeight: 600, marginTop: 2 }}>{yearlyName}</div>
+                <Text type="secondary" style={{ direction: 'ltr', display: 'block', fontSize: 12 }}>
+                  {yearlyStartDate} — {yearlyEndDate}
+                </Text>
+              </>
             )}
           </div>
 

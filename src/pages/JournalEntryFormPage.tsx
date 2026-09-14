@@ -409,6 +409,18 @@ export default function JournalEntryFormPage() {
       />
     )
 
+    const lineDescription = (
+      <TextField
+        size="small"
+        fullWidth
+        label={isMobile ? 'البيان' : undefined}
+        placeholder="بيان السطر"
+        value={line.description}
+        onChange={e => updateLine(i, { description: e.target.value })}
+        slotProps={{ htmlInput: { autoComplete: 'off' } }}
+      />
+    )
+
     const deleteBtn = (
       <Tooltip title="حذف السطر">
         <span>
@@ -419,7 +431,7 @@ export default function JournalEntryFormPage() {
       </Tooltip>
     )
 
-    return { account, balanceHint, party, debit, credit, deleteBtn }
+    return { account, balanceHint, party, debit, credit, lineDescription, deleteBtn }
   }
 
   const balanceSummary = (
@@ -537,6 +549,7 @@ export default function JournalEntryFormPage() {
                       {f.account}
                       {f.balanceHint}
                       {f.party}
+                      {f.lineDescription}
                       <Stack direction="row" spacing={1.5}>
                         {f.debit}
                         {f.credit}
@@ -555,8 +568,9 @@ export default function JournalEntryFormPage() {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ width: '38%' }}>الحساب</TableCell>
-                      <TableCell sx={{ width: '32%' }}>الجهة</TableCell>
+                      <TableCell sx={{ width: '28%' }}>الحساب</TableCell>
+                      <TableCell sx={{ width: '20%' }}>الجهة</TableCell>
+                      <TableCell sx={{ width: '22%' }}>البيان</TableCell>
                       <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
                       <TableCell align="left" sx={{ width: '12%' }}>دائن</TableCell>
                       <TableCell sx={{ width: 48 }} />
@@ -572,6 +586,7 @@ export default function JournalEntryFormPage() {
                             {f.balanceHint}
                           </TableCell>
                           <TableCell>{f.party}</TableCell>
+                          <TableCell>{f.lineDescription}</TableCell>
                           <TableCell align="left" sx={{ width: 110 }}>{f.debit}</TableCell>
                           <TableCell align="left" sx={{ width: 110 }}>{f.credit}</TableCell>
                           <TableCell>{f.deleteBtn}</TableCell>

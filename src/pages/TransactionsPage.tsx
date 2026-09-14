@@ -34,12 +34,17 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
   const debitTotal  = debits.reduce((s, l)  => s + Number(l.debit),  0)
   const creditTotal = credits.reduce((s, l) => s + Number(l.credit), 0)
 
-  const Line = ({ prefix, name, amount, indent, color }: {
-    prefix: string; name: string; amount: string; indent: boolean; color: string
+  const Line = ({ prefix, name, description, amount, indent, color }: {
+    prefix: string; name: string; description?: string | null; amount: string; indent: boolean; color: string
   }) => (
     <Flex align="baseline" gap={4} style={{ paddingLeft: indent ? 12 : 0, direction: 'rtl' }}>
       <Text style={{ color, fontWeight: 700, flexShrink: 0, fontSize: 15 }}>{prefix}</Text>
-      <Text style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15 }}>{name}</Text>
+      <Text style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 15 }}>
+        {name}
+        {description && (
+          <span style={{ color: 'var(--ant-color-text-secondary)', fontStyle: 'italic', fontSize: 13 }}> — {description}</span>
+        )}
+      </Text>
       <Text style={{ color, fontWeight: 600, marginLeft: 'auto', paddingLeft: 8, direction: 'ltr', flexShrink: 0, fontSize: 15 }}>{amount}</Text>
     </Flex>
   )
@@ -52,7 +57,7 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
         </Text>
       )}
       {debits.map((l, i) => (
-        <Line key={`d-${i}`} prefix="من ح/" name={l.account?.name ?? '—'} amount={fmt(l.debit)} indent={multiDebit} color="var(--ant-color-primary)" />
+        <Line key={`d-${i}`} prefix="من ح/" name={l.account?.name ?? '—'} description={l.description} amount={fmt(l.debit)} indent={multiDebit} color="var(--ant-color-primary)" />
       ))}
       {multiCredit && (
         <Text style={{ color: 'var(--ant-color-success)', fontWeight: 700, display: 'block', direction: 'rtl', marginTop: 2, fontSize: 16 }}>
@@ -60,7 +65,7 @@ function BayanCell({ entry }: { entry: JournalEntry }) {
         </Text>
       )}
       {credits.map((l, i) => (
-        <Line key={`c-${i}`} prefix="إلى ح/" name={l.account?.name ?? '—'} amount={fmt(l.credit)} indent={multiCredit || !multiDebit} color="var(--ant-color-success)" />
+        <Line key={`c-${i}`} prefix="إلى ح/" name={l.account?.name ?? '—'} description={l.description} amount={fmt(l.credit)} indent={multiCredit || !multiDebit} color="var(--ant-color-success)" />
       ))}
       <Text type="secondary" style={{ fontStyle: 'italic', display: 'block', marginTop: 2, fontSize: 15 }}>
         {entry.description}
