@@ -11,7 +11,7 @@ import FilterBar from '@/components/common/FilterBar'
 import { useResponsive } from '@/hooks/useResponsive'
 import FirebaseImportDialog from '@/components/FirebaseImportDialog'
 import {
-  ArrowUpDown, Ban, CircleCheck, CloudDownload, FileDown, FileSpreadsheet, Pencil, Search, Sheet, Trash2,
+  ArrowUpDown, Ban, CircleCheck, CloudDownload, FileDown, FileSpreadsheet, Pencil, Printer, Search, Sheet, Trash2,
 } from 'lucide-react'
 import { journalApi } from '@/api/journal'
 import { openPdf, downloadExcel } from '@/api/pdf'
@@ -81,6 +81,7 @@ export default function TransactionsPage() {
   const [loading,      setLoading]      = useState(true)
   const [reversing,    setReversing]    = useState<number | null>(null)
   const [togglingId,   setTogglingId]   = useState<number | null>(null)
+  const [printingId,   setPrintingId]   = useState<number | null>(null)
   const [confirmEntry, setConfirmEntry] = useState<JournalEntry | null>(null)
   const [pdfLoading,   setPdfLoading]   = useState(false)
   const [excelLoading, setExcelLoading] = useState(false)
@@ -147,6 +148,15 @@ export default function TransactionsPage() {
       // error toast is shown globally by the axios response interceptor
     } finally {
       setReversing(null)
+    }
+  }
+
+  const handlePrint = async (entry: JournalEntry) => {
+    setPrintingId(entry.id)
+    try {
+      await openPdf(`/api/journal-entries/${entry.id}/voucher`, {})
+    } finally {
+      setPrintingId(null)
     }
   }
 
@@ -272,6 +282,14 @@ export default function TransactionsPage() {
               disabled={!entry.is_posted || !!entry.reversed_by || reversing === entry.id}
               onClick={() => setConfirmEntry(entry)}
               icon={reversing === entry.id ? <Spin size="small" /> : <ArrowUpDown size={15} />}
+            />
+          </Tooltip>
+          <Tooltip title="معاينة وطباعة">
+            <Button
+              type="text" shape="circle" size="small"
+              disabled={printingId === entry.id}
+              onClick={() => handlePrint(entry)}
+              icon={printingId === entry.id ? <Spin size="small" /> : <Printer size={15} />}
             />
           </Tooltip>
           <Tooltip title="تعديل">
@@ -407,6 +425,11 @@ export default function TransactionsPage() {
                 <Button type="text" shape="circle" size="small" disabled={!entry.is_posted || !!entry.reversed_by || reversing === entry.id}
                   onClick={() => setConfirmEntry(entry)}
                   icon={reversing === entry.id ? <Spin size="small" /> : <ArrowUpDown size={16} />} />
+              </Tooltip>
+              <Tooltip title="معاينة وطباعة">
+                <Button type="text" shape="circle" size="small" disabled={printingId === entry.id}
+                  onClick={() => handlePrint(entry)}
+                  icon={printingId === entry.id ? <Spin size="small" /> : <Printer size={16} />} />
               </Tooltip>
               <Tooltip title="تعديل">
                 <Button type="text" shape="circle" size="small" color="primary" variant="text" disabled={entry.is_posted}

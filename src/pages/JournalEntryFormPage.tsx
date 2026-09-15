@@ -8,11 +8,12 @@ import {
   IconButton, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Tooltip, Typography, createTheme, ThemeProvider, useMediaQuery,
 } from '@mui/material'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Printer, Trash2 } from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
 import { useToast } from '@/lib/toast'
 import api from '@/lib/axios'
 import { journalApi } from '@/api/journal'
+import { openPdf } from '@/api/pdf'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
 import { fiscalYearsApi } from '@/api/fiscalYears'
@@ -101,6 +102,7 @@ export default function JournalEntryFormPage() {
   const [loadingMeta, setLoadingMeta] = useState(true)
   const [loadingEntry, setLoadingEntry] = useState(isEdit)
   const [saving, setSaving] = useState(false)
+  const [printing, setPrinting] = useState(false)
 
   const [date, setDate] = useState(today())
   const [reference, setReference] = useState('')
@@ -182,6 +184,16 @@ export default function JournalEntryFormPage() {
   const removeLine = (i: number) => {
     if (lines.length <= 2) return
     setLines(prev => prev.filter((_, idx) => idx !== i))
+  }
+
+  const handlePrint = async () => {
+    if (!id) return
+    setPrinting(true)
+    try {
+      await openPdf(`/api/journal-entries/${id}/voucher`, {})
+    } finally {
+      setPrinting(false)
+    }
   }
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
@@ -482,6 +494,15 @@ export default function JournalEntryFormPage() {
             <Typography variant={isMobile ? 'h6' : 'h5'} sx={{ flexGrow: 1, fontWeight: 700 }}>
               {isEdit ? 'تعديل القيد' : 'قيد جديد'}
             </Typography>
+            {isEdit && (
+              <Tooltip title="معاينة وطباعة">
+                <span>
+                  <IconButton onClick={handlePrint} disabled={printing}>
+                    {printing ? <CircularProgress size={18} /> : <Printer size={18} />}
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
             {!isMobile && (
               <Button
                 type="submit"
