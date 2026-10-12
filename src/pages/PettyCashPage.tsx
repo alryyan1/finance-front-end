@@ -139,19 +139,22 @@ export default function PettyCashPage() {
   const [loading, setLoading]         = useState(true)
 
   // Approval designation (who is allowed to approve)
-  const [approvalSettings, setApprovalSettings] = useState<{ managerUserId: number | null; auditorUserId: number | null }>({
+  const [approvalSettings, setApprovalSettings] = useState<{ managerUserId: number | null; auditorUserId: number | null; financeManagerUserId: number | null }>({
     managerUserId: null,
     auditorUserId: null,
+    financeManagerUserId: null,
   })
   // Firestore tenant collection petty cash approvals are mirrored under — falls back to
   // the same default ("jawda") the backend uses when the setting hasn't been configured.
   const [firestoreCollectionName, setFirestoreCollectionName] = useState<string | null>(null)
   const isManager = !!user && user.id === approvalSettings.managerUserId
   const isAuditor = !!user && user.id === approvalSettings.auditorUserId
+  const isFinanceManager = !!user && user.id === approvalSettings.financeManagerUserId
 
   // Approve / upload-document in-flight state
   const [approving, setApproving]           = useState<number | null>(null)
   const [approvingAuditor, setApprovingAuditor] = useState<number | null>(null)
+  const [approvingFinanceManager, setApprovingFinanceManager] = useState<number | null>(null)
 
   // Auditor comment dialog
   const [auditorCommentTarget, setAuditorCommentTarget] = useState<PettyCashTransaction | null>(null)
@@ -285,6 +288,7 @@ export default function PettyCashPage() {
       setApprovalSettings({
         managerUserId: s.petty_cash_manager_user_id,
         auditorUserId: s.petty_cash_auditor_user_id,
+        financeManagerUserId: s.petty_cash_finance_manager_user_id,
       })
       setFirestoreCollectionName(s.firebase_collection_name || 'jawda')
     })
@@ -642,6 +646,26 @@ export default function PettyCashPage() {
     })
   }
 
+  const handleApproveFinanceManager = (t: PettyCashTransaction) => {
+    Modal.confirm({
+      title: 'اعتماد المدير المالي',
+      content: `سيتم تسجيل اعتمادك لهذا المصروف بمبلغ ${numFmt(t.amount)}. هل أنت متأكد؟`,
+      okText: 'اعتماد', cancelText: 'إلغاء',
+      onOk: async () => {
+        setApprovingFinanceManager(t.id)
+        try {
+          await pettyCashApi.approveByFinanceManager(t.id)
+          loadTransactions()
+          toast.success('تم اعتماد المصروف من قبل المدير المالي')
+        } catch (e: any) {
+          toast.error(e?.response?.data?.message ?? 'تعذّر اعتماد المصروف')
+        } finally {
+          setApprovingFinanceManager(null)
+        }
+      },
+    })
+  }
+
   const handleOpenAuditorComment = (t: PettyCashTransaction) => {
     setAuditorCommentTarget(t)
     setAuditorCommentValue(t.auditor_comment ?? '')
@@ -752,7 +776,7 @@ export default function PettyCashPage() {
       ),
     },
     {
-      title: 'الحالة', width: 100, align: 'center',
+      title: 'المدير العام', width: 100, align: 'center',
       render: (_: unknown, t) => t.type === 'expense' && (
         <Flex align="center" justify="center" gap={4}>
           {syncingIds.has(t.id) && (
@@ -780,7 +804,7 @@ export default function PettyCashPage() {
       ),
     },
     {
-      title: 'التدقيق', width: 140, align: 'center',
+      title: 'المراجع', width: 140, align: 'center',
       render: (_: unknown, t) => t.type === 'expense' && (
         <Flex align="center" justify="center" gap={4}>
           <Tooltip title={t.auditor_approved_at ? 'تم التدقيق' : 'بانتظار تدقيق المصروف'}>
@@ -810,6 +834,29 @@ export default function PettyCashPage() {
           ) : t.auditor_comment && (
             <Tooltip title={`ملاحظة التدقيق: ${t.auditor_comment}`}>
               <MessageSquareText size={14} color="var(--ant-color-primary)" />
+            </Tooltip>
+          )}
+        </Flex>
+      ),
+    },
+    {
+      title: ' المدير المالي', width: 140, align: 'center',
+      render: (_: unknown, t) => t.type === 'expense' && (
+        <Flex align="center" justify="center" gap={4}>
+          <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'بانتظار اعتماد المدير المالي'}>
+            <span style={{
+              width: 9, height: 9, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
+              background: t.finance_manager_approved_at ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
+            }} />
+          </Tooltip>
+          {isFinanceManager && (
+            <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'اعتماد المدير المالي'}>
+              <Button size="small"
+                onClick={() => handleApproveFinanceManager(t)}
+                disabled={approvingFinanceManager === t.id || !!t.finance_manager_approved_at}
+              >
+                {approvingFinanceManager === t.id ? <Spin size="small" /> : 'اعتماد'}
+              </Button>
             </Tooltip>
           )}
         </Flex>
@@ -1307,11 +1354,14 @@ export default function PettyCashPage() {
                   </Button>
                 </Flex>
               ) : (
-                <Segmented
-                  block
+                <Select
+                  showSearch
+                  style={{ width: '100%' }}
                   value={expenseForm.source_account_id?.id}
-                  onChange={v => setExpenseForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
-                  options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+                  onChange={v => setExpenseForm(f => ({ ...f, source_account_id: contraAccounts.find(a => a.id === v) ?? null }))}
+                  notFoundContent="لا توجد حسابات"
+                  filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                  options={contraAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
                 />
               )}
             </Col>
@@ -1434,11 +1484,14 @@ export default function PettyCashPage() {
             </Col>
             <Col span={24}>
               <FieldLabel icon={Landmark}>من حساب</FieldLabel>
-              <Segmented
-                block
+              <Select
+                showSearch
+                style={{ width: '100%' }}
                 value={receiptForm.source_account_id?.id}
-                onChange={v => setReceiptForm(f => ({ ...f, source_account_id: [bankAccount, cashAccount].find(a => a?.id === v) ?? null }))}
-                options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+                onChange={v => setReceiptForm(f => ({ ...f, source_account_id: contraAccounts.find(a => a.id === v) ?? null }))}
+                notFoundContent="لا توجد حسابات"
+                filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+                options={contraAccounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
               />
             </Col>
             <Col span={24}>
