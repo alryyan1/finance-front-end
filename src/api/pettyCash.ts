@@ -56,6 +56,18 @@ export interface ExpensePayload {
   document?: File | null
 }
 
+export interface UpdateExpensePayload {
+  date: string
+  amount?: string
+  beneficiary_name?: string
+  party_id?: number
+  contra_account_id?: number
+  lines?: { contra_account_id: number; amount: string }[]
+  source_account_id?: number
+  credit_lines?: { source_account_id: number; amount: string }[]
+  description?: string
+}
+
 export interface ReceiptPayload {
   date: string
   amount: string
@@ -146,6 +158,9 @@ export const pettyCashApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
+
+  updateExpense: (id: number, data: UpdateExpensePayload): Promise<PettyCashTransaction> =>
+    api.put<PettyCashTransaction>(`/api/petty-cash/transactions/${id}`, data).then(r => r.data),
 
   deleteTransaction: (id: number): Promise<void> =>
     api.delete(`/api/petty-cash/transactions/${id}`).then(() => undefined),

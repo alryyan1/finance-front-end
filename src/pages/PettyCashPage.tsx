@@ -15,7 +15,7 @@ import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
   ArrowDownToLine, Banknote, Camera, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
-  Landmark, MessageCircle, MessageSquareText, Paperclip, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
+  Landmark, MessageCircle, MessageSquareText, Paperclip, Pencil, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
@@ -188,6 +188,8 @@ export default function PettyCashPage() {
   const [expenseOpen, setExpenseOpen]     = useState(false)
   const [expenseForm, setExpenseForm]     = useState(emptyExpenseForm())
   const [creatingExpense, setCreatingExpense] = useState(false)
+  // Set while editing an existing (still-pending) expense instead of creating a new one
+  const [editingExpenseId, setEditingExpenseId] = useState<number | null>(null)
   const expenseDocInputRef = useRef<HTMLInputElement>(null)
   const expenseCameraInputRef = useRef<HTMLInputElement>(null)
   const expenseAmountRef = useRef<GetRef<typeof InputNumber>>(null)
@@ -380,6 +382,34 @@ export default function PettyCashPage() {
       source_account_id: bankAccount ?? cashAccount,
       creditLines: [{ source_account: bankAccount ?? cashAccount, amount: '' }],
     })
+    setEditingExpenseId(null)
+    setExpenseOpen(true)
+  }
+
+  /** Opens the same expense dialog pre-filled for editing — only usable while
+   *  the expense is still pending (see the disabled condition on the row's edit
+   *  button), since the manager's approval is what posts the journal entry. */
+  const openEditExpenseDialog = (t: PettyCashTransaction) => {
+    const isCompound = t.lines.length > 0
+    const isCompoundCredit = t.credit_lines.length > 0
+    setExpenseForm({
+      date: t.date,
+      amount: isCompound ? '' : t.amount,
+      beneficiary_name: t.beneficiary_name ?? '',
+      party: t.party,
+      contra_account_id: t.contra_account_id ? accounts.find(a => a.id === t.contra_account_id) ?? null : null,
+      source_account_id: t.source_account_id ? accounts.find(a => a.id === t.source_account_id) ?? null : null,
+      description: t.description ?? '',
+      document: null,
+      compound: isCompound,
+      lines: isCompound
+        ? t.lines.map(l => ({ contra_account: accounts.find(a => a.id === l.contra_account_id) ?? null, amount: l.amount }))
+        : [emptyCompoundLine(), emptyCompoundLine()],
+      creditLines: isCompoundCredit
+        ? t.credit_lines.map(l => ({ source_account: accounts.find(a => a.id === l.source_account_id) ?? null, amount: l.amount }))
+        : [{ source_account: t.source_account_id ? accounts.find(a => a.id === t.source_account_id) ?? null : null, amount: '' }],
+    })
+    setEditingExpenseId(t.id)
     setExpenseOpen(true)
   }
 
@@ -418,25 +448,31 @@ export default function PettyCashPage() {
     if (!expenseFormValid) return
     setCreatingExpense(true)
     try {
-      const created = await pettyCashApi.createExpense({
+      const basePayload = {
         date: expenseForm.date,
         beneficiary_name: expenseForm.beneficiary_name || undefined,
         party_id: expenseForm.party?.id,
         description: expenseForm.description || undefined,
-        document: expenseForm.document,
         ...(expenseForm.compound
           ? { lines: expenseForm.lines.map(l => ({ contra_account_id: l.contra_account!.id, amount: l.amount })) }
           : { amount: expenseForm.amount, contra_account_id: expenseForm.contra_account_id!.id }),
         ...(expenseForm.compound
           ? { credit_lines: expenseForm.creditLines.map(l => ({ source_account_id: l.source_account!.id, amount: l.amount })) }
           : { source_account_id: expenseForm.source_account_id!.id }),
-      })
+      }
+      if (editingExpenseId) {
+        await pettyCashApi.updateExpense(editingExpenseId, basePayload)
+        toast.success('تم حفظ تعديل المصروف')
+      } else {
+        const created = await pettyCashApi.createExpense({ ...basePayload, document: expenseForm.document })
+        toast.success('تم حفظ المصروف بانتظار اعتماد المدير')
+        if (created.notifications) setNotificationResults(created.notifications)
+      }
       setExpenseOpen(false)
       setExpenseForm(emptyExpenseForm())
+      setEditingExpenseId(null)
       if (page === 1) loadTransactions()
       else setPage(1)
-      toast.success('تم حفظ المصروف بانتظار اعتماد المدير')
-      if (created.notifications) setNotificationResults(created.notifications)
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? 'تعذّر حفظ المصروف')
     } finally {
@@ -866,6 +902,12 @@ export default function PettyCashPage() {
       title: 'إجراءات', width: 200, align: 'center',
       render: (_: unknown, t) => (
         <Flex align="center" justify="center" wrap="nowrap">
+          {t.type === 'expense' && (
+            <Tooltip title={t.status === 'approved' ? 'لا يمكن تعديل مصروف تم اعتماده' : 'تعديل'}>
+              <Button type="text" shape="circle" size="small" disabled={t.status === 'approved'}
+                onClick={() => openEditExpenseDialog(t)} icon={<Pencil size={15} color="var(--ant-color-primary)" />} />
+            </Tooltip>
+          )}
           {t.type === 'expense' && t.status === 'pending' && (
             <Tooltip title="إرسال إشعار واتساب للمدير">
               <Button type="text" shape="circle" size="small" onClick={() => handleSendNotification(t)} disabled={notifying === t.id}
@@ -1163,7 +1205,7 @@ export default function PettyCashPage() {
       {/* ── Expense Dialog ── */}
       <Modal
         open={expenseOpen}
-        onCancel={() => setExpenseOpen(false)}
+        onCancel={() => { setExpenseOpen(false); setEditingExpenseId(null) }}
         width={640}
         centered
         styles={{ content: { borderRadius: 16, padding: 0, overflow: 'hidden' }, header: { padding: '14px 18px 0', margin: 0 }, body: { padding: '10px 18px 0' }, footer: { padding: '10px 18px 14px', margin: 0 } }}
@@ -1176,7 +1218,7 @@ export default function PettyCashPage() {
               }}>
                 <Banknote size={16} color="var(--ant-color-error)" />
               </div>
-              <Text strong style={{ fontSize: 14 }}>مصروف نثرية جديد</Text>
+              <Text strong style={{ fontSize: 14 }}>{editingExpenseId ? 'تعديل مصروف نثرية' : 'مصروف نثرية جديد'}</Text>
             </Flex>
             <DateInput
               value={expenseForm.date}
@@ -1188,11 +1230,11 @@ export default function PettyCashPage() {
         }
         footer={
           <Flex justify="flex-end" gap={8}>
-            <Button onClick={() => setExpenseOpen(false)}>إلغاء</Button>
+            <Button onClick={() => { setExpenseOpen(false); setEditingExpenseId(null) }}>إلغاء</Button>
             <Button type="primary" danger onClick={handleCreateExpense}
               disabled={creatingExpense || !expenseFormValid}
-              icon={creatingExpense ? <Spin size="small" /> : <Plus size={16} />}>
-              حفظ المصروف
+              icon={creatingExpense ? <Spin size="small" /> : editingExpenseId ? <Pencil size={16} /> : <Plus size={16} />}>
+              {editingExpenseId ? 'حفظ التعديل' : 'حفظ المصروف'}
             </Button>
           </Flex>
         }
@@ -1369,33 +1411,35 @@ export default function PettyCashPage() {
               <FieldLabel icon={FileText}>البيان</FieldLabel>
               <Input.TextArea ref={expenseDescriptionRef} rows={2} placeholder="مثال: مواصلات توصيل طرد" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} />
             </Col>
-            <Col span={24}>
-              <Flex gap={8} align="stretch" style={{ marginBottom: 10 }}>
-                <div
-                  className="petty-upload-zone"
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', minWidth: 0 }}
-                  onClick={() => expenseDocInputRef.current?.click()}
-                >
-                  <Paperclip size={14} color="#000" />
-                  <Text ellipsis style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>
-                    {expenseForm.document ? expenseForm.document.name : 'إرفاق إيصال (اختياري)'}
-                  </Text>
-                </div>
-                {isMobile && (
-                  <Button
-                    icon={<Camera size={15} />}
-                    onClick={() => expenseCameraInputRef.current?.click()}
-                    style={{ flexShrink: 0 }}
+            {!editingExpenseId && (
+              <Col span={24}>
+                <Flex gap={8} align="stretch" style={{ marginBottom: 10 }}>
+                  <div
+                    className="petty-upload-zone"
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', minWidth: 0 }}
+                    onClick={() => expenseDocInputRef.current?.click()}
                   >
-                    التقاط بالكاميرا
-                  </Button>
-                )}
-              </Flex>
-              <input ref={expenseDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
-                onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
-              <input ref={expenseCameraInputRef} type="file" hidden accept="image/*" capture="environment"
-                onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
-            </Col>
+                    <Paperclip size={14} color="#000" />
+                    <Text ellipsis style={{ fontSize: 12.5, fontWeight: 700, color: '#000' }}>
+                      {expenseForm.document ? expenseForm.document.name : 'إرفاق إيصال (اختياري)'}
+                    </Text>
+                  </div>
+                  {isMobile && (
+                    <Button
+                      icon={<Camera size={15} />}
+                      onClick={() => expenseCameraInputRef.current?.click()}
+                      style={{ flexShrink: 0 }}
+                    >
+                      التقاط بالكاميرا
+                    </Button>
+                  )}
+                </Flex>
+                <input ref={expenseDocInputRef} type="file" hidden accept=".jpg,.jpeg,.png,.pdf"
+                  onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
+                <input ref={expenseCameraInputRef} type="file" hidden accept="image/*" capture="environment"
+                  onChange={e => setExpenseForm(f => ({ ...f, document: e.target.files?.[0] ?? null }))} />
+              </Col>
+            )}
           </Row>
         </div>
       </Modal>
