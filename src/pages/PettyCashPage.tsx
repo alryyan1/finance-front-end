@@ -465,7 +465,7 @@ export default function PettyCashPage() {
         toast.success('تم حفظ تعديل المصروف')
       } else {
         const created = await pettyCashApi.createExpense({ ...basePayload, document: expenseForm.document })
-        toast.success('تم حفظ المصروف بانتظار اعتماد المدير')
+        toast.success('تم حفظ المصروف بانتظار الاعتماد')
         if (created.notifications) setNotificationResults(created.notifications)
       }
       setExpenseOpen(false)
@@ -820,14 +820,14 @@ export default function PettyCashPage() {
               <Spin size="small" />
             </Tooltip>
           )}
-          <Tooltip title={t.status === 'approved' ? 'مكتمل — اعتمده المدير' : 'بانتظار اعتماد المدير'}>
+          <Tooltip title={t.manager_approved_at ? 'تم الاعتماد' : 'بانتظار اعتماد المدير العام'}>
             <span style={{
               width: 9, height: 9, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
-              background: t.status === 'approved' ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
+              background: t.manager_approved_at ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
             }} />
           </Tooltip>
           {isManager && (
-            <Tooltip title={t.manager_approved_at ? 'تم الاعتماد' : 'اعتماد نهائي (مدير) — يُنشئ القيد المحاسبي'}>
+            <Tooltip title={t.manager_approved_at ? 'تم الاعتماد' : 'اعتماد المدير العام'}>
               <Button size="small"
                 onClick={() => handleApprove(t)}
                 disabled={approving === t.id || !!t.manager_approved_at}
@@ -886,7 +886,7 @@ export default function PettyCashPage() {
             }} />
           </Tooltip>
           {isFinanceManager && (
-            <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'اعتماد المدير المالي'}>
+            <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'اعتماد نهائي (المدير المالي) — يُنشئ القيد المحاسبي'}>
               <Button size="small"
                 onClick={() => handleApproveFinanceManager(t)}
                 disabled={approvingFinanceManager === t.id || !!t.finance_manager_approved_at}
@@ -993,7 +993,7 @@ export default function PettyCashPage() {
         <div><Title level={5}>ما هو صندوق النثريات؟</Title>
           <Text>مصروفات صغيرة ومتكررة تُصرف نقداً أو من البنك. كل مصروف يُنشئ قيداً محاسبياً (مدين المصروف، دائن الحساب المُختار).</Text></div>
         <div><Title level={5}>الاعتماد</Title>
-          <Text>اعتماد المدير هو ما يُنشئ القيد المحاسبي فعلياً.</Text></div>
+          <Text>اعتماد المدير المالي هو ما يُنشئ القيد المحاسبي فعلياً.</Text></div>
         <div><Title level={5}>المرفقات</Title>
           <Text>يمكن إرفاق صورة أو ملف PDF لإيصال كل مصروف لتوثيقه.</Text></div>
       </Flex>

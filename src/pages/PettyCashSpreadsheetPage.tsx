@@ -15,7 +15,7 @@ const typeLabel = (t: PettyCashTransaction) => (t.type === 'expense' ? 'مصرو
 
 const statusLabel = (t: PettyCashTransaction) => {
   if (t.type !== 'expense') return ''
-  return t.status === 'approved' ? 'معتمد' : 'بانتظار اعتماد المدير'
+  return t.status === 'approved' ? 'معتمد' : 'بانتظار اعتماد المدير المالي'
 }
 
 function buildSheetData(transactions: PettyCashTransaction[]) {
