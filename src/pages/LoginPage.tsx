@@ -46,6 +46,7 @@ export default function LoginPage() {
             onChange={e => setUsername(e.target.value)}
             autoComplete="username"
             required
+            dir="ltr"
             prefix={<User size={18} color="var(--ant-color-text-disabled)" />}
             style={{ marginBottom: 12 }}
           />
@@ -58,6 +59,7 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             autoComplete="current-password"
             required
+            dir="ltr"
             prefix={<Lock size={18} color="var(--ant-color-text-disabled)" />}
             suffix={
               <Button

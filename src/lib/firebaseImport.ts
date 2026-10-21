@@ -78,9 +78,18 @@ function resolveAccountId(
 
 /**
  * Matches an external system's own party reference that finance-api doesn't know
- * yet, e.g. "sales_client_25" or "sales_supplier_7" — {source_system}_{source_type}_{source_id}.
+ * yet, e.g. "sales_client_25", "sales_supplier_7" or "jawda_doctor_5" —
+ * {source_system}_{source_type}_{source_id}.
  */
-const EXTERNAL_PARTY_PATTERN = /^([a-z0-9-]+)_(client|supplier)_(.+)$/
+const EXTERNAL_PARTY_PATTERN = /^([a-z0-9-]+)_(client|supplier|doctor)_(.+)$/
+
+/** source_type segment of EXTERNAL_PARTY_PATTERN maps 1:1 onto Party['type'], except "client" → "customer". */
+function partyTypeForSourceType(sourceType: string): 'customer' | 'supplier' | 'doctor' | undefined {
+  if (sourceType === 'client')   return 'customer'
+  if (sourceType === 'supplier') return 'supplier'
+  if (sourceType === 'doctor')   return 'doctor'
+  return undefined
+}
 
 /**
  * Resolve a Firebase party ID to a finance-api numeric party ID.
@@ -89,7 +98,8 @@ const EXTERNAL_PARTY_PATTERN = /^([a-z0-9-]+)_(client|supplier)_(.+)$/
  * - "doctor_X" format        → look up doctor_mappings[X] (pre-synced in Firestore
  *                              by the external system, resolved to a numeric party id)
  * - "{system}_client_X" /
- *   "{system}_supplier_X"    → resolve via POST /parties/resolve-external, which
+ *   "{system}_supplier_X" /
+ *   "{system}_doctor_X"      → resolve via POST /parties/resolve-external, which
  *                              finds the mapped Party or creates it (and the mapping)
  *                              on first sight. Cached per import run so repeated
  *                              references to the same external record only call the
@@ -132,6 +142,7 @@ async function resolvePartyId(
       name: partyName || `${sourceType} #${sourceId}`,
       phone: partyPhone,
       email: partyEmail,
+      type: partyTypeForSourceType(sourceType),
     })
     externalPartyCache.set(partyId, party.id)
     return party.id
@@ -154,7 +165,15 @@ export async function fetchDoctorMappings(storageName: string): Promise<Record<s
   return result
 }
 
-/** Fetch all journal entries from Firebase that have not been imported yet. */
+/**
+ * Fetch all journal entries from Firebase that have not been imported yet,
+ * ordered by createdAt — the import dialog creates them in finance-api
+ * sequentially in array order, so this ordering is what makes finance-api's
+ * auto-increment IDs (and displayed order) follow the same chronology the
+ * entries were actually created in (e.g. revenue booked before the doctor fee
+ * entitlement, booked before its payout), instead of Firestore's unspecified
+ * default order for an unordered query.
+ */
 export async function fetchPendingEntries(storageName: string): Promise<FirebaseJournalEntry[]> {
   const db = getDb()
   // Firestore "!=" query doesn't return docs where the field is absent;
@@ -171,6 +190,7 @@ export async function fetchPendingEntries(storageName: string): Promise<Firebase
       createdAt:   d.data().createdAt   as string,
       lines:       (d.data().lines ?? []) as FirebaseJournalLine[],
     }))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 }
 
 /** Permanently delete a journal entry from Firebase. */

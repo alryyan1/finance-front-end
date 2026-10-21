@@ -19,6 +19,8 @@
     "build:alfanar": "vite build --mode alfanar",
     "build:altohami-man": "vite build --mode altohami-man",
     "build:alalmany": "vite build --mode alalmany",
+    "build:alroomy": "vite build --mode alroomy",
+
     "lint": "eslint .",
     "preview": "vite preview"
   },
