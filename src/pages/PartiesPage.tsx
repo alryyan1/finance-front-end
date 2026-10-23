@@ -1,15 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Button, Flex, Input, Modal, Select, Spin, Switch, Table, Tag, Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
+import FilterBar from '@/components/common/FilterBar'
+import PartyCategoriesModal from '@/components/parties/PartyCategoriesModal'
 import { useToast } from '@/lib/toast'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Search, Tags, Trash2 } from 'lucide-react'
 import { partiesApi } from '@/api/parties'
 import { accountsApi } from '@/api/accounts'
+import { partyCategoriesApi } from '@/api/partyCategories'
 import type { Party, PartyType } from '@/types/party'
 import type { Account } from '@/types/account'
+import type { PartyCategory } from '@/types/partyCategory'
 
 const { Title, Text } = Typography
 
@@ -45,14 +49,18 @@ const emptyForm = {
   email:      '',
   address:    '',
   account_id: null as number | null,
+  category_id: null as number | null,
   is_active:  true,
 }
 
 export default function PartiesPage() {
   const toast = useToast()
-  const [parties, setParties]   = useState<Party[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
+  const [parties, setParties]       = useState<Party[]>([])
+  const [accounts, setAccounts]     = useState<Account[]>([])
+  const [categories, setCategories] = useState<PartyCategory[]>([])
   const [loading, setLoading]   = useState(true)
+
+  const [categoriesModalOpen, setCategoriesModalOpen] = useState(false)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing]       = useState<Party | null>(null)
@@ -63,14 +71,39 @@ export default function PartiesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Party | null>(null)
   const [deleting, setDeleting]         = useState(false)
 
+  const [search, setSearch]       = useState('')
+  const [typeFilter, setTypeFilter] = useState<PartyType | 'all'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<number | 'all'>('all')
+
   useEffect(() => { load() }, [])
+
+  const filteredParties = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return parties.filter(p => {
+      if (typeFilter !== 'all' && p.type !== typeFilter) return false
+      if (categoryFilter !== 'all' && p.category_id !== categoryFilter) return false
+      if (!q) return true
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (p.phone ?? '').toLowerCase().includes(q) ||
+        (p.email ?? '').toLowerCase().includes(q)
+      )
+    })
+  }, [parties, search, typeFilter, categoryFilter])
+
+  const activeFilterCount = (typeFilter !== 'all' ? 1 : 0) + (categoryFilter !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0)
+
+  function resetFilters() {
+    setSearch(''); setTypeFilter('all'); setCategoryFilter('all')
+  }
 
   async function load() {
     setLoading(true)
     try {
-      const [p, a] = await Promise.all([partiesApi.list(), accountsApi.list()])
+      const [p, a, c] = await Promise.all([partiesApi.list(), accountsApi.list(), partyCategoriesApi.list()])
       setParties(p)
       setAccounts(a)
+      setCategories(c)
     } finally {
       setLoading(false)
     }
@@ -89,6 +122,7 @@ export default function PartiesPage() {
       email:      p.email ?? '',
       address:    p.address ?? '',
       account_id: p.account_id,
+      category_id: p.category_id,
       is_active:  p.is_active,
     })
     setDialogOpen(true)
@@ -153,6 +187,14 @@ export default function PartiesPage() {
       render: (v: string | null) => <span dir="ltr" style={{ display: 'block', textAlign: 'right' }}>{v ?? '—'}</span>,
     },
     {
+      title: 'التصنيف',
+      dataIndex: 'category',
+      width: 130,
+      render: (cat: Party['category']) => cat
+        ? <Tag>{cat.name}</Tag>
+        : <Text type="secondary" style={{ fontSize: 12, opacity: 0.6 }}>—</Text>,
+    },
+    {
       title: 'الحساب المرتبط',
       dataIndex: 'account',
       render: (acc: Party['account']) => acc
@@ -201,16 +243,54 @@ export default function PartiesPage() {
                 <Text>لعرض كشف حساب طرف معين، استخدم صفحة "كشف الحساب" واختر الحساب المرتبط ثم صفّح بالطرف المحدد.</Text></div>
             </Flex>
           </HelpButton>
+          <Button icon={<Tags size={16} />} onClick={() => setCategoriesModalOpen(true)}>
+            إدارة التصنيفات
+          </Button>
           <Button type="primary" icon={<Plus size={16} />} onClick={openCreate}>
             إضافة طرف
           </Button>
         </Flex>
       </Flex>
 
+      {/* Filters */}
+      <div style={{ marginBottom: 12 }}>
+        <FilterBar activeCount={activeFilterCount} onReset={resetFilters}>
+          <Input
+            size="small"
+            placeholder="بحث بالاسم أو الهاتف أو البريد..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: 220 }}
+            allowClear
+            prefix={<Search size={14} color="var(--ant-color-text-disabled)" />}
+          />
+          <Select
+            size="small"
+            value={typeFilter}
+            onChange={setTypeFilter}
+            style={{ width: 130 }}
+            options={[
+              { value: 'all', label: 'كل الأنواع' },
+              ...(Object.entries(TYPE_LABELS) as [PartyType, string][]).map(([v, label]) => ({ value: v, label })),
+            ]}
+          />
+          <Select
+            size="small"
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            style={{ width: 150 }}
+            options={[
+              { value: 'all', label: 'كل التصنيفات' },
+              ...categories.map(c => ({ value: c.id, label: c.name })),
+            ]}
+          />
+        </FilterBar>
+      </div>
+
       {/* Table */}
       <Table
         columns={columns}
-        dataSource={parties}
+        dataSource={filteredParties}
         rowKey="id"
         loading={loading}
         size="small"
@@ -273,6 +353,18 @@ export default function PartiesPage() {
             </div>
 
             <div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>التصنيف</Text>
+              <Select
+                allowClear
+                style={{ width: '100%' }}
+                placeholder="اختر تصنيفاً..."
+                value={form.category_id ?? undefined}
+                onChange={v => setForm(p => ({ ...p, category_id: v ?? null }))}
+                options={categories.map(c => ({ value: c.id, label: c.name }))}
+              />
+            </div>
+
+            <div>
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>العنوان</Text>
               <Input.TextArea rows={2} value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
             </div>
@@ -312,6 +404,13 @@ export default function PartiesPage() {
           <span style={{ fontWeight: 600, color: 'var(--ant-color-text)' }}>{deleteTarget?.name}</span>؟
         </Text>
       </Modal>
+
+      <PartyCategoriesModal
+        open={categoriesModalOpen}
+        onClose={() => setCategoriesModalOpen(false)}
+        categories={categories}
+        onChanged={load}
+      />
     </div>
   )
 }

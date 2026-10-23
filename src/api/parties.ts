@@ -1,7 +1,7 @@
 import api from '@/lib/axios'
 import type { Party } from '@/types/party'
 
-type PartyPayload = Omit<Party, 'id' | 'account' | 'created_at' | 'updated_at'>
+type PartyPayload = Omit<Party, 'id' | 'account' | 'category' | 'created_at' | 'updated_at'>
 
 export const partiesApi = {
   list: (): Promise<Party[]> =>

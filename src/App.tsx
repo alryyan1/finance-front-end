@@ -14,6 +14,7 @@ import IncomeStatementPage from '@/pages/IncomeStatementPage'
 import BalanceSheetPage from '@/pages/BalanceSheetPage'
 import BalanceSheetHorizontalPage from '@/pages/BalanceSheetHorizontalPage'
 import StatementOfEquityPage from '@/pages/StatementOfEquityPage'
+import ReportPartyCategoryBalancePage from '@/pages/ReportPartyCategoryBalancePage'
 import SettingsPage from '@/pages/SettingsPage'
 import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
 import FiscalYearsPage from '@/pages/FiscalYearsPage'
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="/reports/balance-sheet" element={<BalanceSheetPage />} />
             <Route path="/reports/balance-sheet/horizontal" element={<BalanceSheetHorizontalPage />} />
             <Route path="/reports/statement-of-equity" element={<StatementOfEquityPage />} />
+            <Route path="/reports/party-category-balance" element={<ReportPartyCategoryBalancePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/opening-balances" element={<OpeningBalancesPage />} />
             <Route path="/settings/fiscal-years" element={<FiscalYearsPage />} />
