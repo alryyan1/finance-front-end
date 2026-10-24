@@ -842,6 +842,29 @@ export default function PettyCashPage() {
       ),
     },
     {
+      title: ' المدير المالي', width: 140, align: 'center',
+      render: (_: unknown, t) => t.type === 'expense' && (
+        <Flex align="center" justify="center" gap={4}>
+          <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'بانتظار اعتماد المدير المالي'}>
+            <span style={{
+              width: 9, height: 9, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
+              background: t.finance_manager_approved_at ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
+            }} />
+          </Tooltip>
+          {isFinanceManager && (
+            <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'اعتماد نهائي (المدير المالي) — يُنشئ القيد المحاسبي'}>
+              <Button size="small"
+                onClick={() => handleApproveFinanceManager(t)}
+                disabled={approvingFinanceManager === t.id || !!t.finance_manager_approved_at}
+              >
+                {approvingFinanceManager === t.id ? <Spin size="small" /> : 'اعتماد'}
+              </Button>
+            </Tooltip>
+          )}
+        </Flex>
+      ),
+    },
+    {
       title: 'المراجع', width: 140, align: 'center',
       render: (_: unknown, t) => t.type === 'expense' && (
         <Flex align="center" justify="center" gap={4}>
@@ -872,29 +895,6 @@ export default function PettyCashPage() {
           ) : t.auditor_comment && (
             <Tooltip title={`ملاحظة التدقيق: ${t.auditor_comment}`}>
               <MessageSquareText size={14} color="var(--ant-color-primary)" />
-            </Tooltip>
-          )}
-        </Flex>
-      ),
-    },
-    {
-      title: ' المدير المالي', width: 140, align: 'center',
-      render: (_: unknown, t) => t.type === 'expense' && (
-        <Flex align="center" justify="center" gap={4}>
-          <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'بانتظار اعتماد المدير المالي'}>
-            <span style={{
-              width: 9, height: 9, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
-              background: t.finance_manager_approved_at ? 'var(--ant-color-success)' : 'var(--ant-color-warning)',
-            }} />
-          </Tooltip>
-          {isFinanceManager && (
-            <Tooltip title={t.finance_manager_approved_at ? 'تم الاعتماد' : 'اعتماد نهائي (المدير المالي) — يُنشئ القيد المحاسبي'}>
-              <Button size="small"
-                onClick={() => handleApproveFinanceManager(t)}
-                disabled={approvingFinanceManager === t.id || !!t.finance_manager_approved_at}
-              >
-                {approvingFinanceManager === t.id ? <Spin size="small" /> : 'اعتماد'}
-              </Button>
             </Tooltip>
           )}
         </Flex>
@@ -1169,8 +1169,8 @@ export default function PettyCashPage() {
                 onChange={v => { setPendingApprovalFilter((v as PendingApprovalStage) ?? null); setPage(1) }}
                 options={[
                   { value: 'manager', label: 'بانتظار المدير العام' },
-                  { value: 'auditor', label: 'بانتظار المراجع' },
                   { value: 'finance_manager', label: 'بانتظار المدير المالي' },
+                  { value: 'auditor', label: 'بانتظار المراجع' },
                 ]}
               />
             </FilterBar>
