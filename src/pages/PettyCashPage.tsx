@@ -21,7 +21,7 @@ import {
 import { useAuth } from '@/context/AuthContext'
 import { accountsApi } from '@/api/accounts'
 import { pettyCashSettingsApi, pettyCashAccountSettingsApi } from '@/api/settings'
-import { pettyCashApi, type PettyCashTransaction, type NotificationResult, type PettyCashTotals } from '@/api/pettyCash'
+import { pettyCashApi, type PettyCashTransaction, type NotificationResult, type PettyCashTotals, type PendingApprovalStage } from '@/api/pettyCash'
 import { partiesApi } from '@/api/parties'
 import { openPdf, downloadExcel } from '@/api/pdf'
 import type { Account } from '@/types/account'
@@ -175,6 +175,7 @@ export default function PettyCashPage() {
   const [search, setSearch]             = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sourceAccountFilter, setSourceAccountFilter] = useState<number | null>(null)
+  const [pendingApprovalFilter, setPendingApprovalFilter] = useState<PendingApprovalStage | null>(null)
 
   // Pagination — the grid used to load every transaction in the date range at
   // once; the backend now paginates so page loads stay fast regardless of how
@@ -252,7 +253,8 @@ export default function PettyCashPage() {
   const loadTransactions = () => {
     setLoading(true)
     pettyCashApi.listTransactionsPaginated({
-      from, to, search: debouncedSearch || undefined, source_account_id: sourceAccountFilter ?? undefined, page, per_page: pageSize,
+      from, to, search: debouncedSearch || undefined, source_account_id: sourceAccountFilter ?? undefined,
+      pending_approval: pendingApprovalFilter ?? undefined, page, per_page: pageSize,
     })
       .then(res => {
         setTransactions(res.data)
@@ -296,7 +298,7 @@ export default function PettyCashPage() {
     })
   }, [])
 
-  useEffect(() => { loadTransactions() }, [from, to, debouncedSearch, sourceAccountFilter, page, pageSize])
+  useEffect(() => { loadTransactions() }, [from, to, debouncedSearch, sourceAccountFilter, pendingApprovalFilter, page, pageSize])
 
   // Live updates: the WhatsApp approve-button tap writes straight to Firestore (via the
   // pettyCashWebhook Cloud Function), bypassing this app entirely. Listen for changes on
@@ -589,7 +591,7 @@ export default function PettyCashPage() {
   const handlePdf = async () => {
     setPdfLoading(true)
     try {
-      await openPdf('/api/petty-cash/transactions/pdf', { from, to, source_account_id: sourceAccountFilter ?? undefined })
+      await openPdf('/api/petty-cash/transactions/pdf', { from, to, source_account_id: sourceAccountFilter ?? undefined, pending_approval: pendingApprovalFilter ?? undefined })
     } catch {
       toast.error('تعذّر إنشاء ملف PDF')
     } finally {
@@ -600,7 +602,7 @@ export default function PettyCashPage() {
   const handleExcel = async () => {
     setExcelLoading(true)
     try {
-      await downloadExcel('/api/petty-cash/transactions/excel', { from, to, source_account_id: sourceAccountFilter ?? undefined }, 'petty-cash-transactions.xlsx')
+      await downloadExcel('/api/petty-cash/transactions/excel', { from, to, source_account_id: sourceAccountFilter ?? undefined, pending_approval: pendingApprovalFilter ?? undefined }, 'petty-cash-transactions.xlsx')
     } catch {
       toast.error('تعذّر إنشاء ملف Excel')
     } finally {
@@ -1114,8 +1116,8 @@ export default function PettyCashPage() {
           {/* Toolbar */}
           <div style={{ marginBottom: 8 }}>
             <FilterBar
-              activeCount={[search, from, to, sourceAccountFilter].filter(Boolean).length}
-              onReset={() => { setSearch(''); setFrom(''); setTo(''); setSourceAccountFilter(null); setPage(1) }}
+              activeCount={[search, from, to, sourceAccountFilter, pendingApprovalFilter].filter(Boolean).length}
+              onReset={() => { setSearch(''); setFrom(''); setTo(''); setSourceAccountFilter(null); setPendingApprovalFilter(null); setPage(1) }}
               desktopExtra={
                 <>
                   <Tooltip title="تصدير PDF">
@@ -1157,6 +1159,19 @@ export default function PettyCashPage() {
                 value={sourceAccountFilter ?? undefined}
                 onChange={v => { setSourceAccountFilter(v ?? null); setPage(1) }}
                 options={[bankAccount, cashAccount].filter((a): a is Account => !!a).map(a => ({ value: a.id, label: a.name }))}
+              />
+              <Select
+                size="small"
+                allowClear
+                placeholder="بانتظار اعتماد..."
+                style={{ width: isMobile ? '100%' : 170 }}
+                value={pendingApprovalFilter ?? undefined}
+                onChange={v => { setPendingApprovalFilter((v as PendingApprovalStage) ?? null); setPage(1) }}
+                options={[
+                  { value: 'manager', label: 'بانتظار المدير العام' },
+                  { value: 'auditor', label: 'بانتظار المراجع' },
+                  { value: 'finance_manager', label: 'بانتظار المدير المالي' },
+                ]}
               />
             </FilterBar>
           </div>
