@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import AccountsPage from '@/pages/AccountsPage'
 import PartiesPage from '@/pages/PartiesPage'
+import CostCentersPage from '@/pages/CostCentersPage'
 import TransactionsPage from '@/pages/TransactionsPage'
 import JournalEntryFormPage from '@/pages/JournalEntryFormPage'
 import TrialBalancePage from '@/pages/TrialBalancePage'
@@ -15,6 +16,7 @@ import BalanceSheetPage from '@/pages/BalanceSheetPage'
 import BalanceSheetHorizontalPage from '@/pages/BalanceSheetHorizontalPage'
 import StatementOfEquityPage from '@/pages/StatementOfEquityPage'
 import ReportPartyCategoryBalancePage from '@/pages/ReportPartyCategoryBalancePage'
+import ReportCostCenterBalancePage from '@/pages/ReportCostCenterBalancePage'
 import SettingsPage from '@/pages/SettingsPage'
 import OpeningBalancesPage from '@/pages/OpeningBalancesPage'
 import FiscalYearsPage from '@/pages/FiscalYearsPage'
@@ -53,6 +55,7 @@ export default function App() {
             <Route path="/roles" element={<RolesPage />} />
             <Route path="/backup" element={<BackupPage />} />
             <Route path="/parties" element={<PartiesPage />} />
+            <Route path="/cost-centers" element={<CostCentersPage />} />
             <Route path="/reports" element={<TrialBalancePage />} />
             <Route path="/reports/trial-balance" element={<TrialBalancePage />} />
             <Route path="/reports/ledger" element={<LedgerPage />} />
@@ -61,6 +64,7 @@ export default function App() {
             <Route path="/reports/balance-sheet/horizontal" element={<BalanceSheetHorizontalPage />} />
             <Route path="/reports/statement-of-equity" element={<StatementOfEquityPage />} />
             <Route path="/reports/party-category-balance" element={<ReportPartyCategoryBalancePage />} />
+            <Route path="/reports/cost-center-balance" element={<ReportCostCenterBalancePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/opening-balances" element={<OpeningBalancesPage />} />
             <Route path="/settings/fiscal-years" element={<FiscalYearsPage />} />

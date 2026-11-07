@@ -16,14 +16,17 @@ import { journalApi } from '@/api/journal'
 import { openPdf } from '@/api/pdf'
 import { accountsApi } from '@/api/accounts'
 import { partiesApi } from '@/api/parties'
+import { costCentersApi } from '@/api/costCenters'
 import { fiscalYearsApi } from '@/api/fiscalYears'
 import type { JournalEntryLinePayload } from '@/types/journal'
 import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
+import type { CostCenter } from '@/types/costCenter'
 
 interface LineForm {
   account: Account | null
   party: Party | null
+  costCenter: CostCenter | null
   description: string
   debit: string
   credit: string
@@ -42,6 +45,7 @@ function mergeRefs<T>(...refs: Array<React.Ref<T> | undefined | null>) {
 const emptyLine = (): LineForm => ({
   account: null,
   party: null,
+  costCenter: null,
   description: '',
   debit: '',
   credit: '',
@@ -69,8 +73,14 @@ interface PartyOption {
   label: string
 }
 
+interface CostCenterOption {
+  value: number
+  label: string
+}
+
 const accountFilterOptions = createFilterOptions<AccountOption>({ stringify: o => o.label, matchFrom: 'any' })
 const partyFilterOptions = createFilterOptions<PartyOption>({ stringify: o => o.label, matchFrom: 'any' })
+const costCenterFilterOptions = createFilterOptions<CostCenterOption>({ stringify: o => o.label, matchFrom: 'any' })
 
 const rtlCache = createCache({ key: 'mui-jef-rtl', stylisPlugins: [rtlPlugin] })
 
@@ -98,6 +108,7 @@ export default function JournalEntryFormPage() {
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [parties, setParties] = useState<Party[]>([])
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([])
   const [balances, setBalances] = useState<Record<number, { amount: number; side: 'debit' | 'credit' }>>({})
   const [loadingMeta, setLoadingMeta] = useState(true)
   const [loadingEntry, setLoadingEntry] = useState(isEdit)
@@ -121,11 +132,13 @@ export default function JournalEntryFormPage() {
     Promise.all([
       accountsApi.list(),
       partiesApi.list(),
+      costCentersApi.list(),
       api.get<{ rows: TrialBalanceRow[] }>('/api/reports/trial-balance', { params: { from: yearStart(), to: today() } }),
     ])
-      .then(([accs, parts, trialBalance]) => {
+      .then(([accs, parts, centers, trialBalance]) => {
         setAccounts(accs)
         setParties(parts)
+        setCostCenters(centers)
         const map: Record<number, { amount: number; side: 'debit' | 'credit' }> = {}
         trialBalance.data.rows.forEach(r => { map[r.account_id] = { amount: Number(r.balance), side: r.balance_side } })
         setBalances(map)
@@ -143,6 +156,7 @@ export default function JournalEntryFormPage() {
         (entry.lines ?? []).map(l => ({
           account: l.account ? ({ id: l.account.id, code: l.account.code, name: l.account.name } as Account) : null,
           party: l.party ? ({ id: l.party.id, name: l.party.name } as Party) : null,
+          costCenter: l.cost_center ? ({ id: l.cost_center.id, name: l.cost_center.name } as CostCenter) : null,
           description: l.description ?? '',
           debit: l.debit === '0.00' ? '' : String(Number(l.debit)),
           credit: l.credit === '0.00' ? '' : String(Number(l.credit)),
@@ -216,6 +230,7 @@ export default function JournalEntryFormPage() {
       lines: lines.map(l => ({
         account_id: l.account!.id,
         party_id: l.party?.id ?? null,
+        cost_center_id: l.costCenter?.id ?? null,
         description: l.description.trim() || null,
         debit: parseFloat(l.debit) || 0,
         credit: parseFloat(l.credit) || 0,
@@ -263,6 +278,7 @@ export default function JournalEntryFormPage() {
   })
 
   const partyOptions: PartyOption[] = parties.map(p => ({ value: p.id, label: p.name }))
+  const costCenterOptions: CostCenterOption[] = costCenters.map(c => ({ value: c.id, label: c.name }))
 
   /** Per-line input nodes, shared by the desktop table and the mobile card layout. */
   const renderLineFields = (line: LineForm, i: number) => {
@@ -271,6 +287,9 @@ export default function JournalEntryFormPage() {
       : null
     const selectedParty = line.party
       ? partyOptions.find(o => o.value === line.party!.id) ?? null
+      : null
+    const selectedCostCenter = line.costCenter
+      ? costCenterOptions.find(o => o.value === line.costCenter!.id) ?? null
       : null
     const lineBalance = line.account ? balances[line.account.id] : undefined
     const usedAccountIdsElsewhere = new Set(
@@ -383,6 +402,34 @@ export default function JournalEntryFormPage() {
       />
     )
 
+    const costCenter = (
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={costCenterOptions}
+        value={selectedCostCenter}
+        filterOptions={costCenterFilterOptions}
+        getOptionLabel={o => o.label}
+        isOptionEqualToValue={(o, v) => o.value === v.value}
+        noOptionsText="لا توجد نتائج"
+        onChange={(_, v) => {
+          const cc = v ? costCenters.find(c => c.id === v.value) ?? null : null
+          updateLine(i, { costCenter: cc })
+        }}
+        renderInput={params => (
+          <TextField
+            {...params}
+            label={isMobile ? 'مركز التكلفة' : undefined}
+            placeholder="اختياري"
+            slotProps={{
+              ...params.slotProps,
+              htmlInput: { ...params.slotProps.htmlInput, autoComplete: 'off' },
+            }}
+          />
+        )}
+      />
+    )
+
     const debit = (
       <TextField
         size="small"
@@ -443,7 +490,7 @@ export default function JournalEntryFormPage() {
       </Tooltip>
     )
 
-    return { account, balanceHint, party, debit, credit, lineDescription, deleteBtn }
+    return { account, balanceHint, party, costCenter, debit, credit, lineDescription, deleteBtn }
   }
 
   const balanceSummary = (
@@ -570,6 +617,7 @@ export default function JournalEntryFormPage() {
                       {f.account}
                       {f.balanceHint}
                       {f.party}
+                      {f.costCenter}
                       {f.lineDescription}
                       <Stack direction="row" spacing={1.5}>
                         {f.debit}
@@ -589,9 +637,10 @@ export default function JournalEntryFormPage() {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ width: '28%' }}>الحساب</TableCell>
-                      <TableCell sx={{ width: '20%' }}>الجهة</TableCell>
-                      <TableCell sx={{ width: '22%' }}>البيان</TableCell>
+                      <TableCell sx={{ width: '24%' }}>الحساب</TableCell>
+                      <TableCell sx={{ width: '16%' }}>الجهة</TableCell>
+                      <TableCell sx={{ width: '16%' }}>مركز التكلفة</TableCell>
+                      <TableCell sx={{ width: '20%' }}>البيان</TableCell>
                       <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
                       <TableCell align="left" sx={{ width: '12%' }}>دائن</TableCell>
                       <TableCell sx={{ width: 48 }} />
@@ -607,6 +656,7 @@ export default function JournalEntryFormPage() {
                             {f.balanceHint}
                           </TableCell>
                           <TableCell>{f.party}</TableCell>
+                          <TableCell>{f.costCenter}</TableCell>
                           <TableCell>{f.lineDescription}</TableCell>
                           <TableCell align="left" sx={{ width: 110 }}>{f.debit}</TableCell>
                           <TableCell align="left" sx={{ width: 110 }}>{f.credit}</TableCell>

@@ -27,6 +27,8 @@ export interface PettyCashTransaction {
   beneficiary_name: string | null
   party_id: number | null
   party: { id: number; name: string } | null
+  cost_center_id: number | null
+  cost_center: { id: number; name: string } | null
   contra_account_id: number | null
   contra_account: { id: number; code: string; name: string } | null
   lines: PettyCashTransactionLine[]
@@ -49,6 +51,7 @@ export interface ExpensePayload {
   amount?: string
   beneficiary_name?: string
   party_id?: number
+  cost_center_id?: number
   contra_account_id?: number
   lines?: { contra_account_id: number; amount: string }[]
   source_account_id?: number
@@ -62,6 +65,7 @@ export interface UpdateExpensePayload {
   amount?: string
   beneficiary_name?: string
   party_id?: number
+  cost_center_id?: number
   contra_account_id?: number
   lines?: { contra_account_id: number; amount: string }[]
   source_account_id?: number
@@ -74,6 +78,7 @@ export interface ReceiptPayload {
   amount: string
   beneficiary_name?: string
   party_id?: number
+  cost_center_id?: number
   contra_account_id: number
   source_account_id: number
   description?: string
@@ -122,6 +127,7 @@ export const pettyCashApi = {
     fd.append('date', data.date)
     if (data.beneficiary_name) fd.append('beneficiary_name', data.beneficiary_name)
     if (data.party_id) fd.append('party_id', String(data.party_id))
+    if (data.cost_center_id) fd.append('cost_center_id', String(data.cost_center_id))
     if (data.description) fd.append('description', data.description)
     if (data.document) fd.append('document', data.document)
     if (data.lines) {
@@ -154,6 +160,7 @@ export const pettyCashApi = {
     fd.append('source_account_id', String(data.source_account_id))
     if (data.beneficiary_name) fd.append('beneficiary_name', data.beneficiary_name)
     if (data.party_id) fd.append('party_id', String(data.party_id))
+    if (data.cost_center_id) fd.append('cost_center_id', String(data.cost_center_id))
     if (data.description) fd.append('description', data.description)
     if (data.document) fd.append('document', data.document)
     return api.post<PettyCashTransaction>('/api/petty-cash/receipts', fd, {

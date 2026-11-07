@@ -3,11 +3,13 @@ export interface JournalEntryLine {
   journal_entry_id: number
   account_id: number
   party_id: number | null
+  cost_center_id: number | null
   description: string | null
   debit: string
   credit: string
   account?: { id: number; code: string; name: string }
   party?: { id: number; name: string } | null
+  cost_center?: { id: number; name: string } | null
 }
 
 export interface JournalEntry {
@@ -35,6 +37,7 @@ export interface JournalEntryPayload {
 export interface JournalEntryLinePayload {
   account_id: number | null
   party_id: number | null
+  cost_center_id: number | null
   description: string
   debit: number
   credit: number

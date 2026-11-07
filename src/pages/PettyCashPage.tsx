@@ -14,7 +14,7 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { useToast } from '@/lib/toast'
 import { getFirestoreDb } from '@/lib/firestore'
 import {
-  ArrowDownToLine, Banknote, Camera, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
+  ArrowDownToLine, Banknote, Boxes, Camera, CheckCheck, CheckCircle2, CircleAlert, CircleMinus, Download, Eye, FileDown, FileText, FileX,
   Landmark, MessageCircle, MessageSquareText, Paperclip, Pencil, Plus, RefreshCw, Search, Settings, Sheet, Trash2, UserRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -23,9 +23,11 @@ import { accountsApi } from '@/api/accounts'
 import { pettyCashSettingsApi, pettyCashAccountSettingsApi } from '@/api/settings'
 import { pettyCashApi, type PettyCashTransaction, type NotificationResult, type PettyCashTotals, type PendingApprovalStage } from '@/api/pettyCash'
 import { partiesApi } from '@/api/parties'
+import { costCentersApi } from '@/api/costCenters'
 import { openPdf, downloadExcel } from '@/api/pdf'
 import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
+import type { CostCenter } from '@/types/costCenter'
 
 const { Title, Text } = Typography
 
@@ -45,6 +47,7 @@ const emptyExpenseForm = () => ({
   amount:             '',
   beneficiary_name:   '',
   party:              null as Party | null,
+  costCenter:         null as CostCenter | null,
   contra_account_id:  null as Account | null,
   source_account_id:  null as Account | null,
   description:        '',
@@ -59,6 +62,7 @@ const emptyReceiptForm = () => ({
   amount:             '',
   beneficiary_name:   '',
   party:              null as Party | null,
+  costCenter:         null as CostCenter | null,
   contra_account_id:  null as Account | null,
   source_account_id:  null as Account | null,
   description:        '',
@@ -130,6 +134,7 @@ export default function PettyCashPage() {
   const [bankAccount, setBankAccount] = useState<Account | null>(null)
   const [accounts, setAccounts]       = useState<Account[]>([])
   const [parties, setParties]         = useState<Party[]>([])
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([])
   // Guards the "accounts not configured" empty-state from flashing briefly on
   // every visit while cashAccount/bankAccount are still their initial null —
   // that state is indistinguishable from "genuinely not configured" until this
@@ -288,6 +293,7 @@ export default function PettyCashPage() {
       // degrades (see the hasSourceAccount banner below).
     }).finally(() => setAccountSettingsLoading(false))
     partiesApi.list().then(setParties)
+    costCentersApi.list().then(setCostCenters)
     pettyCashSettingsApi.get().then(s => {
       setApprovalSettings({
         managerUserId: s.petty_cash_manager_user_id,
@@ -399,6 +405,7 @@ export default function PettyCashPage() {
       amount: isCompound ? '' : t.amount,
       beneficiary_name: t.beneficiary_name ?? '',
       party: t.party,
+      costCenter: t.cost_center,
       contra_account_id: t.contra_account_id ? accounts.find(a => a.id === t.contra_account_id) ?? null : null,
       source_account_id: t.source_account_id ? accounts.find(a => a.id === t.source_account_id) ?? null : null,
       description: t.description ?? '',
@@ -454,6 +461,7 @@ export default function PettyCashPage() {
         date: expenseForm.date,
         beneficiary_name: expenseForm.beneficiary_name || undefined,
         party_id: expenseForm.party?.id,
+        cost_center_id: expenseForm.costCenter?.id,
         description: expenseForm.description || undefined,
         ...(expenseForm.compound
           ? { lines: expenseForm.lines.map(l => ({ contra_account_id: l.contra_account!.id, amount: l.amount })) }
@@ -493,6 +501,7 @@ export default function PettyCashPage() {
         amount: receiptForm.amount,
         beneficiary_name: receiptForm.beneficiary_name || undefined,
         party_id: receiptForm.party?.id,
+        cost_center_id: receiptForm.costCenter?.id,
         description: receiptForm.description || undefined,
         document: receiptForm.document,
         contra_account_id: receiptForm.contra_account_id!.id,
@@ -1302,6 +1311,19 @@ export default function PettyCashPage() {
               />
             </Col>
             <Col span={24}>
+              <FieldLabel icon={Boxes}>مركز التكلفة (اختياري)</FieldLabel>
+              <Select
+                allowClear
+                showSearch
+                style={{ width: '100%' }}
+                placeholder="اختر مركز تكلفة"
+                value={expenseForm.costCenter?.id}
+                onChange={v => setExpenseForm(f => ({ ...f, costCenter: costCenters.find(c => c.id === v) ?? null }))}
+                options={costCenters.map(c => ({ value: c.id, label: c.name }))}
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              />
+            </Col>
+            <Col span={24}>
               <Flex align="center" justify="space-between">
                 <FieldLabel icon={Landmark}>{expenseForm.compound ? 'حسابات المصروف' : 'حساب المصروف'}</FieldLabel>
                 <Button
@@ -1538,6 +1560,19 @@ export default function PettyCashPage() {
                 value={receiptForm.party?.id}
                 onChange={v => setReceiptForm(f => ({ ...f, party: parties.find(p => p.id === v) ?? null }))}
                 options={parties.map(p => ({ value: p.id, label: p.name }))}
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              />
+            </Col>
+            <Col span={24}>
+              <FieldLabel icon={Boxes}>مركز التكلفة (اختياري)</FieldLabel>
+              <Select
+                allowClear
+                showSearch
+                style={{ width: '100%' }}
+                placeholder="اختر مركز تكلفة"
+                value={receiptForm.costCenter?.id}
+                onChange={v => setReceiptForm(f => ({ ...f, costCenter: costCenters.find(c => c.id === v) ?? null }))}
+                options={costCenters.map(c => ({ value: c.id, label: c.name }))}
                 filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
               />
             </Col>
