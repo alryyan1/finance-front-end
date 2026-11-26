@@ -6,6 +6,7 @@ import Topbar from './Topbar'
 import BottomNav, { BOTTOM_NAV_HEIGHT } from './BottomNav'
 import MobileNavDrawer from './MobileNavDrawer'
 import { FiscalYearsProvider } from '@/context/FiscalYearsContext'
+import { AppSettingsProvider } from '@/context/AppSettingsContext'
 import { useResponsive } from '@/hooks/useResponsive'
 
 export const TOPBAR_HEIGHT = 64
@@ -15,6 +16,7 @@ export default function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   return (
+    <AppSettingsProvider>
     <FiscalYearsProvider>
       {isDesktop ? (
         <Flex style={{ height: '100vh', overflow: 'hidden' }}>
@@ -39,5 +41,6 @@ export default function AppLayout() {
         </Flex>
       )}
     </FiscalYearsProvider>
+    </AppSettingsProvider>
   )
 }

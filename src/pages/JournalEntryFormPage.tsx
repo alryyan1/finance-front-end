@@ -10,6 +10,7 @@ import {
 } from '@mui/material'
 import { ArrowLeft, Plus, Printer, Trash2 } from 'lucide-react'
 import { useThemeMode } from '@/context/ThemeModeContext'
+import { useAppSettings } from '@/context/AppSettingsContext'
 import { useToast } from '@/lib/toast'
 import api from '@/lib/axios'
 import { journalApi } from '@/api/journal'
@@ -90,6 +91,7 @@ export default function JournalEntryFormPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const { mode } = useThemeMode()
+  const { partyEnabled } = useAppSettings()
 
   const theme = useMemo(() => createTheme({
     direction: 'rtl',
@@ -616,7 +618,7 @@ export default function JournalEntryFormPage() {
                     <Stack spacing={1.5}>
                       {f.account}
                       {f.balanceHint}
-                      {f.party}
+                      {partyEnabled && f.party}
                       {f.costCenter}
                       {f.lineDescription}
                       <Stack direction="row" spacing={1.5}>
@@ -637,8 +639,8 @@ export default function JournalEntryFormPage() {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ width: '24%' }}>الحساب</TableCell>
-                      <TableCell sx={{ width: '16%' }}>الجهة</TableCell>
+                      <TableCell sx={{ width: partyEnabled ? '24%' : '28%' }}>الحساب</TableCell>
+                      {partyEnabled && <TableCell sx={{ width: '16%' }}>الجهة</TableCell>}
                       <TableCell sx={{ width: '16%' }}>مركز التكلفة</TableCell>
                       <TableCell sx={{ width: '20%' }}>البيان</TableCell>
                       <TableCell align="left" sx={{ width: '12%' }}>مدين</TableCell>
@@ -655,7 +657,7 @@ export default function JournalEntryFormPage() {
                             {f.account}
                             {f.balanceHint}
                           </TableCell>
-                          <TableCell>{f.party}</TableCell>
+                          {partyEnabled && <TableCell>{f.party}</TableCell>}
                           <TableCell>{f.costCenter}</TableCell>
                           <TableCell>{f.lineDescription}</TableCell>
                           <TableCell align="left" sx={{ width: 110 }}>{f.debit}</TableCell>

@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useAppSettings } from '@/context/AppSettingsContext'
 import { accountsApi } from '@/api/accounts'
 import { pettyCashSettingsApi, pettyCashAccountSettingsApi } from '@/api/settings'
 import { pettyCashApi, type PettyCashTransaction, type NotificationResult, type PettyCashTotals, type PendingApprovalStage } from '@/api/pettyCash'
@@ -129,6 +130,7 @@ export default function PettyCashPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { partyEnabled } = useAppSettings()
   const { isMobile } = useResponsive()
   const [cashAccount, setCashAccount] = useState<Account | null>(null)
   const [bankAccount, setBankAccount] = useState<Account | null>(null)
@@ -768,7 +770,7 @@ export default function PettyCashPage() {
         // (cash/bank) is credited; for a receipt it's the opposite — the source
         // account is debited since it's receiving money, and the contra account
         // (where the money came from) is credited. See PettyCashApprovalService::postJournalEntry.
-        const partyTag = t.party
+        const partyTag = partyEnabled && t.party
           ? <Text style={{ fontSize: 11, fontStyle: 'italic', color: '#666' }}>({t.party.name})</Text>
           : null
         const contraLine = t.contra_account ? (
@@ -1297,19 +1299,21 @@ export default function PettyCashPage() {
               <FieldLabel icon={UserRound}>اسم المستفيد</FieldLabel>
               <Input value={expenseForm.beneficiary_name} onChange={e => setExpenseForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
             </Col>
-            <Col span={24}>
-              <FieldLabel icon={UserRound}>الطرف (اختياري)</FieldLabel>
-              <Select
-                allowClear
-                showSearch
-                style={{ width: '100%' }}
-                placeholder="اختر عميل / مورد"
-                value={expenseForm.party?.id}
-                onChange={v => setExpenseForm(f => ({ ...f, party: parties.find(p => p.id === v) ?? null }))}
-                options={parties.map(p => ({ value: p.id, label: p.name }))}
-                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-              />
-            </Col>
+            {partyEnabled && (
+              <Col span={24}>
+                <FieldLabel icon={UserRound}>الطرف (اختياري)</FieldLabel>
+                <Select
+                  allowClear
+                  showSearch
+                  style={{ width: '100%' }}
+                  placeholder="اختر عميل / مورد"
+                  value={expenseForm.party?.id}
+                  onChange={v => setExpenseForm(f => ({ ...f, party: parties.find(p => p.id === v) ?? null }))}
+                  options={parties.map(p => ({ value: p.id, label: p.name }))}
+                  filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                />
+              </Col>
+            )}
             <Col span={24}>
               <FieldLabel icon={Boxes}>مركز التكلفة (اختياري)</FieldLabel>
               <Select
@@ -1550,19 +1554,21 @@ export default function PettyCashPage() {
               <FieldLabel icon={UserRound}>استلمت من</FieldLabel>
               <Input value={receiptForm.beneficiary_name} onChange={e => setReceiptForm(f => ({ ...f, beneficiary_name: e.target.value }))} />
             </Col>
-            <Col span={24}>
-              <FieldLabel icon={UserRound}>الطرف (اختياري)</FieldLabel>
-              <Select
-                allowClear
-                showSearch
-                style={{ width: '100%' }}
-                placeholder="اختر عميل / مورد"
-                value={receiptForm.party?.id}
-                onChange={v => setReceiptForm(f => ({ ...f, party: parties.find(p => p.id === v) ?? null }))}
-                options={parties.map(p => ({ value: p.id, label: p.name }))}
-                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-              />
-            </Col>
+            {partyEnabled && (
+              <Col span={24}>
+                <FieldLabel icon={UserRound}>الطرف (اختياري)</FieldLabel>
+                <Select
+                  allowClear
+                  showSearch
+                  style={{ width: '100%' }}
+                  placeholder="اختر عميل / مورد"
+                  value={receiptForm.party?.id}
+                  onChange={v => setReceiptForm(f => ({ ...f, party: parties.find(p => p.id === v) ?? null }))}
+                  options={parties.map(p => ({ value: p.id, label: p.name }))}
+                  filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                />
+              </Col>
+            )}
             <Col span={24}>
               <FieldLabel icon={Boxes}>مركز التكلفة (اختياري)</FieldLabel>
               <Select

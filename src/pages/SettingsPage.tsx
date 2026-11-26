@@ -8,12 +8,14 @@ import { useToast } from '@/lib/toast'
 import {
   AlignLeft, AlignRight, Building2, Copy, Eye, EyeOff, Image as ImageIcon, KeyRound, Link as LinkIcon,
   LayoutTemplate, Lock, MessageCircle, Plus, Save, Settings, Trash2, User, PiggyBank, ClipboardCheck,
-  ShoppingCart,
+  ShoppingCart, Users,
 } from 'lucide-react'
 import api from '@/lib/axios'
 import {
   settingsApi, pettyCashSettingsApi, pettyCashAccountSettingsApi, salesBridgeSettingsApi, userPasswordApi,
+  partySettingsApi,
   type CompanySettings, type LogoPosition, type PettyCashApprovalSettings, type SalesBridgeAccountSettings,
+  type PartySettings,
 } from '@/api/settings'
 import { accountsApi } from '@/api/accounts'
 import type { Account } from '@/types/account'
@@ -43,6 +45,7 @@ const TABS = [
   { key: 'petty-cash',  label: 'صندوق النثريات',   icon: <PiggyBank size={15} /> },
   { key: 'approval',    label: 'اعتماد النثريات',  icon: <ClipboardCheck size={15} /> },
   { key: 'sales-bridge', label: 'ربط المبيعات',     icon: <ShoppingCart size={15} /> },
+  { key: 'parties',     label: 'الجهات',            icon: <Users size={15} /> },
   { key: 'tokens',      label: 'رموز API',         icon: <KeyRound size={15} /> },
   { key: 'password',    label: 'كلمة المرور',      icon: <Lock size={15} /> },
 ] as const
@@ -54,6 +57,7 @@ const SECTION_COLOR = {
   pettyFund: '#16a34a',
   approval: '#0891b2',
   salesBridge: '#be185d',
+  parties:  '#4f46e5',
   tokens:   '#d97706',
   password: '#dc2626',
 } as const
@@ -126,6 +130,11 @@ export default function SettingsPage() {
   const [salesBridgeLoading, setSalesBridgeLoading] = useState(true)
   const [salesBridgeSaving,  setSalesBridgeSaving]  = useState(false)
 
+  // Party feature toggle state
+  const [partySettings, setPartySettings] = useState<PartySettings>({ party_enabled: true })
+  const [partyLoading, setPartyLoading]   = useState(true)
+  const [partySaving, setPartySaving]     = useState(false)
+
   useEffect(() => {
     settingsApi.get()
       .then(setForm)
@@ -154,6 +163,10 @@ export default function SettingsPage() {
         setSalesDiscountAccount(a.find(acc => acc.id === s.sales_discount_account_id) ?? null)
       })
       .finally(() => setSalesBridgeLoading(false))
+
+    partySettingsApi.get()
+      .then(setPartySettings)
+      .finally(() => setPartyLoading(false))
   }, [])
 
   const handlePettyCashApprovalSave = async () => {
@@ -211,6 +224,19 @@ export default function SettingsPage() {
       toast.error(e?.response?.data?.message ?? 'تعذّر حفظ حسابات ربط المبيعات')
     } finally {
       setSalesBridgeSaving(false)
+    }
+  }
+
+  const handlePartySave = async (next: PartySettings) => {
+    setPartySaving(true)
+    try {
+      const r = await partySettingsApi.update(next)
+      setPartySettings(r)
+      toast.success('تم حفظ إعدادات الجهات')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'تعذّر حفظ إعدادات الجهات')
+    } finally {
+      setPartySaving(false)
     }
   }
 
@@ -778,6 +804,45 @@ export default function SettingsPage() {
                   حفظ حسابات ربط المبيعات
                 </Button>
               </Flex>
+            </Flex>
+          )}
+        </div>
+      )}
+
+      {/* Party feature toggle */}
+      {activeTab === 'parties' && (
+        <div style={cardStyle}>
+          <SectionHeader
+            icon={<Users size={20} />}
+            color={SECTION_COLOR.parties}
+            title="إعدادات الجهات"
+            subtitle="تفعيل أو تعطيل استخدام الجهات (عملاء/موردين) في القيود وكشف الحساب وصندوق النثريات"
+          />
+
+          {partyLoading ? <Spin /> : (
+            <Flex vertical gap={20}>
+              <div style={{ padding: 20, border: '1px solid var(--ant-color-border-secondary)', borderRadius: 10, background: 'var(--ant-color-fill-alter)' }}>
+                <Flex align="center" justify="space-between" gap={16} wrap="wrap">
+                  <Flex align="center" gap={8}>
+                    <Users size={15} color={SECTION_COLOR.parties} />
+                    <div>
+                      <Text style={{ fontWeight: 700, display: 'block' }}>تفعيل الجهات</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        عند التعطيل، يُخفى حقل/عمود الجهة من قيود اليومية وكشف الحساب وصندوق النثريات
+                      </Text>
+                    </div>
+                  </Flex>
+                  <Switch
+                    checked={partySettings.party_enabled}
+                    loading={partySaving}
+                    onChange={checked => {
+                      const next = { party_enabled: checked }
+                      setPartySettings(next)
+                      handlePartySave(next)
+                    }}
+                  />
+                </Flex>
+              </div>
             </Flex>
           )}
         </div>

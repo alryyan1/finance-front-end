@@ -174,6 +174,24 @@ export const salesBridgeSettingsApi = {
     api.put<Record<string, unknown>>('/api/settings', data).then(r => toSalesBridgeAccountSettings(r.data)),
 }
 
+// ── Party feature toggle ────────────────────────────────────────────────────
+
+export interface PartySettings {
+  party_enabled: boolean
+}
+
+function toPartySettings(data: Record<string, unknown>): PartySettings {
+  return { party_enabled: Boolean(data.party_enabled ?? true) }
+}
+
+export const partySettingsApi = {
+  get: (): Promise<PartySettings> =>
+    api.get<Record<string, unknown>>('/api/settings').then(r => toPartySettings(r.data)),
+
+  update: (data: PartySettings): Promise<PartySettings> =>
+    api.put<Record<string, unknown>>('/api/settings', data).then(r => toPartySettings(r.data)),
+}
+
 // ── Change own password ─────────────────────────────────────────────────────
 
 export interface ChangePasswordPayload {

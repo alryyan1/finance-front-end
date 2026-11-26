@@ -15,6 +15,7 @@ import type { Account } from '@/types/account'
 import type { Party } from '@/types/party'
 import { BookOpen, FileDown, Rows3, Sheet } from 'lucide-react'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
+import { useAppSettings } from '@/context/AppSettingsContext'
 
 const { Title, Text } = Typography
 
@@ -57,7 +58,7 @@ const GL_BLUE   = '#0d2b6e'
 const GL_RED    = '#c0001a'
 const GL_HEADER = '#1a3a8f'
 
-function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick: (id: number) => void }) {
+function GeneralLedgerView({ data, onRowClick, partyEnabled }: { data: LedgerData; onRowClick: (id: number) => void; partyEnabled: boolean }) {
   const th = (i: number, label: string): React.CSSProperties => ({
     background: GL_HEADER, color: '#fff', fontWeight: 700,
     fontFamily: 'inherit', fontSize: 14,
@@ -137,7 +138,7 @@ function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick:
                 <td style={{ fontFamily: 'inherit', fontSize: 13, border: '1px solid #cdd6f0', padding: '8px 12px' }}>
                   <div style={{ fontWeight: 600 }}>{row.entry_description}</div>
                   {row.line_description && <div style={{ fontSize: 11, color: '#888' }}>{row.line_description}</div>}
-                  {row.party_name && <div style={{ fontSize: 11, color: '#666', fontStyle: 'italic' }}>{row.party_name}</div>}
+                  {partyEnabled && row.party_name && <div style={{ fontSize: 11, color: '#666', fontStyle: 'italic' }}>{row.party_name}</div>}
                   {data.is_aggregate && (
                     <div style={{ fontSize: 11, color: GL_HEADER, direction: 'ltr' }}>{row.account_code} — {row.account_name}</div>
                   )}
@@ -177,7 +178,7 @@ function GeneralLedgerView({ data, onRowClick }: { data: LedgerData; onRowClick:
   )
 }
 
-const ledgerColumns = (isAggregate: boolean): ColumnsType<LedgerRow> => [
+const ledgerColumns = (isAggregate: boolean, partyEnabled: boolean): ColumnsType<LedgerRow> => [
   {
     title: 'التاريخ', dataIndex: 'date', width: 110, align: 'center',
     render: (v: string) => <span style={{ direction: 'ltr', color: 'var(--ant-color-text-secondary)' }}>{v}</span>,
@@ -199,10 +200,10 @@ const ledgerColumns = (isAggregate: boolean): ColumnsType<LedgerRow> => [
     title: 'الحساب', dataIndex: 'account_code', width: 160, align: 'center' as const,
     render: (_: string, row: LedgerRow) => <Text type="secondary">{row.account_code} — {row.account_name}</Text>,
   }] : []),
-  {
-    title: 'الطرف', dataIndex: 'party_name', width: 150, align: 'center',
+  ...(partyEnabled ? [{
+    title: 'الطرف', dataIndex: 'party_name', width: 150, align: 'center' as const,
     render: (v: string | null) => <Text type="secondary">{v || '—'}</Text>,
-  },
+  }] : []),
   {
     title: 'مدين', dataIndex: 'debit', width: 130, align: 'right',
     render: (v: string) => Number(v) > 0
@@ -232,6 +233,7 @@ const yearStart = () => `${new Date().getFullYear()}-01-01`
 export default function LedgerPage() {
   const navigate = useNavigate()
   const toast = useToast()
+  const { partyEnabled } = useAppSettings()
   const [accounts, setAccounts]       = useState<Account[]>([])
   const [parties, setParties]         = useState<Party[]>([])
   const [account, setAccount]         = useState<Account | null>(null)
@@ -339,17 +341,19 @@ export default function LedgerPage() {
             filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
             options={accounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
           />
-          <Select
-            showSearch
-            allowClear
-            style={{ minWidth: 200 }}
-            placeholder="الطرف (اختياري)"
-            value={party?.id}
-            onChange={v => { setParty(parties.find(p => p.id === v) ?? null); setData(null) }}
-            notFoundContent="لا توجد نتائج"
-            filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
-            options={parties.map(p => ({ value: p.id, label: p.name }))}
-          />
+          {partyEnabled && (
+            <Select
+              showSearch
+              allowClear
+              style={{ minWidth: 200 }}
+              placeholder="الطرف (اختياري)"
+              value={party?.id}
+              onChange={v => { setParty(parties.find(p => p.id === v) ?? null); setData(null) }}
+              notFoundContent="لا توجد نتائج"
+              filterOption={(input, option) => (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())}
+              options={parties.map(p => ({ value: p.id, label: p.name }))}
+            />
+          )}
           <DateInput value={from} onChange={e => { setFrom(e.target.value); setFiscalYearId(null) }} />
           <DateInput value={to} onChange={e => { setTo(e.target.value); setFiscalYearId(null) }} />
           <Button type="primary" onClick={load} disabled={!account || loading}>
@@ -391,7 +395,7 @@ export default function LedgerPage() {
       )}
 
       {!loading && data && view === 'gl' && (
-        <GeneralLedgerView data={data} onRowClick={id => navigate(`/transactions/${id}/edit`)} />
+        <GeneralLedgerView data={data} onRowClick={id => navigate(`/transactions/${id}/edit`)} partyEnabled={partyEnabled} />
       )}
 
       {!loading && data && view === 'arabic' && (
@@ -414,7 +418,7 @@ export default function LedgerPage() {
             size="small"
             bordered
             sticky
-            columns={ledgerColumns(data.is_aggregate)}
+            columns={ledgerColumns(data.is_aggregate, partyEnabled)}
             dataSource={data.rows}
             rowKey={(_, i) => String(i)}
             pagination={false}
@@ -424,7 +428,10 @@ export default function LedgerPage() {
               style: { cursor: 'pointer' },
               onClick: () => navigate(`/transactions/${row.entry_id}/edit`),
             })}
-            summary={() => (
+            summary={() => {
+              // Columns before Debit: Date, Reference, Description, [Account if aggregate], [Party if enabled]
+              const leadingCols = 3 + (data.is_aggregate ? 1 : 0) + (partyEnabled ? 1 : 0)
+              return (
               <>
                 <Table.Summary fixed="top">
                   <Table.Summary.Row style={{ background: 'var(--ant-color-fill-alter)' }}>
@@ -435,11 +442,12 @@ export default function LedgerPage() {
                     <Table.Summary.Cell index={2}>
                       <Text type="secondary" italic>رصيد افتتاحي</Text>
                     </Table.Summary.Cell>
-                    {data.is_aggregate && <Table.Summary.Cell index={3} />}
-                    <Table.Summary.Cell index={data.is_aggregate ? 4 : 3} />
-                    <Table.Summary.Cell index={data.is_aggregate ? 5 : 4} />
-                    <Table.Summary.Cell index={data.is_aggregate ? 6 : 5} />
-                    <Table.Summary.Cell index={data.is_aggregate ? 7 : 6} align="right">
+                    {Array.from({ length: leadingCols - 3 }).map((_, i) => (
+                      <Table.Summary.Cell key={i} index={3 + i} />
+                    ))}
+                    <Table.Summary.Cell index={leadingCols} />
+                    <Table.Summary.Cell index={leadingCols + 1} />
+                    <Table.Summary.Cell index={leadingCols + 2} align="right">
                       <span style={{ direction: 'ltr', fontWeight: 600 }}>
                         {numFmt(data.opening_balance)}
                         <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--ant-color-text-secondary)' }}>{sideLbl(data.opening_side)}</span>
@@ -450,7 +458,7 @@ export default function LedgerPage() {
                 {data.rows.length > 0 && (
                   <Table.Summary fixed="bottom">
                     <Table.Summary.Row style={{ background: 'var(--ant-color-fill-alter)', fontWeight: 700 }}>
-                      <Table.Summary.Cell index={0} colSpan={data.is_aggregate ? 5 : 4} align="center">الإجمالي</Table.Summary.Cell>
+                      <Table.Summary.Cell index={0} colSpan={leadingCols} align="center">الإجمالي</Table.Summary.Cell>
                       <Table.Summary.Cell index={1} align="right">
                         <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{numFmt(data.totals.debit)}</span>
                       </Table.Summary.Cell>
@@ -467,7 +475,8 @@ export default function LedgerPage() {
                   </Table.Summary>
                 )}
               </>
-            )}
+              )
+            }}
           />
         </>
       )}
