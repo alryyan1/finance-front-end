@@ -1,13 +1,15 @@
-import { useState } from 'react'
-import { Button, Flex, Spin, Table, Typography } from 'antd'
+import { useEffect, useState } from 'react'
+import { Button, Flex, Select, Spin, Table, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import HelpButton from '@/components/common/HelpButton'
 import DateInput from '@/components/common/DateInput'
 import { FileDown, Sheet } from 'lucide-react'
 import api from '@/lib/axios'
 import { openPdf, downloadExcel } from '@/api/pdf'
+import { accountsApi } from '@/api/accounts'
 import FiscalYearSelector from '@/components/FiscalYearSelector'
 import { useToast } from '@/lib/toast'
+import type { Account } from '@/types/account'
 
 const { Title, Text } = Typography
 
@@ -43,15 +45,19 @@ export default function ReportCostCenterBalancePage() {
   const [from, setFrom]             = useState(yearStart())
   const [to, setTo]                 = useState(today())
   const [fiscalYearId, setFiscalYearId] = useState<number | null>(null)
+  const [accounts, setAccounts]     = useState<Account[]>([])
+  const [accountId, setAccountId]   = useState<number | null>(null)
   const [data, setData]             = useState<CostCenterBalanceData | null>(null)
   const [loading, setLoading]       = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [xlsLoading, setXlsLoading] = useState(false)
 
+  useEffect(() => { accountsApi.list().then(setAccounts).catch(() => {}) }, [])
+
   const handlePdf = async () => {
     setPdfLoading(true)
     try {
-      const params = fiscalYearId ? { fiscal_year_id: fiscalYearId } : { from, to }
+      const params = { ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : { from, to }), ...(accountId ? { account_id: accountId } : {}) }
       await openPdf('/api/reports/cost-center-balance/pdf', params)
     } finally { setPdfLoading(false) }
   }
@@ -59,19 +65,24 @@ export default function ReportCostCenterBalancePage() {
   const handleExcel = async () => {
     setXlsLoading(true)
     try {
-      const params = fiscalYearId ? { fiscal_year_id: fiscalYearId } : { from, to }
+      const params = { ...(fiscalYearId ? { fiscal_year_id: fiscalYearId } : { from, to }), ...(accountId ? { account_id: accountId } : {}) }
       await downloadExcel('/api/reports/cost-center-balance/excel', params, 'cost-center-balance.xlsx')
     } catch { toast.error('تعذّر إنشاء ملف Excel') }
     finally { setXlsLoading(false) }
   }
 
-  const load = (f = from, t = to, fyId = fiscalYearId) => {
+  const load = (f = from, t = to, fyId = fiscalYearId, accId = accountId) => {
     setLoading(true)
-    const params = fyId ? { fiscal_year_id: fyId } : { from: f, to: t }
+    const params = { ...(fyId ? { fiscal_year_id: fyId } : { from: f, to: t }), ...(accId ? { account_id: accId } : {}) }
     api.get<CostCenterBalanceData>('/api/reports/cost-center-balance', { params })
       .then(r => setData(r.data))
       .catch(() => toast.error('تعذّر تحميل البيانات'))
       .finally(() => setLoading(false))
+  }
+
+  const handleAccountChange = (v: number | null) => {
+    setAccountId(v)
+    load(from, to, fiscalYearId, v)
   }
 
   const handlePeriodChange = (fyId: number | null, f: string, t: string) => {
@@ -136,6 +147,19 @@ export default function ReportCostCenterBalancePage() {
           <Flex vertical gap={4}>
             <Text type="secondary" style={{ fontSize: 12 }}>إلى تاريخ</Text>
             <DateInput value={to} onChange={e => setTo(e.target.value)} />
+          </Flex>
+          <Flex vertical gap={4}>
+            <Text type="secondary" style={{ fontSize: 12 }}>الحساب (اختياري)</Text>
+            <Select
+              allowClear
+              showSearch
+              style={{ width: 220 }}
+              placeholder="كل الحسابات"
+              value={accountId ?? undefined}
+              onChange={v => handleAccountChange(v ?? null)}
+              options={accounts.map(a => ({ value: a.id, label: `${a.code} — ${a.name}` }))}
+              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+            />
           </Flex>
           <Button type="primary" onClick={() => load()} disabled={loading}>
             {loading ? <Spin size="small" /> : 'عرض'}
