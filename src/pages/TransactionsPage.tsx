@@ -22,6 +22,10 @@ const { Text } = Typography
 
 const fmt = (v: string | null | undefined) => v ? Math.round(Number(v)).toLocaleString('en-US') : '—'
 
+const pad = (n: number) => String(n).padStart(2, '0')
+const monthStart = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01` }
+const monthEnd = () => { const d = new Date(); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(last)}` }
+
 const debitLines  = (lines: JournalEntryLine[]) => lines.filter(l => Number(l.debit)  > 0)
 const creditLines = (lines: JournalEntryLine[]) => lines.filter(l => Number(l.credit) > 0)
 
@@ -88,8 +92,8 @@ export default function TransactionsPage() {
   const [importOpen,   setImportOpen]   = useState(false)
 
   const [search, setSearch] = useState('')
-  const [from,   setFrom]   = useState('')
-  const [to,     setTo]     = useState('')
+  const [from,   setFrom]   = useState(monthStart())
+  const [to,     setTo]     = useState(monthEnd())
   const [status, setStatus] = useState('all')
 
   const load = (params?: { search: string; from: string; to: string; status: string }) => {
@@ -111,8 +115,9 @@ export default function TransactionsPage() {
   }
 
   const handleReset = () => {
-    setSearch(''); setFrom(''); setTo(''); setStatus('all')
-    load({ search: '', from: '', to: '', status: 'all' })
+    const f = monthStart(), t = monthEnd()
+    setSearch(''); setFrom(f); setTo(t); setStatus('all')
+    load({ search: '', from: f, to: t, status: 'all' })
   }
 
   const handleDelete = async (entry: JournalEntry) => {
@@ -191,7 +196,7 @@ export default function TransactionsPage() {
   const grandTotal  = entries.reduce((s, e) => s + Number(e.lines_sum_debit ?? 0), 0)
   const postedCount = entries.filter(e =>  e.is_posted).length
   const draftCount  = entries.filter(e => !e.is_posted).length
-  const activeFilterCount = [search, from, to, status !== 'all'].filter(Boolean).length
+  const activeFilterCount = [search, from !== monthStart(), to !== monthEnd(), status !== 'all'].filter(Boolean).length
 
   const openSpreadsheet = () => {
     const p = new URLSearchParams()
@@ -349,7 +354,7 @@ export default function TransactionsPage() {
         onReset={handleReset}
         desktopExtra={exportActions}
       >
-        <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={from} defaultTo={to} block={isMobile} />
+        <FiscalYearSelector onChange={handlePeriodChange} defaultFrom={monthStart()} defaultTo={monthEnd()} block={isMobile} />
         <Input
           size="small"
           placeholder="بحث..."
